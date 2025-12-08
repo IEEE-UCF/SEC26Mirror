@@ -50,3 +50,6 @@ install/*
 
 # env
 *.env
+
+# platformio
+.pio/*

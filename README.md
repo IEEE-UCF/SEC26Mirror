@@ -1,3 +1,3 @@
 # SEC26
 
-SEC26 Merged Repository
+Full repository for the SoutheastCon 2026 Hardware Competition. Hosted on Gitea!

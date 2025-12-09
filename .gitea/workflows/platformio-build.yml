@@ -19,10 +19,15 @@ jobs:
 
       - name: Install PlatformIO
         run: pip install platformio
-      
+
+      - name: Enter WS
+        run: cd mcu_ws/
+
       - name: Install Pio Packages
-        run: pio pkg install        
+        run: pio pkg install 
+        working-directory: mcu_ws/       
 
       - name: Build All Environments
         # Running without '-e' builds all environments found in platformio.ini
         run: pio run
+        working-directory: mcu_ws/

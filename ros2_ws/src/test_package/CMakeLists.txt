@@ -20,10 +20,9 @@ target_link_libraries(test_node rclcpp::rclcpp)
 install(TARGETS test_node
   DESTINATION lib/${PROJECT_NAME})
 
-# Install configuration (if you add launch files later)
-install(DIRECTORY
-  DESTINATION share/${PROJECT_NAME}
-)
+# Install launch files
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

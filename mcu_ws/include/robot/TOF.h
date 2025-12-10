@@ -24,7 +24,7 @@ class TOFDriverSetup : public Classes::BaseSetup {
   ~TOFDriverSetup() = default;
   TOFDriverSetup() = delete;
 
-  TOFDriverSetup(const char* _id, uint16_t _timeout = 500s,
+  TOFDriverSetup(const char* _id, uint16_t _timeout = 500,
                  uint16_t _cooldown = 0)
       : Classes::BaseSetup(_id), timeout(_timeout), cooldown(_cooldown) {};
 

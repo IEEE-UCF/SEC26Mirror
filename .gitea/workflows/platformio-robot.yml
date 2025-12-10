@@ -6,7 +6,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-robot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install CMake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build Robot Environment
+        working-directory: mcu_ws/
+        run: |
+          echo "Building specific environment: robot"
+          
+          # Install dependencies ONLY for the robot environment
+          pio pkg install -e robot
+          
+          # Build ONLY the robot environment
+          pio run -e robot
+  
+  build-non-robot:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

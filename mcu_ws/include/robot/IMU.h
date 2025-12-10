@@ -1,21 +1,41 @@
+/**
+ * @file IMU.h
+ * @author Trevor Cannon
+ * @brief Defines IMU wrapper for BNO08x IMU
+ * @date 12/10/2025
+ */
+
+#ifndef IMUWRAPPER_H
+#define IMUWRAPPER_H
+
 #include <Adafruit_BNO08x.h>
 #include <BaseDriver.h>
 
 // i2c address default is 0x4A
 
 namespace Drivers {
-struct IMUDriverSetup : Classes::BaseSetup {
-  const byte reset_pin = -1;
+
+class IMUDriverSetup : public Classes::BaseSetup {
+ public:
+  const int8_t reset_pin;
+
+  ~IMUDriverSetup() = default;
+  IMUDriverSetup() = delete;
+
+  IMUDriverSetup(const char* _id, int8_t _pin = -1)
+      : Classes::BaseSetup(_id), reset_pin(_pin) {};
+
+ private:
 };
 
 struct IMUDriverData {
-  float accel_x;
-  float accel_y;
-  float accel_z;
+  float accel_x = 0.0f;
+  float accel_y = 0.0f;
+  float accel_z = 0.0f;
 
-  float gyro_x;
-  float gyro_y;
-  float gyro_z;
+  float gyro_x = 0.0f;
+  float gyro_y = 0.0f;
+  float gyro_z = 0.0f;
 };
 
 class IMUDriver : public Classes::BaseDriver {
@@ -32,10 +52,12 @@ class IMUDriver : public Classes::BaseDriver {
   IMUDriverData getData() { return data_; };
 
  private:
-  IMUDriverSetup setup_;
+  const IMUDriverSetup setup_;
   IMUDriverData data_;
+  char infoBuffer_[64];
 
   Adafruit_BNO08x imu_;
   sh2_SensorValue_t sensorValue_;
 };
 }  // namespace Drivers
+#endif

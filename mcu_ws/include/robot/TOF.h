@@ -1,3 +1,11 @@
+/**
+ * @file TOF.h
+ * @author Trevor Cannon
+ * @brief Defines TOF driver wrapper for
+ * VL53L0X TOF sensor
+ * @date 12/10/2025
+ */
+
 #ifndef VL53L0XWRAPPER_H
 #define VL53L0XWRAPPER_H
 
@@ -7,9 +15,20 @@
 #include <string>
 
 namespace Drivers {
-struct TOFDriverSetup : public Classes::BaseSetup {
-  uint16_t timeout = 500;
-  uint16_t cooldown = 0;
+
+class TOFDriverSetup : public Classes::BaseSetup {
+ public:
+  const uint16_t timeout;
+  const uint16_t cooldown;
+
+  ~TOFDriverSetup() = default;
+  TOFDriverSetup() = delete;
+
+  TOFDriverSetup(const char* _id, uint16_t _timeout = 500s,
+                 uint16_t _cooldown = 0)
+      : Classes::BaseSetup(_id), timeout(_timeout), cooldown(_cooldown) {};
+
+ private:
 };
 
 struct TOFDriverData {
@@ -38,7 +57,7 @@ class TOFDriver : public Classes::BaseDriver {
   std::string getInfo() override;
 
  private:
-  TOFDriverSetup setup_;
+  const TOFDriverSetup setup_;
   VL53L0X sensor_;
   TOFDriverData range_;
 };

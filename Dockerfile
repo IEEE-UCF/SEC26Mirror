@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nano \
     yq \
     git-lfs \
+    pipx \
     # Qt/X11 runtime dependencies
     libxcb1 \
     libx11-xcb1 \
@@ -92,8 +93,15 @@ RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
 # 6. Update .bashrc
 RUN echo "" >> /home/$USER_NAME/.bashrc && \
     echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USER_NAME/.bashrc && \
-    echo "source /home/$USER_NAME/ros2_workspaces/install/setup.bash" >> /home/$USER_NAME/.bashrc && \
-    echo "source /home/$USER_NAME/ros2_workspaces/microros_agent_ws/install/setup.bash" >> /home/$USER_NAME/.bashrc
+    echo "source /home/$USER_NAME/ros2_workspaces/install/setup.bash" >> /home/$USER_NAME/.bashrc
+    #echo "source /home/$USER_NAME/ros2_workspaces/microros_agent_ws/install/setup.bash" >> /home/$USER_NAME/.bashrc
+
+# 7. Install PlatformIO via pipx
+# Note: We manually set ENV PATH so 'pio' is immediately available in this container's
+# runtime without requiring a shell restart or sourcing .bashrc
+ENV PATH="/home/$USER_NAME/.local/bin:$PATH"
+RUN pipx install platformio && \
+    pipx ensurepath
 
 FROM base AS dev
 

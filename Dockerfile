@@ -67,6 +67,10 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 # Fix permissions so the user/group own their workspace
 RUN chown -R $USER_UID:$USER_GID /home/$USER_NAME || true
 
+# Configure passwordless sudo for the user
+RUN echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/$USER_NAME && \
+    chmod 0440 /etc/sudoers.d/$USER_NAME
+
 # --- Switch to existing ubuntu user ---
 USER $USER_NAME
 

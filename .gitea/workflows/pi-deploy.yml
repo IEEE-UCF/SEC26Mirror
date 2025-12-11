@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - prod
+      - CD-testing
 
 jobs:
   deploy-robot:
@@ -49,21 +50,16 @@ jobs:
           # 3. Start the container
           docker compose -f $COMPOSE_FILE --project-directory . up -d
 
+
+
       - name: Run and activate ROS2 things
         run: |
-          # connect to container
-          echo "Connecting to container"
-          docker exec -it sec26-devcontainer-1 /bin/bash
+          # 4. Wait a moment for container to stabilize
+          sleep 5
 
-
-          # run colcon build
-          echo "Running colcon build"
-          colcon build
-
-          # Build complete
-          echo "Colcon Built"
-
-          # this is where we activate the various different terminals needed for running the different ros2 things
+          # 5. Run the script INSIDE the container
+          # We use "bash -c" to ensure it runs properly
+          docker exec -u rosdev sec26-devcontainer-1 bash -c "/home/rosdev/ros2_workspaces/src/sec26/scripts/start_robot.sh"
 
       - name: Cleanup
         run: |

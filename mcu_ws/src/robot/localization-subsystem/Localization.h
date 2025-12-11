@@ -1,10 +1,3 @@
-/**
- * @file Localization.h
- * @author Trevor Cannon
- * @brief Track robot's position using gyro and encoder readings
- * @date 12/11/2025
- */
-
 #ifndef LOCALIZATION_H
 #define LOCALIZATION_H
 
@@ -20,13 +13,11 @@ class Localization {
   Localization() : currentPose(START_X, START_Y, START_THETA) {};
 
   Pose2D getPose() { return currentPose; }
-  void update(long leftTicks, long rightTicks, float yaw);
-  void printInfo();
+  void update();
+  void getInfo();
 
  private:
   Pose2D currentPose;
-  long prevLeftTicks = 0;
-  long prevRightTicks = 0;
 };
 
 #endif

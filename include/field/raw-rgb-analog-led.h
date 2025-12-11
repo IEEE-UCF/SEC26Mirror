@@ -13,6 +13,7 @@
 #include <array>
 
 namespace RawDrivers {
+// color values for RGB
 class RGBColor {
  public:
   ~RGBColor() = default;
@@ -23,7 +24,7 @@ class RGBColor {
   const uint8_t g;
   const uint8_t b;
 };
-
+// setup for RGB LED
 class RGBAnalogLEDSetup : public Classes::BaseSetup {
  public:
   ~RGBAnalogLEDSetup() = default;
@@ -39,19 +40,20 @@ class RGBAnalogLEDSetup : public Classes::BaseSetup {
   const std::array<uint8_t, 3> rgbPins_;  // r, g, b
 };
 
+// main RGB LED class
 class RGBAnalogLED : public Classes::BaseDriver {
  public:
-  RGBAnalogLED(const RGBAnalogLEDSetup& setup);
-  bool init() override;
-  void update() override;
-  const char* getInfo() override;
+  RGBAnalogLED(const RGBAnalogLEDSetup& setup);  // constructor
+  bool init() override;                          // initialize LED
+  void update() override;                        // update LED in some way??
+  const char* getInfo() override;                // get info on LED
 
-  void setColor(RGBColor color);
+  void setColor(RGBColor color);  // set LED color
 
  private:
-  const RGBAnalogLEDSetup& setup_;
-  char infoBuf_[96];
-  RGBColor colorBuffer;
+  const RGBAnalogLEDSetup& setup_;  // setup information
+  char infoBuf_[96];                // ?? holds information in string
+  RGBColor colorBuffer;             // holds LED color
 };
 };  // namespace RawDrivers
 

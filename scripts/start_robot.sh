@@ -11,7 +11,7 @@ echo "🐢 Starting Colcon Build..."
 cd $WS_DIR
 
 # Using symlink-install is faster and allows python editing without rebuilding
-colcon build --symlink-install
+colcon build --symlink-install --executor sequential
 
 # 4. Announce Success
 echo "--------------------------------"

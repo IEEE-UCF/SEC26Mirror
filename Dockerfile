@@ -67,6 +67,10 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 # Fix permissions so the user/group own their workspace
 RUN chown -R $USER_UID:$USER_GID /home/$USER_NAME || true
 
+# Configure passwordless sudo for the user
+RUN echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/$USER_NAME && \
+    chmod 0440 /etc/sudoers.d/$USER_NAME
+
 # --- Switch to existing ubuntu user ---
 USER $USER_NAME
 
@@ -101,6 +105,15 @@ RUN pipx install platformio && \
     pipx inject platformio pyyaml && \
     pipx ensurepath
 
+USER root
+# 8. Install any other python3 libraries here
+# Ensure gpiozero is available for Raspberry Pi GPIO control
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-gpiozero \
+        python3-lgpio \
+        python3-rpi.gpio && \
+    rm -rf /var/lib/apt/lists/*
+
 FROM base AS dev
 
 # Switch to root to install Gazebo Harmonic and required tools, then switch back
@@ -125,10 +138,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Cleanup apt caches
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+USER $USER_NAME
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
 
 FROM base AS prod
 
+USER $USER_NAME
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]

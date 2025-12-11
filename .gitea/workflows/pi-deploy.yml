@@ -19,6 +19,12 @@ jobs:
         working-directory: /home/ieee/SEC26
 
     steps:
+      - name: LEDs On
+        run: |
+          echo "⚡ LED Flashing (daemonized) during deployment"
+          # Kill any lingering daemonized gpioset processes
+          pkill -f "gpioset.*BOOTLED" || true
+          gpioset -z -C BOOTLED -c gpiochip0 -t 200 17=1
       - name: 📂 Pull Latest Code (Robot)
         run: |
           echo "📂 Navigating to /home/ieee/SEC26..."
@@ -84,3 +90,12 @@ jobs:
         run: |
           echo "🧹 Cleaning up old images..."
           docker image prune -f
+
+      - name: ⚡ Ensure LED process stops (always)
+        if: ${{ always() }}
+        run: |
+          echo "⚡ Ensuring BOOTLED process is stopped regardless of job outcome"
+          # Kill any lingering daemonized gpioset processes
+          pkill -f "gpioset.*BOOTLED" || true
+          # Explicitly turn the LED on
+          gpioset -z -C BOOTLED -c gpiochip0 17=1 || true

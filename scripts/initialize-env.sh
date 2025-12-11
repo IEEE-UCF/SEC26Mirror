@@ -35,7 +35,7 @@ cat > "${ENV_FILE}" <<EOL
 #   dev  -> Installs Gazebo, RViz, GDB, and GUI tools. (Best for PC/Laptop)
 #   prod -> Minimal runtime only. No simulators. (Best for Robot/Deployment)
 #
-BUILD_TARGET=dev
+BUILD_TARGET=prod
 
 
 # ======================================================================

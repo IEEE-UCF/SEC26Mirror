@@ -9,42 +9,35 @@ on:
   workflow_dispatch:
 
 jobs:
+  # 1. Robot Job - Always Runs
   deploy-robot:
     runs-on: rpi-ros2
     
-    # 1. Force all steps to run inside your specific directory
+    # Force all steps to run inside your specific directory
     defaults:
       run:
         working-directory: /home/ieee/SEC26
 
     steps:
-      - name: Pull Latest Code
+      - name: 📂 Pull Latest Code (Robot)
         run: |
           echo "📂 Navigating to /home/ieee/SEC26..."
-          
-          # Ensure git trusts this directory (prevents "dubious ownership" errors)
           git config --global --add safe.directory /home/ieee/SEC26
-          
-          # Force sync with the repository (WARNING: wipes local uncommitted changes on the Pi)
           git fetch --all
-          
           echo "🔀 Switching to branch: ${{ gitea.ref_name }}"
           git reset --hard origin/${{ gitea.ref_name }}
-
           echo "🔧 Fixing permissions..."
           chmod +x scripts/start_robot.sh
 
-      - name: Run Verification Script
+      - name: 🧪 Run Verification Script
         run: |
           echo "🧪 Running test script on the Pi..."
-          # We call the script inside the scripts folder
+          # The verification script runs from the working-directory/scripts
           python3 scripts/test_deploy.py
 
-      - name: Build and Deploy
+      - name: 🚀 Build and Deploy (Docker)
         run: |
-          echo "🚀 Rebuilding from: /home/ieee/SEC26/docker/dev_ws/docker-compose.yml"
-          
-          # Define the file path relative to the working directory
+          echo "🚀 Rebuilding from: /home/ieee/SEC26/docker-compose.yml"
           COMPOSE_FILE="docker-compose.yml"
           
           # 1. Stop existing services
@@ -56,18 +49,18 @@ jobs:
           # 3. Start the container
           docker compose -f $COMPOSE_FILE --project-directory . up -d
 
-
-
-      - name: Run and activate ROS2 things
+      - name: ▶️ Run and activate ROS2 things
         run: |
           # 4. Wait a moment for container to stabilize
           sleep 5
 
-          # 5. Run the script INSIDE the container
-          # We use "bash -c" to ensure it runs properly
-          docker exec -u ubuntu sec26-devcontainer-1 bash -c "/home/ubuntu/ros2_workspaces/src/sec26/scripts/start_robot.sh"
+          # 5. Flash MCU firmware from docker container
+          docker exec -u ubuntu sec26-devcontainer-1 bash -c "cd /home/ubuntu/scripts && chmod +x flash_mcu.sh && ./flash_mcu.sh"
+          
+          # 6. Run the script INSIDE the container
+          docker exec -u ubuntu sec26-devcontainer-1 bash -c "cd /home/ubuntu/scripts && chmod +x start_robot.sh && ./start_robot.sh"
 
-      - name: Cleanup
+      - name: 🧹 Cleanup
         run: |
           echo "🧹 Cleaning up old images..."
           docker image prune -f

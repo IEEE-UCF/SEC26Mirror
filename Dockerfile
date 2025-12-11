@@ -98,6 +98,7 @@ RUN echo "" >> /home/$USER_NAME/.bashrc && \
 # runtime without requiring a shell restart or sourcing .bashrc
 ENV PATH="/home/$USER_NAME/.local/bin:$PATH"
 RUN pipx install platformio && \
+    pipx inject platformio pyyaml && \
     pipx ensurepath
 
 FROM base AS dev

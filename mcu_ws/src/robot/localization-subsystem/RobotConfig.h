@@ -1,3 +1,10 @@
+/**
+ * @file RobotConfig.h
+ * @author Trevor Cannon
+ * @brief Robot constants for calculations
+ * @date 12/11/2025
+ */
+
 #ifndef ROBOTCONFIG_H
 #define ROBOTCONFIG_H
 

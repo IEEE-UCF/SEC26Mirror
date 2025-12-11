@@ -1,10 +1,10 @@
 # Start with the ROS 2 Jazzy base image
 FROM ros:jazzy-ros-base AS base
 
-# Add build arguments for user creation
-ARG USER_NAME=rosdev
-ARG USER_UID=1001
-ARG USER_GID=$USER_UID
+# Add build arguments for user selection (use existing ubuntu user)
+ARG USER_NAME=ubuntu
+ARG USER_UID=1000
+ARG USER_GID=1000
 
 # 1. Install dependencies (Root)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -47,11 +47,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Create the user and group
-RUN groupadd --gid $USER_GID $USER_NAME \
-    && useradd --uid $USER_UID --gid $USER_GID -m $USER_NAME \
-    && echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USER_NAME \
-    && chmod 0440 /etc/sudoers.d/$USER_NAME
+# 2. Use existing user/group
+# The base image already provides the `ubuntu` user (UID 1000). No need to create users here.
 
 # Setup directory
 RUN mkdir -p /home/$USER_NAME/ros2_workspaces/src
@@ -67,10 +64,10 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     rosdep install --from-paths src --ignore-src -y && \
     rm -rf /var/lib/apt/lists/*
 
-# Fix permissions so the user owns their workspace
-RUN chown -R $USER_NAME:$USER_GID /home/$USER_NAME
+# Fix permissions so the user/group own their workspace
+RUN chown -R $USER_UID:$USER_GID /home/$USER_NAME || true
 
-# --- Switch to User ---
+# --- Switch to existing ubuntu user ---
 USER $USER_NAME
 
 RUN rosdep update

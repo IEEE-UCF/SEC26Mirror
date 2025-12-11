@@ -56,3 +56,4 @@ log/*
 
 # platformio
 .pio/*
+mcu_ws/.vscode/*

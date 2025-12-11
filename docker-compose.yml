@@ -11,8 +11,19 @@ services:
       - QT_X11_NO_MITSHM=1
       - ARDUINO_DIRECTORIES_USER=/home/rosdev/.arduino15
     volumes:
-      # Mount device access and X11 socket (for Linux)
-      - ../:/home/rosdev/ros2_workspaces/src/sec26:cached
+      # --- Source Code (Synced with Host) ---
+      - ./ros2_ws:/home/rosdev/ros2_workspaces/src/sec26ros:cached
+      - ./mcu_ws:/home/rosdev/mcu_workspaces/src/sec26mcu:cached
+      - ./scripts:/home/rosdev/ros2_workspaces/src/sec26/scripts:cached
+
+      # --- Build Artifacts (Persisted in Docker, kept off Host) ---
+      # This prevents "root" owned files appearing on your laptop 
+      # and speeds up IO on Windows/Mac
+      - ros2_build:/home/rosdev/ros2_workspaces/build
+      - ros2_install:/home/rosdev/ros2_workspaces/install
+      - ros2_log:/home/rosdev/ros2_workspaces/log
+
+      # --- System / Hardware ---
       - /dev:/dev
       - /tmp/.X11-unix:/tmp/.X11-unix
     # This uses the network mode from the .env file (either 'host' for Linux or 'bridge' for Win/Mac)
@@ -20,3 +31,9 @@ services:
     privileged: true
     # Keep the container running
     command: sleep infinity
+
+# Create biuld artifact volumes
+volumes:
+  ros2_build:
+  ros2_install:
+  ros2_log:

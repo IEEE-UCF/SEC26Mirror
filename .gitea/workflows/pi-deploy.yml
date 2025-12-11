@@ -28,6 +28,9 @@ jobs:
           git fetch origin
           git reset --hard origin/prod
 
+          echo "🔧 Fixing permissions..."
+          chmod +x scripts/start_robot.sh
+
       - name: Run Verification Script
         run: |
           echo "🧪 Running test script on the Pi..."

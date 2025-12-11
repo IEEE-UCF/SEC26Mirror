@@ -50,15 +50,35 @@ jobs:
           docker compose -f $COMPOSE_FILE --project-directory . up -d
 
       - name: ▶️ Run and activate ROS2 things
+        env:
+          EVENT_NAME: ${{ gitea.event_name }}
         run: |
           # 4. Wait a moment for container to stabilize
           sleep 5
 
-          # 5. Flash MCU firmware from docker container
-          docker exec -u ubuntu sec26-devcontainer-1 bash -c "cd /home/ubuntu/scripts && chmod +x flash_mcu.sh && ./flash_mcu.sh"
-          
-          # 6. Run the script INSIDE the container
-          docker exec -u ubuntu sec26-devcontainer-1 bash -c "cd /home/ubuntu/scripts && chmod +x start_robot.sh && ./start_robot.sh"
+          # 5. Determine if MCU sources changed in latest commit range
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "🟠 Manual dispatch detected; forcing MCU flash"
+            CHANGED_MCU="mcu_ws/"
+          else
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              CHANGED_MCU=$(git diff --name-only HEAD~1 HEAD | grep '^mcu_ws/' || true)
+            else
+              # No previous commit available; default to flashing MCU once
+              CHANGED_MCU="mcu_ws/"
+            fi
+          fi
+
+          if [ -z "$CHANGED_MCU" ]; then
+            echo "ℹ️ No changes detected in mcu_ws; skipping MCU flash"
+            MCU_FLAG="--skip-mcu"
+          else
+            echo "🔧 Changes detected in mcu_ws; will flash MCU"
+            MCU_FLAG=""
+          fi
+
+          # 6. Run unified deployment script inside container (conditional MCU flash, ROS build, then launch test node)
+          docker exec -u ubuntu sec26-devcontainer-1 bash -c "python3 /home/ubuntu/scripts/deploy-all.py $MCU_FLAG"
 
       - name: 🧹 Cleanup
         run: |

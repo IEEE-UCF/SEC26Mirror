@@ -1,11 +1,15 @@
 #include "Pose2D.h"
 
-void Pose2D::normalizeTheta() { theta = std::remainder(theta, 2 * PI); }
+void Pose2D::normalizeTheta() {
+  theta = std::remainder(theta, 2 * PI);
+  return;
+}
 
 void Pose2D::add(const Pose2D& pose) {
   x += pose.x;
   y += pose.y;
   theta += pose.theta;
+  return;
 }
 
 void Pose2D::rotate(float angle) {
@@ -17,4 +21,6 @@ void Pose2D::rotate(float angle) {
 
   x = new_x;
   y = new_y;
+
+  return;
 }

@@ -5,6 +5,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+import threading
+import time
+try:
+    from gpiozero import LED  # Dedicated GPIO library
+except Exception:
+    LED = None
 
 # Container paths (match docker-compose mounts)
 SCRIPTS_DIR = Path("/home/ubuntu/scripts")
@@ -12,6 +18,54 @@ MCU_WS = Path("/home/ubuntu/mcu_workspaces/sec26mcu")
 ROS_WS = Path("/home/ubuntu/ros2_workspaces")
 ROS_INSTALL_SETUP = ROS_WS / "install" / "setup.bash"
 TEST_PKG_LAUNCH = Path("/home/ubuntu/ros2_workspaces/src/sec26ros/test_package/launch/test_node.launch.py")
+
+GPIO_PIN = 17  # BCM pin 17
+
+
+class LedBlinker:
+    def __init__(self, pin: int, interval_sec: float = 0.2):
+        self.pin = pin
+        self.interval = interval_sec
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._led = None
+        self._started = False
+
+    def start(self):
+        try:
+            if LED is not None:
+                self._led = LED(self.pin)
+                self._thread.start()
+                self._started = True
+        except Exception:
+            self._led = None
+
+    def _run(self):
+        state = False
+        while not self._stop.is_set():
+            if self._led is not None:
+                if state:
+                    self._led.on()
+                else:
+                    self._led.off()
+            time.sleep(self.interval)
+            state = not state
+
+    def stop(self):
+        self._stop.set()
+        if self._started and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+
+    def set(self, on: bool):
+        try:
+            if self._led is not None:
+                if on:
+                    self._led.on()
+                else:
+                    self._led.off()
+        except Exception:
+            pass
+
 
 
 def run(cmd, env=None, cwd=None, shell=False):
@@ -97,22 +151,36 @@ def main():
 
     ensure_in_container()
 
-    if not args.skip_mcu:
-        flash_mcu()
-    else:
-        print("⏭️ Skipping MCU flashing by request")
+    # LED: blink during build/flash, solid on success, off on failure
+    blinker = LedBlinker(GPIO_PIN, interval_sec=0.2)
+    try:
+        # Start blinking as we begin deployment work
+        blinker.start()
 
-    if not args.skip_ros:
-        build_ros()
-    else:
-        print("⏭️ Skipping ROS build by request")
+        if not args.skip_mcu:
+            flash_mcu()
+        else:
+            print("⏭️ Skipping MCU flashing by request")
 
-    if not args.skip_launch:
-        launch_test_node()
-    else:
-        print("⏭️ Skipping test node launch by request")
+        if not args.skip_ros:
+            build_ros()
+        else:
+            print("⏭️ Skipping ROS build by request")
 
-    print("\n🎉 Deployment sequence completed")
+        if not args.skip_launch:
+            launch_test_node()
+        else:
+            print("⏭️ Skipping test node launch by request")
+
+        # Success: stop blinking and turn LED solid on
+        blinker.stop()
+        blinker.set(True)
+        print("\n🎉 Deployment sequence completed")
+    except SystemExit as e:
+        # Failure path: stop blinking and turn LED off
+        blinker.stop()
+        blinker.set(False)
+        raise
 
 
 if __name__ == "__main__":

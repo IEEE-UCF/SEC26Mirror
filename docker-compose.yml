@@ -27,6 +27,7 @@ services:
 
       # --- System / Hardware ---
       - /dev:/dev
+      - /sys:/sys
       - /tmp/.X11-unix:/tmp/.X11-unix
     # This uses the network mode from the .env file (either 'host' for Linux or 'bridge' for Win/Mac)
     network_mode: ${NETWORK_MODE_CONFIG}

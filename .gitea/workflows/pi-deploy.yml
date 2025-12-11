@@ -64,7 +64,7 @@ jobs:
 
           # 5. Run the script INSIDE the container
           # We use "bash -c" to ensure it runs properly
-          docker exec -u rosdev sec26-devcontainer-1 bash -c "/home/rosdev/ros2_workspaces/src/sec26/scripts/start_robot.sh"
+          docker exec -u ubuntu sec26-devcontainer-1 bash -c "/home/ubuntu/ros2_workspaces/src/sec26/scripts/start_robot.sh"
 
       - name: Cleanup
         run: |

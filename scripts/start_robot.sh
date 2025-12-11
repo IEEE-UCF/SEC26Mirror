@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 1. Define Workspace Path
-WS_DIR="/home/rosdev/ros2_workspaces"
+WS_DIR="/home/ubuntu/ros2_workspaces"
 
 # 2. Source ROS 2 Jazzy
 # Check if the setup file exists to prevent confusing errors later

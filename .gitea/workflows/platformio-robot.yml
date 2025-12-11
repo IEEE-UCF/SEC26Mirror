@@ -1,0 +1,85 @@
+name: PlatformIO Build All
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - 'mcu_ws/**'
+  workflow_dispatch:
+
+jobs:
+  build-robot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install CMake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build Robot Environment
+        working-directory: mcu_ws/
+        run: |
+          echo "Building specific environment: robot"
+          
+          # Install dependencies ONLY for the robot environment
+          pio pkg install -e robot
+          
+          # Build ONLY the robot environment
+          pio run -e robot
+  
+  build-non-robot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build All Except Robot
+        working-directory: mcu_ws/
+        run: |
+          # 1. Parse platformio.ini for environment names (lines starting with [env:NAME])
+          # 2. Filter out 'robot'
+          # 3. Construct the argument string (e.g., "-e dev -e release")
+          
+          args=""
+          # Extract env names
+          envs=$(grep "^\[env:" platformio.ini | sed 's/^\[env:\(.*\)\]/\1/')
+          
+          for env in $envs; do
+            if [ "$env" != "robot" ]; then
+              args="$args -e $env"
+            else
+              echo "Skipping environment: $env"
+            fi
+          done
+          
+          if [ -z "$args" ]; then
+             echo "No environments to build (or only 'robot' was found)."
+             exit 0
+          fi
+          
+          echo "Running for environments:$args"
+          
+          # Install dependencies ONLY for the filtered environments
+          pio pkg install $args
+          
+          # Build ONLY the filtered environments
+          pio run $args

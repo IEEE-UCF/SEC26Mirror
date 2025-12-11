@@ -3,6 +3,8 @@ name: PlatformIO Build All
 on:
   pull_request:
     branches: [ "master" ]
+    paths:
+      - 'mcu_ws/**'
   workflow_dispatch:
 
 jobs:

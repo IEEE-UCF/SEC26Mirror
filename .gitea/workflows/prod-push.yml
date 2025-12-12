@@ -1,0 +1,31 @@
+name: Deploy Master to Prod
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  sync-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to fetch all history so we can push to other branches
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "Gitea Actions"
+          git config --global user.email "actions@gitea.local"
+
+      - name: Push to prod
+        env:
+          # Gitea Actions automatically provides this token.
+          # Ensure your Runner has write permissions if this fails.
+          GITHUB_TOKEN: ${{ secrets.EL_HUB_TOKEN }}
+        run: |
+          # Force push the current HEAD (which is master) to the prod branch.
+          # This ensures prod becomes an exact mirror of master.
+          git push origin HEAD:prod --force

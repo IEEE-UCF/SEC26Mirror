@@ -23,6 +23,12 @@ jobs:
       - name: Push to prod
         env:
           PAT: ${{ secrets.EL_HUB_PAT }}
+          USERNAME: ${{ secrets.EL_HUB_USER }}
         run: |
-          git remote set-url origin https://$PAT@gitea.syndric.org/ieeeucf/SEC26.git
+          if [ -z "$USERNAME" ]; then
+            echo "ERROR: EL_HUB_USER secret not set (required username for PAT)." >&2
+            exit 1
+          fi
+          # Use HTTPS URL with username:token to authenticate
+          git remote set-url origin https://$USERNAME:$PAT@gitea.syndric.org/ieeeucf/SEC26.git
           git push origin HEAD:prod --force

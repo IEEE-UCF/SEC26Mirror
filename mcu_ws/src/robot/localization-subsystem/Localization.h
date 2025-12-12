@@ -21,10 +21,12 @@ class Localization {
 
   Pose2D getPose() { return currentPose; }
   void update(long leftTicks, long rightTicks, float yaw);
-  void getInfo();
+  void printInfo();
 
  private:
   Pose2D currentPose;
+  long prevLeftTicks = 0;
+  long prevRightTicks = 0;
 };
 
 #endif

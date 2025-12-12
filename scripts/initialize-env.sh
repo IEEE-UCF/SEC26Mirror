@@ -51,8 +51,8 @@ BUILD_TARGET=prod
 # 🍎 WINDOWS / 🍏 MACOS (DOCKER DESKTOP):
 # Use this if you are using Docker Desktop.
 # Requires an XServer (VcXsrv/XQuartz) installed on host.
-# DISPLAY_CONFIG=host.docker.internal:0
-# NETWORK_MODE_CONFIG=bridge
+#DISPLAY_CONFIG=host.docker.internal:0
+#NETWORK_MODE_CONFIG=bridge
 
 # ----------------------------------------------------------------------
 # ⚠️  DEFAULT FALLBACK (If you don't uncomment anything above)

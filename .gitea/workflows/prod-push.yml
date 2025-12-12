@@ -22,10 +22,7 @@ jobs:
 
       - name: Push to prod
         env:
-          # Gitea Actions automatically provides this token.
-          # Ensure your Runner has write permissions if this fails.
-          GITHUB_TOKEN: ${{ secrets.EL_HUB_TOKEN }}
+          PAT: ${{ secrets.EL_HUB_PAT }}
         run: |
-          # Force push the current HEAD (which is master) to the prod branch.
-          # This ensures prod becomes an exact mirror of master.
+          git remote set-url origin https://$PAT@gitea.syndric.org/ieeeucf/SEC26.git
           git push origin HEAD:prod --force

@@ -13,9 +13,12 @@ services:
       - PLATFORMIO_CORE_DIR=/home/ubuntu/.platformio
     volumes:
       # --- Source Code (Synced with Host) ---
-      - ./ros2_ws:/home/ubuntu/ros2_workspaces/src/sec26ros:cached
-      - ./mcu_ws:/home/ubuntu/mcu_workspaces/sec26mcu:cached
-      - ./scripts:/home/ubuntu/scripts:cached
+      - ./ros2_ws:/home/ubuntu/ros2_workspaces/src/sec26ros:delegated
+      # Ensure ROS2 workspace-level VS Code settings land at /home/ubuntu/ros2_workspaces/.vscode
+      - ./ros2_ws/.vscode:/home/ubuntu/ros2_workspaces/.vscode:delegated
+      - ./mcu_ws:/home/ubuntu/mcu_workspaces/sec26mcu:delegated
+      - ./lib/micro_ros_arduino_examples_platformio:/home/ubuntu/mcu_workspaces/micro_ros_arduino_examples_platformio:delegated
+      - ./scripts:/home/ubuntu/scripts
 
       # --- Build Artifacts (Persisted in Docker, kept off Host) ---
       # This prevents "root" owned files appearing on your laptop 
@@ -24,6 +27,8 @@ services:
       - ros2_install:/home/ubuntu/ros2_workspaces/install
       - ros2_log:/home/ubuntu/ros2_workspaces/log
       - platformio_cache:/home/ubuntu/.platformio
+      - mcu_build_artifacts:/home/ubuntu/mcu_workspaces/sec26mcu/.pio
+      - mcu_build_artifacts_microros:/home/ubuntu/mcu_workspaces/micro_ros_arduino_examples_platformio/.pio
 
       # --- System / Hardware ---
       - /dev:/dev
@@ -41,3 +46,5 @@ volumes:
   ros2_install:
   ros2_log:
   platformio_cache:
+  mcu_build_artifacts:
+  mcu_build_artifacts_microros:

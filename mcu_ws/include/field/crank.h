@@ -25,7 +25,7 @@ class CrankSetup : public Classes::BaseSetup {
 
   CrankSetup(const char* _id, const uint8_t ledPin, const uint8_t clk_k,
              const uint8_t dt_k)
-      : Classes::BaseSetup(_id), _ledPin(ledPin), _clk_k(clk_k), _dt_k(dt_k) {};
+      : BaseSetup(_id), _ledPin(ledPin), _clk_k(clk_k), _dt_k(dt_k) {};
 
   const uint8_t _ledPin;
   const uint8_t _clk_k;

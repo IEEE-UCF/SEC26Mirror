@@ -20,7 +20,6 @@ void CrankDriver::update() {
       _counter--;
     } else {
       _counter++;
-      digitalWrite(2, HIGH);
     }
 
     Serial.print(" - counter: ");
@@ -51,7 +50,9 @@ const char* CrankDriver::getInfo() {
 }
 
 void CrankDriver::reset() {
+  digitalWrite(_setup._ledPin, LOW);
   _prevClk = digitalRead(_setup._clk_k);
+
   _counter = 0;
   task = NOTCOMPLETE;
 }

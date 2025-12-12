@@ -1,35 +1,11 @@
 
 #include "keypad.h"
 
-DIYables_Keypad::DIYables_Keypad(char* keymap, byte* rowPins, byte* columnPins,
-                                 byte numRows, byte numCols) {
-  _keymap = keymap;
-  _row_pins = rowPins;
-  _column_pins = columnPins;
-  _num_rows = numRows;
-  _num_cols = numCols;
-  _prev_key = 0;
-  _debounce_time = 300;  // default value is 300ms
-  _prev_time = 0;
-  task = NOTCOMPLETE;
-  for (int col = 0; col < _num_cols; col++) {
-    pinMode(_column_pins[col], OUTPUT);
-    digitalWrite(_column_pins[col], HIGH);
-    for (int row = 0; row < _num_rows; row++) {
-      pinMode(_row_pins[row], INPUT_PULLUP);
-    }
-  }
-}
+namespace Field {
 
-char DIYables_Keypad::getKey() {
-  char key = _prev_key;
-  _prev_key = 0;
-  return key;
-}
-void DIYables_Keypad::setDebounceTime(unsigned long time) {
-  _debounce_time = time;
-}
-void DIYables_Keypad::update() {
+bool KeypadDriver::init() { return true; }
+
+void KeypadDriver::update() {
   static int count = 0;
   //------------------------------------------------------
   for (int col = 0; col < _num_cols; col++) {
@@ -66,10 +42,50 @@ void DIYables_Keypad::update() {
   }
 }
 
-int DIYables_Keypad::getStatus() {
+const char* KeypadDriver::getInfo() {
+  return ("\nID: " + std::string(setup_.getId()) +
+          "\nNum Rows: " + std::to_string(_num_rows) + "\nNum Cols: " +
+          std::to_string(_num_cols) + "\nKeymap: " + std::to_string(*_keymap) +
+          "\nRow Pins: " + std::to_string(*_row_pins) +
+          "\nCol Pins: " + std::to_string(*_column_pins) +
+          "\nPrev Key: " + std::to_string(_prev_key) +
+          "\nDebounce Time: " + std::to_string(_debounce_time) +
+          "\nPrev Time: " + std::to_string(_prev_time))
+      .c_str();
+}
+
+bool KeypadDriver::getStatus() {
   if (task == COMPLETE) {
     return 1;
   } else {
     return 0;
   }
 }
+
+char KeypadDriver::getKey() {
+  char key = _prev_key;
+  _prev_key = 0;
+  return key;
+}
+
+void KeypadDriver::setDebounceTime(unsigned long time) {
+  _debounce_time = time;
+}
+
+void KeypadDriver::reset() {
+  _prev_key = 0;
+  _debounce_time = 300;
+  _prev_time = 0;
+
+  task = NOTCOMPLETE;
+
+  for (int col = 0; col < _num_cols; col++) {
+    pinMode(_column_pins[col], OUTPUT);
+    digitalWrite(_column_pins[col], HIGH);
+    for (int row = 0; row < _num_rows; row++) {
+      pinMode(_row_pins[row], INPUT_PULLUP);
+    }
+  }
+}
+
+};  // namespace Field

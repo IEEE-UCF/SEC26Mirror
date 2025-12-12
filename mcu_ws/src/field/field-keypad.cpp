@@ -36,21 +36,24 @@ RawDrivers::RGBColor green = RawDrivers::RGBColor(0, 150, 0);
 RawDrivers::RGBColor blue = RawDrivers::RGBColor(0, 0, 100);
 RawDrivers::RGBColor purple = RawDrivers::RGBColor(200, 150, 0);
 
-DIYables_Keypad keypad = DIYables_Keypad(makeKeymap(keys), row_pins,
-                                         column_pins, ROW_NUM, COLUMN_NUM);
+Field::KeypadSetup setupKeypad = Field::KeypadSetup("Keypad");
+Field::KeypadDriver Keypad1 = Field::KeypadDriver(
+    setupKeypad, makeKeymap(keys), row_pins, column_pins, ROW_NUM, COLUMN_NUM);
 
 int randomNum;
 void setup() {
   Serial.begin(9600);
   RGB1.init();
+  Keypad1.init();
+
   pinMode(led_pin, OUTPUT);
 
   randomNum = random(0, 3);
 }
 void loop() {
-  keypad.update();
+  Keypad1.update();
 
-  if (keypad.getStatus() == 1) {
+  if (Keypad1.getStatus()) {
     digitalWrite(led_pin, HIGH);
 
     switch (randomNum) {

@@ -2,12 +2,12 @@
 #include "field/pressure.h"
 #include "field/raw-rgb-analog-led.h"
 
-#define FORCE_SENSOR_PIN 27
+const uint8_t forcePin = 27;
 
-// CHANGE THIS
-int r = 5;
-int g = 16;
-int b = 17;
+const uint8_t r = 5;
+const uint8_t g = 16;
+const uint8_t b = 17;
+const uint8_t ledPin = 4;
 
 // RGB setup and class
 RawDrivers::RGBAnalogLEDSetup setup1 =
@@ -22,21 +22,26 @@ RawDrivers::RGBColor green = RawDrivers::RGBColor(0, 150, 0);
 RawDrivers::RGBColor blue = RawDrivers::RGBColor(0, 0, 100);
 RawDrivers::RGBColor purple = RawDrivers::RGBColor(200, 150, 0);
 
-forcesensor forcesensepad = forcesensor(FORCE_SENSOR_PIN);
+// pressure configuration
+Field::PressureSetup setupPressure = Field::PressureSetup("Pressure", forcePin);
+Field::PressureDriver Pressure1 = Field::PressureDriver(setupPressure);
 
 int randomNum;  // for random number gen
 
 void setup() {
   Serial.begin(9600);
-
   RGB1.init();
+
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+
   randomNum = random(0, 3);
 }
 
 void loop() {
-  forcesensepad.update();
-  if (forcesensepad.getStatus() == 1) {
-    Serial.println("HOORAY!");
+  Pressure1.update();
+  if (Pressure1.getStatus()) {
+    digitalWrite(ledPin, HIGH);
 
     switch (randomNum) {
       case 1:
@@ -57,38 +62,4 @@ void loop() {
         break;
     }
   }
-  // int analogReading = analogRead(FORCE_SENSOR_PIN);
-
-  // Serial.print("Force sensor reading = ");
-  // Serial.print(analogReading); // print the raw analog reading
-
-  // if (analogReading < 10)       // from 0 to 9
-  //   Serial.println(" -> no pressure");
-  // else if (analogReading < 200) // from 10 to 199
-  //   Serial.println(" -> light touch");
-  // else if (analogReading < 500) // from 200 to 499
-  //   Serial.println(" -> light squeeze");
-  // else if (analogReading < 800) // from 500 to 799
-  //   Serial.println(" -> medium squeeze");
-  // else // from 800 to 1023
-  //   Serial.println(" -> big squeeze");
-
-  // delay(25);
-
-  //  rgb.setColor(0);
-  // rgb.reset();
-  //  digitalWrite(led_pin,HIGH);
-  //  delay(300);
-  // keypad.update();
-  // if(keypad.getStatus()==1)
-  // {
-  //   Serial.println("Task is completed!");
-  //   digitalWrite(led_pin,HIGH);
-  //   rgb.setColor(randomNumber);
-  // rgb.setColor(3);
-  //}else{
-  // Serial.println("Task is not finished!");
-  // Serial.println("Task is not completed!");
-  // digitalWrite(led_pin,LOW);
-  // }
 }

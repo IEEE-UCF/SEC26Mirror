@@ -32,6 +32,7 @@ void ButtonDriver::update() {
 
 bool ButtonDriver::getStatus() {
   if (task == COMPLETE) {
+    digitalWrite(_setup._ledPin, HIGH);
     return 1;
   } else {
     return 0;
@@ -54,6 +55,7 @@ void ButtonDriver::reset() {
   digitalWrite(_setup._rygPins[0], LOW);  // r
   digitalWrite(_setup._rygPins[1], LOW);  // y
   digitalWrite(_setup._rygPins[2], LOW);  // g
+  digitalWrite(_setup._ledPin, LOW);
 }
 
 };  // namespace Field

@@ -36,6 +36,13 @@ struct IMUDriverData {
   float gyro_x = 0.0f;
   float gyro_y = 0.0f;
   float gyro_z = 0.0f;
+
+  float qi = 0.0f;
+  float qj = 0.0f;
+  float qk = 0.0f;
+  float qr = 0.0f;
+
+  float yaw = 0.0f;
 };
 
 class IMUDriver : public Classes::BaseDriver {
@@ -50,6 +57,8 @@ class IMUDriver : public Classes::BaseDriver {
   char* getInfo() override;
 
   IMUDriverData getData() { return data_; };
+
+  float calculateYaw(float qi, float qj, float qk, float qr);
 
  private:
   const IMUDriverSetup setup_;

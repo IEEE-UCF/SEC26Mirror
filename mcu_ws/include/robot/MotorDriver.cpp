@@ -6,7 +6,7 @@ bool MotorDriver::init() {
   initSuccess_ = true;
 
   if (setup_.pwm_pin >= 0) {
-    // analogWriteFrequency(setup_.pwm_pin, 18310.55);
+    analogWriteFrequency(setup_.pwm_pin, 18310.55);
     pinMode(setup_.pwm_pin, OUTPUT);
   } else {
     initSuccess_ = false;

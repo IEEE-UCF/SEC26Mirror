@@ -18,8 +18,10 @@ class RGBColor {
  public:
   ~RGBColor() = default;
   RGBColor() = delete;
+
   RGBColor(const uint8_t r, const uint8_t g, const uint8_t b)
       : _r(r), _g(g), _b(b) {}
+
   uint8_t _r;
   uint8_t _g;
   uint8_t _b;
@@ -44,12 +46,24 @@ class RGBAnalogLEDSetup : public Classes::BaseSetup {
 /// @brief main RGB LED class
 class RGBAnalogLED : public Classes::BaseDriver {
  public:
-  RGBAnalogLED(const RGBAnalogLEDSetup& setup);  // constructor
-  bool init() override;                          // initialize LED
-  void update() override;                        // update LED color
-  const char* getInfo() override;                // get info on LED
+  ~RGBAnalogLED() override = default;
 
-  void setColor(RGBColor& color);  // set LED color
+  RGBAnalogLED(const RGBAnalogLEDSetup& setup)
+      : _setup(setup), _colorBuffer(RGBColor(0, 0, 0)), BaseDriver(setup) {};
+
+  /// @brief  Initialize driver
+  /// @return Success
+  bool init() override;
+
+  /// @brief Update LED color
+  void update() override;
+
+  /// @brief Get info in the form of a data string
+  /// @return data string
+  const char* getInfo() override;
+
+  /// @brief Set LED color
+  void setColor(RGBColor& color);
 
  private:
   const RGBAnalogLEDSetup& _setup;  // setup information

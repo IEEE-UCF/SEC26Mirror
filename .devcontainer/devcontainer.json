@@ -1,0 +1,35 @@
+{
+  "name": "SEC26 Dev",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "service": "devcontainer",
+  "workspaceFolder": "/home/ubuntu",
+  "overrideCommand": false,
+  "remoteUser": "ubuntu",
+  "features": {},
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash",
+        "C_Cpp.default.includePath": [
+          "/home/ubuntu/ros2_workspaces/src/**",
+          "/home/ubuntu/ros2_workspaces/install/**",
+          "/home/ubuntu/ros2_workspaces/build/**",
+          "/usr/include",
+          "/usr/local/include",
+          "/opt/ros/humble/include"
+        ],
+        "C_Cpp.default.compileCommands": "/home/ubuntu/ros2_workspaces/build/compile_commands.json",
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+      },
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-iot.vscode-ros",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "platformio.platformio-ide"
+      ]
+    }
+  },
+  "runServices": ["devcontainer"],
+  "shutdownAction": "none"
+}

@@ -6,44 +6,44 @@ on:
     branches:
       - prod
       - CD-testing
+  workflow_dispatch:
 
 jobs:
+  # 1. Robot Job - Always Runs
   deploy-robot:
     runs-on: rpi-ros2
     
-    # 1. Force all steps to run inside your specific directory
+    # Force all steps to run inside your specific directory
     defaults:
       run:
         working-directory: /home/ieee/SEC26
 
     steps:
-      - name: Pull Latest Code
+      - name: LEDs On
+        run: |
+          echo "⚡ LED Flashing (daemonized) during deployment"
+          # Kill any lingering daemonized gpioset processes
+          pkill -f "gpioset.*BOOTLED" || true
+          gpioset -z -C BOOTLED -c gpiochip0 -t 200 17=1
+      - name: 📂 Pull Latest Code (Robot)
         run: |
           echo "📂 Navigating to /home/ieee/SEC26..."
-          
-          # Ensure git trusts this directory (prevents "dubious ownership" errors)
           git config --global --add safe.directory /home/ieee/SEC26
-          
-          # Force sync with the repository (WARNING: wipes local uncommitted changes on the Pi)
           git fetch --all
-          
           echo "🔀 Switching to branch: ${{ gitea.ref_name }}"
           git reset --hard origin/${{ gitea.ref_name }}
-
           echo "🔧 Fixing permissions..."
           chmod +x scripts/start_robot.sh
 
-      - name: Run Verification Script
+      - name: 🧪 Run Verification Script
         run: |
           echo "🧪 Running test script on the Pi..."
-          # We call the script inside the scripts folder
+          # The verification script runs from the working-directory/scripts
           python3 scripts/test_deploy.py
 
-      - name: Build and Deploy
+      - name: 🚀 Build and Deploy (Docker)
         run: |
-          echo "🚀 Rebuilding from: /home/ieee/SEC26/docker/dev_ws/docker-compose.yml"
-          
-          # Define the file path relative to the working directory
+          echo "🚀 Rebuilding from: /home/ieee/SEC26/docker-compose.yml"
           COMPOSE_FILE="docker-compose.yml"
           
           # 1. Stop existing services
@@ -55,18 +55,47 @@ jobs:
           # 3. Start the container
           docker compose -f $COMPOSE_FILE --project-directory . up -d
 
-
-
-      - name: Run and activate ROS2 things
+      - name: ▶️ Run and activate ROS2 things
+        env:
+          EVENT_NAME: ${{ gitea.event_name }}
         run: |
           # 4. Wait a moment for container to stabilize
           sleep 5
 
-          # 5. Run the script INSIDE the container
-          # We use "bash -c" to ensure it runs properly
-          docker exec -u rosdev sec26-devcontainer-1 bash -c "/home/rosdev/ros2_workspaces/src/sec26/scripts/start_robot.sh"
+          # 5. Determine if MCU sources changed in latest commit range
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "🟠 Manual dispatch detected; forcing MCU flash"
+            CHANGED_MCU="mcu_ws/"
+          else
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              CHANGED_MCU=$(git diff --name-only HEAD~1 HEAD | grep '^mcu_ws/' || true)
+            else
+              # No previous commit available; default to flashing MCU once
+              CHANGED_MCU="mcu_ws/"
+            fi
+          fi
 
-      - name: Cleanup
+          if [ -z "$CHANGED_MCU" ]; then
+            echo "ℹ️ No changes detected in mcu_ws; skipping MCU flash"
+            MCU_FLAG="--skip-mcu"
+          else
+            echo "🔧 Changes detected in mcu_ws; will flash MCU"
+            MCU_FLAG=""
+          fi
+
+          # 6. Run unified deployment script inside container (conditional MCU flash, ROS build, then launch test node)
+          docker exec -u ubuntu sec26-devcontainer-1 bash -c "python3 /home/ubuntu/scripts/deploy-all.py $MCU_FLAG"
+
+      - name: 🧹 Cleanup
         run: |
           echo "🧹 Cleaning up old images..."
           docker image prune -f
+
+      - name: ⚡ Ensure LED process stops (always)
+        if: ${{ always() }}
+        run: |
+          echo "⚡ Ensuring BOOTLED process is stopped regardless of job outcome"
+          # Kill any lingering daemonized gpioset processes
+          pkill -f "gpioset.*BOOTLED" || true
+          # Explicitly turn the LED on
+          gpioset -z -C BOOTLED -c gpiochip0 17=1 || true

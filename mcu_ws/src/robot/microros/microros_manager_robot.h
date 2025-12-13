@@ -16,6 +16,9 @@
 #include <rclc/executor.h>
 #include <rmw_microros/rmw_microros.h>
 #include <std_msgs/msg/int32.h>
+#include <std_msgs/msg/string.h>
+#include <std_msgs/msg/bool.h>
+#include <geometry_msgs/msg/transform_stamped.h>
 #include <tf2_msgs/msg/tf_message.h>
 #include "microros_setup.h"
 
@@ -59,6 +62,17 @@ class MicrorosManager : public Classes::BaseSubsystem {
   rcl_allocator_t allocator_;
   rcl_publisher_t publisher_;
   std_msgs__msg__Int32 msg_;
+  // Heartbeat and state publishers
+  rcl_publisher_t heartbeat_pub_;
+  std_msgs__msg__Int32 heartbeat_msg_;
+  rcl_publisher_t state_pub_;
+  std_msgs__msg__String state_msg_;
+  // TF publisher
+  rcl_publisher_t tf_pub_;
+  tf2_msgs__msg__TFMessage* tf_message_ = nullptr;
+  // Cached pose
+  float pos_x_ = 0.0f, pos_y_ = 0.0f, pos_z_ = 0.0f;
+  float roll_ = 0.0f, pitch_ = 0.0f, yaw_ = 0.0f;
 
   enum State {
     WAITING_AGENT,
@@ -71,6 +85,11 @@ class MicrorosManager : public Classes::BaseSubsystem {
   static void timer_callback(rcl_timer_t* timer, int64_t last_call_time);
   bool create_entities();
   void destroy_entities();
+  void update_tf_message();
+ public:
+  // External setters for pose and state
+  void setPose(float x, float y, float z, float roll, float pitch, float yaw);
+  void setState(const char* state);
 };
 
 }  // namespace Subsystem

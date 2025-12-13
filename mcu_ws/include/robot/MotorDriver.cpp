@@ -1,3 +1,11 @@
 #include "MotorDriver.h"
 
-namespace Drivers {}
+namespace Drivers {
+
+bool MotorDriver::init() {}
+
+void MotorDriver::update() {}
+
+char* MotorDriver::getInfo() {}
+
+}  // namespace Drivers

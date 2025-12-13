@@ -1,4 +1,4 @@
-// Test harness for MicrorosManager: publishes TF (pose), heartbeat, and state
+// Test harness for MicrorosManager: publishes heartbeat and state
 #include <Arduino.h>
 #include "robot/microros/microros_manager_robot.h"
 
@@ -16,9 +16,8 @@ void setup() {
 	mgr->init();
 	mgr->begin();
 
-	// Seed initial state and pose
+	// Seed initial state
 	mgr->setState("BOOT");
-	mgr->setPose(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 }
 
 void loop() {
@@ -27,18 +26,7 @@ void loop() {
 	t += 1;
 	theta += 1.0f; // degrees
 
-	// Fake circular position and oscillating altitude
-	float x = 0.5f * cos(theta * 3.14159f / 180.0f);
-	float y = 0.5f * sin(theta * 3.14159f / 180.0f);
-	float z = 0.1f * sin(theta * 2.0f * 3.14159f / 180.0f);
-
-	// Fake orientation (roll/pitch/yaw in degrees)
-	float roll = 5.0f * sin(theta * 3.14159f / 180.0f);
-	float pitch = 3.0f * cos(theta * 3.14159f / 180.0f);
-	float yaw = fmod(theta, 360.0f);
-
-	// Update manager cached pose
-	mgr->setPose(x, y, z, roll, pitch, yaw);
+	// (TF pose updates removed)
 
 	// Cycle state string every few seconds
 	if (t % 500 == 0) mgr->setState("IDLE");

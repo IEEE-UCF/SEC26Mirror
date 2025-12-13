@@ -1,6 +1,6 @@
 // Minimal test that starts the microros subsystem and runs it
 #include <Arduino.h>
-#include <microros_manager.h>
+#include <microros_manager_example.h>
 
 using namespace Subsystem;
 

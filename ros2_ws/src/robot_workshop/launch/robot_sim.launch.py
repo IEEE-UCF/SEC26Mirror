@@ -45,27 +45,39 @@ def generate_launch_description():
         output='screen'
     )
 
-    image_topic_arg = DeclareLaunchArgument('image_topic', default_value='/camera2/image_raw')
-    image_topic = LaunchConfiguration('image_topic')
+    # image_topic_arg = DeclareLaunchArgument('image_topic', default_value='/camera2/image_raw')
+    # image_topic = LaunchConfiguration('image_topic')
 
     
+    # vision = Node(
+    #     package='robot_workshop',
+    #     executable='detector_node',
+    #     name='detector_node',
+    #     output='screen',
+    #     parameters=[{
+    #         'image_topic': image_topic,     # change if your bridge publishes a different name
+    #         'class_name':  'yellow_object',
+    #         'debug_viz':   True,
+    #         'pub_topic': '/detected_objects',
+    #         'pub_debug_image': '/vision/debug_image',
+    #     }],
+    # )
+
+    vision_config = os.path.join(
+        get_package_share_directory('robot_workshop'), 
+        'config', 
+        'vision.yaml')
     vision = Node(
-        package='robot_workshop',
+        package = 'robot_workshop',
         executable='detector_node',
         name='detector_node',
         output='screen',
-        parameters=[{
-            'image_topic': image_topic,     # change if your bridge publishes a different name
-            'class_name':  'yellow_object',
-            'debug_viz':   True,
-            'pub_topic': '/detected_objects',
-            'pub_debug_image': '/vision/debug_image',
-        }],
+        parameters=[vision_config]
     )
 
     return LaunchDescription([
         gz_sim,
         bridge,
-        image_topic_arg ,
+        # image_topic_arg ,
         vision,
     ])

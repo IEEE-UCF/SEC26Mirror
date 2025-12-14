@@ -124,6 +124,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-ros-gz \
     ros-$ROS_DISTRO-rviz2 \
     ros-$ROS_DISTRO-gz-ros2-control \
+    ros-$ROS_DISTRO-rqt-graph \
     curl \
     lsb-release \
     gnupg \

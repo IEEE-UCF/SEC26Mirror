@@ -2,7 +2,7 @@
  * @file I2CPowerDriver.h
  * @author Alexander Peacock
  * @brief Defines the Driver for an INA228 I2C power sensor
- * @date 12/13/2025
+ * @date 12/14/2025
  */
 
 #ifndef I2CPOWERDRIVER_H
@@ -12,7 +12,7 @@
 #include <Arduino.h>
 #include <BaseDriver.h>
 
-// i2c address default is 0x40
+#include <string>
 
 namespace Drivers {
 
@@ -22,22 +22,22 @@ class I2CPowerDriverSetup : public Classes::BaseSetup {
   I2CPowerDriverSetup() = delete;
 
   I2CPowerDriverSetup(const char* _id, uint8_t address = 0x40,
-                      uint8_t maxCurrent = 10, float shuntRes = 0.015)
+                      float maxCurrent = 10, float shuntRes = 0.015)
       : Classes::BaseSetup(_id),
         _address(address),
         _maxCurrent(maxCurrent),
         _shuntRes(shuntRes) {};
 
-  const uint8_t _address;
-  const uint8_t _maxCurrent;
-  const float _shuntRes;
+  const uint8_t _address;   // i2c address default is 0x40
+  const float _maxCurrent;  // max current
+  const float _shuntRes;    // shunt resistance
 };
 
 struct PowerDriverData {
-  float current = 0.0f;
+  float currentmA = 0.0f;
   float busVoltage = 0.0f;
-  float shuntVoltage = 0.0f;
-  float power = 0.0f;
+  float shuntVoltagemW = 0.0f;
+  float powermW = 0.0f;
   float energy = 0.0f;
   float charge = 0.0f;
   float temp = 0.0f;
@@ -64,11 +64,11 @@ class I2CPowerDriver : public Classes::BaseDriver {
 
   /// @brief  Get current
   /// @return float
-  float getCurrent();
+  float getCurrentmW();
 
   /// @brief  Get power
   /// @return float
-  float getPower();
+  float getPowermW();
 
   /// @brief  Get temperature
   /// @return float

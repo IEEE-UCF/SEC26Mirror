@@ -32,7 +32,7 @@ void MotorDriver::update() {
   analogWrite(setup_.pwm_pin, pwmOut);
 }
 
-char* MotorDriver::getInfo() {
+const char* MotorDriver::getInfo() {
   snprintf(infoBuffer_, sizeof(infoBuffer_), "Motor: %s, PWM: %d, Dir: %d",
            setup_.getId(), pwmOut, motorDirection);
   return infoBuffer_;

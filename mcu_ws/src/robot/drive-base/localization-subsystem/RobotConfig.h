@@ -12,7 +12,7 @@ namespace RobotConfig {
 
 // THESE ARE NOT ACCURATE CHANGE LATER!!!!!!!!!!!!!!!!!!
 
-constexpr float TRACK_WIDTH;
+constexpr float TRACK_WIDTH = 10.0f;
 
 constexpr float WHEEL_DIAMETER = 3.25;
 constexpr float WHEEL_RADIUS = WHEEL_DIAMETER * 0.5f;

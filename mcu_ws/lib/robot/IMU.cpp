@@ -62,8 +62,8 @@ float IMUDriver::calculateYaw(float qi, float qj, float qk, float qr) {
   return yaw;
 }
 
-char* IMUDriver::getInfo() {
-  snprintf(infoBuffer_, sizeof(infoBuffer_), "IMU: %s", setup_.id);
+const char* IMUDriver::getInfo() {
+  snprintf(infoBuffer_, sizeof(infoBuffer_), "IMU: %s", setup_.getId());
   return infoBuffer_;
 }
 

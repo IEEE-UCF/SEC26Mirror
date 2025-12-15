@@ -34,11 +34,11 @@ class MotorDriver : public Classes::BaseDriver {
 
   ~MotorDriver() override = default;
   MotorDriver(const MotorDriverSetup& setup)
-      : setup_(setup), BaseDriver(setup) {};
+      : BaseDriver(setup), setup_(setup) {};
 
   bool init() override;
   void update() override;
-  char* getInfo() override;
+  const char* getInfo() override;
 
   void setPWM(int speed);
 

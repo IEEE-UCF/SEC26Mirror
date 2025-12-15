@@ -18,8 +18,8 @@ void TOFDriver::update() {
 }
 
 std::string TOFDriver::getInfo() {
-  std::string info =
-      "\nID: " + getId() + "\nData (mm): " + std::to_string(range_.range);
+  std::string info = "\nID: " + setup_.getId() +
+                     "\nData (mm): " + std::to_string(range_.range);
   return info;
 }
 }  // namespace Drivers

@@ -9,35 +9,58 @@
 #define ROBOTDRIVEBASE_H
 
 #include <memory>
+#include <vector>
 
 #include "EncoderDriver.h"
-#include "Localization.h"
 #include "MotorDriver.h"
 #include "Vector2D.h"
+#include "localization-subsystem/Localization.h"
+#include "localization-subsystem/RobotConfig.h"
+
+enum class DriveMode { MANUAL, AUTO };
 
 struct DriveBaseSetup {
-  std::vector<std::unique_ptr<MotorDriver>> motors_;
-  std::vector<std::unique_ptr<EncoderDriver>> encoders_;
+  std::vector<Drivers::MotorDriverSetup> motorSetups;
+  std::vector<Drivers::EncoderDriverSetup> encoderSetups;
 
-  // PID stuff  (this might be too much for one file lolz)
-
-  int numMotors;
+  // PID Config
 };
 
 class RobotDriveBase {
  public:
   ~RobotDriveBase() = default;
-  RobotDriveBase(const DriveBaseSetup& _setup);
+  RobotDriveBase(const DriveBaseSetup& setup_);
 
-  void setMotorSpeeds(const int motorSpeeds[]);
-  void setSingleMotorSpeed(const int motorSpeed, const int index);
+  void driveVelocity(Vector2D& targetVelocity);
+  void driveSetPoint(Pose2D& targetPose);
+
+  void setMotorSpeeds(int leftSpeed, int rightSpeed);
+
+  void resetPose();
+
+  void update(float dt);
 
  private:
-  DriveBaseSetup driveSetup_;
+  void readEncoders();
+  void updateLocalization(float yaw);
+  void velocityFromPose();
+  void velocityControl(float dt);
+
+  DriveBaseSetup setup_;
   Localization localization_;
 
-  Vector2D currentVelocityPose_;
-  Vector2D targetVelocityPose_;
+  std::vector<std::unique_ptr<Drivers::MotorDriver>> leftMotors_;
+  std::vector<std::unique_ptr<Drivers::MotorDriver>> rightMotors_;
+  std::unique_ptr<Drivers::EncoderDriver> leftEncoder_;
+  std::unique_ptr<Drivers::EncoderDriver> rightEncoder_;
+
+  Drivers::EncoderData leftTicks_;
+  Drivers::EncoderData rightTicks_;
+
+  DriveMode currentMode_ = DriveMode::AUTO;
+
+  Vector2D targetVelocity_;
+  Pose2D targetPose_;
 };
 
 #endif

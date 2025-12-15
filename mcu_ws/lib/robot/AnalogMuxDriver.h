@@ -46,11 +46,8 @@ class AnalogMuxDriver : public Classes::BaseDriver {
   bool init() override;
 
   /// @brief read from select channel
-  void update(uint8_t ch);
-
-  /// @brief read from select channel
   /// @return int
-  int readMux();
+  int readMux(uint8_t ch);
 
   /// @brief Get info in the form of a data string
   /// @return data string

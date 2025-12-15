@@ -7,14 +7,12 @@ bool AnalogMuxDriver::init() {
     return true; 
 }
 
-void AnalogMuxDriver::update(uint8_t ch) {
-    CD74HC4067 aMux(_setup._sPins[0], _setup._sPins[1], _setup._sPins[2],
+int AnalogMuxDriver::readMux(uint8_t ch) {
+  CD74HC4067 aMux(_setup._sPins[0], _setup._sPins[1], _setup._sPins[2],
             _setup._sPins[3]);
 
   aMux.channel(ch);
-}
 
-int AnalogMuxDriver::readMux() {
   int value = analogRead(_setup._sigPin);
   return value;
 }

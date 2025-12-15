@@ -47,6 +47,27 @@
       </link>
     </model>
 
+    
+
+    <!-- Mustard bottles (spawned at world load) -->
+    <!-- <include>
+      <name>mustard_bottle_0</name>
+      <uri>file:///home/ubuntu/ros2_workspaces/src/sec26ros/src/robot_workshop/worlds/model.sdf</uri>
+      <pose>1.0 0.0 0.15 0 0 0</pose>
+    </include>
+
+    <include>
+      <name>mustard_bottle_1</name>
+      <uri>file:///home/ubuntu/ros2_workspaces/src/sec26ros/src/robot_workshop/worlds/model.sdf</uri>
+      <pose>1.0 0.3 0.15 0 0 0</pose>
+    </include>
+
+    <include>
+      <name>mustard_bottle_2</name>
+      <uri>file:///home/ubuntu/ros2_workspaces/src/sec26ros/src/robot_workshop/worlds/model.sdf</uri>
+      <pose>1.0 -0.6 0.15 0 0 0</pose>
+    </include> -->
+
     <model name="my_bot">
       <pose>0 0 0.08255 0 0 0</pose>
       

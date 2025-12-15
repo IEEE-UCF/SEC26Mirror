@@ -29,6 +29,7 @@ from cv_bridge import CvBridge
 from .duck_detector import process_frame
 import cv2, os, yaml, numpy as np
 from ament_index_python.packages import get_package_share_directory
+from robot_workshop.msg import DuckDetection, DuckDetections
 
 class DetectorNode(Node):
     """DetectorNode class"""
@@ -61,6 +62,11 @@ class DetectorNode(Node):
         self.sub     = self.create_subscription(Image, image_topic, self.on_image, qos)
         self.pub_det = self.create_publisher(Detection2DArray, self.pub_topic, 10)
         self.pub_dbg = self.create_publisher(Image, self.pub_dbg_name, 10) if self.debug_viz else None
+        # self.pub_ducks = self.create_publisher(
+        #     DuckDetections,     # Type of Message it can send
+        #     '/duck_detections', # Name
+        #     10                  # Queue Size
+        # )
 
         # Logging info
         self.get_logger().info(f"Using: {image_topic}")
@@ -134,7 +140,25 @@ class DetectorNode(Node):
                 f"[DEBUG IMG] Published annotated frame with {len(metadata)} detections to: {self.pub_dbg_name}"
             )
 
-        
+    # msg = DuckDetections()
+    # msg.header = img_msg.header
+
+    # for meta in metadata:
+    #     d = DuckDetection()
+
+    #     d.x, d.y = meta["Position"]
+    #     d.w, d.h = meta["Size"]
+    #     d.confidence = meta["Score"]
+    #     d.area = meta["Area"]
+    #     d.id = meta["Id"]
+
+    #     d.center_x = d.w + d.w / 2.0
+    #     d.center_y = d.y + d.y / 2.0
+
+    #     msg.detections.append(d)
+    
+
+
 
 def main():
     rclpy.init()

@@ -1,0 +1,35 @@
+from setuptools import setup
+from glob import glob
+import os
+
+package_name = 'secbot_vision'
+
+setup(
+    name=package_name,
+    version='0.1.0',
+    packages=[package_name],
+    data_files=[
+        ('share/ament_index/resource_index/packages',
+            ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'),
+            glob('launch/*.py')),
+        (os.path.join('share', package_name, 'worlds'),
+            glob('worlds/*.sdf') + glob('worlds/*.dae') + glob('worlds/*.png') + glob('worlds/*.mtl')),
+        (os.path.join('share', package_name, 'config'),
+            glob('config/*.yaml')),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    maintainer='Deoxon',
+    maintainer_email='your.email@example.com',
+    description='Vision package for secbot',
+    license='MIT',
+    tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [
+            'detector_node = secbot_vision.detector_node:main',
+            'teleop_pid = secbot_vision.teleop_pid:main',
+        ],
+    },
+)

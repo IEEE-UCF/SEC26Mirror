@@ -1,8 +1,0 @@
-html/
-Doxyfile
-.vscode/
-.pio/
-**/.claude/settings.local.json
-*.bak
-*.txt
-*.pdf

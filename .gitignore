@@ -62,3 +62,8 @@ ros2_ws/.vscode/*
 # platformio
 .pio/*
 mcu_ws/.vscode/*
+
+# python
+*.pyc
+
+

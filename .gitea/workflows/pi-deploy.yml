@@ -32,6 +32,8 @@ jobs:
           git fetch --all
           echo "🔀 Switching to branch: ${{ gitea.ref_name }}"
           git reset --hard origin/${{ gitea.ref_name }}
+          echo "📂 Updating submodules..."
+          git submodule update --init --recursive
           echo "🔧 Fixing permissions..."
           chmod +x scripts/start_robot.sh
 

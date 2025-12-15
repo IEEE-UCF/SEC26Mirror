@@ -131,10 +131,8 @@ jobs:
 
       - name: Colcon build (attached, stream logs)
         run: |
-          docker compose --env-file .env.ci run --rm devcontainer sh -lc '
-            set -e;
-            if [ -f /opt/ros/jazzy/setup.sh ]; then . /opt/ros/jazzy/setup.sh; fi;
-            if [ -f /opt/ros/jazzy/setup.bash ]; then . /opt/ros/jazzy/setup.bash; fi;
+          docker compose --env-file .env.ci run --rm devcontainer bash -lc '
+            set -euo pipefail;
             cd /home/ubuntu/ros2_workspaces;
             colcon build
           '

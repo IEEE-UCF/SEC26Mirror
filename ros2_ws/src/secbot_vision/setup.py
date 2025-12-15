@@ -29,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'detector_node = secbot_vision.detector_node:main',
+            'teleop_pid = secbot_vision.teleop_pid:main',
         ],
     },
 )

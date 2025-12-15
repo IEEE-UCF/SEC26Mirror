@@ -68,11 +68,14 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Sanitize branch name for Docker tag
         id: sanitize
         run: |
-          BRANCH_SLUG=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's/[^a-zA-Z0.9.-]/-/g')
+          BRANCH_SLUG=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's/[^a-zA-Z0-9.-]/-/g')
           echo "BRANCH_SLUG=${BRANCH_SLUG}" >> $GITHUB_ENV
       
       - name: Set up Docker Buildx
@@ -103,6 +106,35 @@ jobs:
           
           # The sanitized slug MUST remain here to keep caches separate.
           cache-from: |
+            type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:latest
             type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:cache-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_platform.outputs.slug }}
             type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:cache-main-${{ steps.sanitize_platform.outputs.slug }}
           cache-to: type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:cache-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_platform.outputs.slug }},mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Prepare docker-compose env (prod)
+        run: |
+          echo "BUILD_TARGET=prod" > .env.ci
+          echo "NETWORK_MODE_CONFIG=bridge" >> .env.ci
+          echo "DISPLAY_CONFIG=" >> .env.ci
+          sudo mkdir -p /tmp/.X11-unix
+
+      - name: Init bootstrap (attached, stream logs)
+        run: |
+          docker compose --env-file .env.ci up --no-build --exit-code-from init-bootstrap init-bootstrap
+
+      - name: Colcon build (attached, stream logs)
+        run: |
+          docker compose --env-file .env.ci run --rm devcontainer sh -lc '
+            set -e;
+            if [ -f /opt/ros/jazzy/setup.sh ]; then . /opt/ros/jazzy/setup.sh; fi;
+            if [ -f /opt/ros/jazzy/setup.bash ]; then . /opt/ros/jazzy/setup.bash; fi;
+            cd /home/ubuntu/ros2_workspaces;
+            colcon build
+          '
+
+      - name: Stop containers
+        if: always()
+        run: |
+          docker compose --env-file .env.ci down -v --remove-orphans

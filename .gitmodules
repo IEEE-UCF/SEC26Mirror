@@ -1,6 +1,3 @@
-[submodule "lib/micro_ros_arduino_examples_platformio"]
-	path = lib/micro_ros_arduino_examples_platformio
-	url = https://github.com/hippo5329/micro_ros_arduino_examples_platformio.git
 [submodule "mcu_ws/libs_external/esp32/micro_ros_platformio"]
 	path = mcu_ws/libs_external/esp32/micro_ros_platformio
 	url = https://github.com/IEEE-UCF/micro_ros_platformio.git

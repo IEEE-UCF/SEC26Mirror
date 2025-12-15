@@ -17,7 +17,6 @@ services:
       # Ensure ROS2 workspace-level VS Code settings land at /home/ubuntu/ros2_workspaces/.vscode
       - ./ros2_ws/.vscode:/home/ubuntu/ros2_workspaces/.vscode:delegated
       - ./mcu_ws:/home/ubuntu/mcu_workspaces/sec26mcu:delegated
-      - ./lib/micro_ros_arduino_examples_platformio:/home/ubuntu/mcu_workspaces/micro_ros_arduino_examples_platformio:delegated
       - ./scripts:/home/ubuntu/scripts
 
       # --- Build Artifacts (Persisted in Docker, kept off Host) ---
@@ -28,7 +27,6 @@ services:
       - ros2_log:/home/ubuntu/ros2_workspaces/log
       - platformio_cache:/home/ubuntu/.platformio
       - mcu_build_artifacts:/home/ubuntu/mcu_workspaces/sec26mcu/.pio
-      - mcu_build_artifacts_microros:/home/ubuntu/mcu_workspaces/micro_ros_arduino_examples_platformio/.pio
       - mcu_lib_external:/home/ubuntu/mcu_workspaces/sec26mcu/libs_external
 
       # --- System / Hardware ---
@@ -54,7 +52,6 @@ services:
       - ros2_log:/ros2_log
       - platformio_cache:/platformio_cache
       - mcu_build_artifacts:/mcu_build_artifacts
-      - mcu_build_artifacts_microros:/mcu_build_artifacts_microros
       - mcu_lib_external:/mcu_lib_external
       - ./mcu_ws/libs_external:/seed:ro
       - ./scripts:/scripts:ro
@@ -70,5 +67,4 @@ volumes:
   ros2_log:
   platformio_cache:
   mcu_build_artifacts:
-  mcu_build_artifacts_microros:
   mcu_lib_external:

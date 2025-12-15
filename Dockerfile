@@ -124,7 +124,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-ros-gz \
     ros-$ROS_DISTRO-rviz2 \
     ros-$ROS_DISTRO-gz-ros2-control \
-    ros-$ROS_DISTRO-rqt-graph \
     curl \
     lsb-release \
     gnupg \
@@ -139,6 +138,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gz-harmonic && \
     # Cleanup apt caches
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    #Add rqt graph
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-$ROS_DISTRO-rqt-graph 
 
 USER $USER_NAME
 ENTRYPOINT ["/ros_entrypoint.sh"]

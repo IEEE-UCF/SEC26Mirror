@@ -56,7 +56,7 @@ services:
       - ./mcu_ws/libs_external:/seed:ro
       - ./scripts:/scripts:ro
     entrypoint: ["/bin/sh","-ec"]
-    command: /scripts/init_bootstrap.sh
+    command: sh /scripts/init_bootstrap.sh
     restart: "no"
 
 

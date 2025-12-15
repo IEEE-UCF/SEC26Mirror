@@ -29,7 +29,7 @@ from cv_bridge import CvBridge
 from .duck_detector import process_frame
 import cv2, os, yaml, numpy as np
 from ament_index_python.packages import get_package_share_directory
-from robot_workshop.msg import DuckDetection, DuckDetections
+from robot_workshop_msgs.msg import DuckDetection, DuckDetections
 
 class DetectorNode(Node):
     """DetectorNode class"""
@@ -62,11 +62,11 @@ class DetectorNode(Node):
         self.sub     = self.create_subscription(Image, image_topic, self.on_image, qos)
         self.pub_det = self.create_publisher(Detection2DArray, self.pub_topic, 10)
         self.pub_dbg = self.create_publisher(Image, self.pub_dbg_name, 10) if self.debug_viz else None
-        # self.pub_ducks = self.create_publisher(
-        #     DuckDetections,     # Type of Message it can send
-        #     '/duck_detections', # Name
-        #     10                  # Queue Size
-        # )
+        self.pub_ducks = self.create_publisher(
+            DuckDetections,     # Type of Message it can send
+            '/duck_detections', # Name
+            10                  # Queue Size
+        )
 
         # Logging info
         self.get_logger().info(f"Using: {image_topic}")
@@ -140,22 +140,28 @@ class DetectorNode(Node):
                 f"[DEBUG IMG] Published annotated frame with {len(metadata)} detections to: {self.pub_dbg_name}"
             )
 
-    # msg = DuckDetections()
-    # msg.header = img_msg.header
+        # Publish standard Object Detection Array
+        self.pub_det.publish(arr)
 
-    # for meta in metadata:
-    #     d = DuckDetection()
+        # Create and Publish Custom Duck Detections
+        duck_msg = DuckDetections()
+        duck_msg.header = msg.header # re-use the image header
 
-    #     d.x, d.y = meta["Position"]
-    #     d.w, d.h = meta["Size"]
-    #     d.confidence = meta["Score"]
-    #     d.area = meta["Area"]
-    #     d.id = meta["Id"]
+        for meta in metadata:
+            d = DuckDetection()
 
-    #     d.center_x = d.w + d.w / 2.0
-    #     d.center_y = d.y + d.y / 2.0
+            d.x, d.y = float(meta["Position"][0]), float(meta["Position"][1])
+            d.w, d.h = float(meta["Size"][0]), float(meta["Size"][1])
+            d.confidence = float(meta["Score"])
+            d.area = float(meta["Area"])
+            d.id = int(meta["Id"])
 
-    #     msg.detections.append(d)
+            d.center_x = float(d.x + d.w / 2.0)
+            d.center_y = float(d.y + d.h / 2.0)
+
+            duck_msg.detections.append(d)
+        
+        self.pub_ducks.publish(duck_msg)
     
 
 

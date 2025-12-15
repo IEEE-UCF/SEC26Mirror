@@ -1,1 +1,2 @@
-# One duck and a list of ducks from vision.
+std_msgs/Header header
+DuckDetection[] detections

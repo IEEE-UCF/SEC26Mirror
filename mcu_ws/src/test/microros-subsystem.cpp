@@ -3,8 +3,9 @@
 #include "robot/microros/ExampleSubsystem.h"
 
 Subsystem::MicrorosManagerSetup managerSetup("microros_manager_test");
+Subsystem::ExampleSubsystemSetup exampleSetup("example_subsystem_test");
 Subsystem::MicrorosManager manager(managerSetup);
-Subsystem::ExampleSubsystem example;
+Subsystem::ExampleSubsystem example(exampleSetup);
 
 void setup() {
   manager.init();

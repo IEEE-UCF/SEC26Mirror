@@ -1,5 +1,6 @@
 #pragma once
 #include "microros_manager_robot.h"
+#include <BaseSubsystem.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 #include <std_msgs/msg/string.h>
@@ -7,8 +8,24 @@
 
 namespace Subsystem {
 
-class ExampleSubsystem : public IMicroRosParticipant {
+class ExampleSubsystemSetup : public Classes::BaseSetup {
  public:
+  ExampleSubsystemSetup(const char* _id) : Classes::BaseSetup(_id) {}
+};
+
+class ExampleSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
+ public:
+  explicit ExampleSubsystem(const ExampleSubsystemSetup& setup)
+    : Classes::BaseSubsystem(setup), setup_(setup) {}
+
+  // BaseSubsystem lifecycle
+  bool init() override { return true; }
+  void begin() override {}
+  void update() override {}
+  void pause() override {}
+  void reset() override { pause(); }
+  const char* getInfo() override { static const char info[] = "ExampleSubsystem"; return info; }
+
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     (void)executor; // not used in this simple example
     node_ = node;
@@ -39,6 +56,7 @@ class ExampleSubsystem : public IMicroRosParticipant {
     (void)ret;
   }
  private:
+  const ExampleSubsystemSetup setup_;
   rcl_publisher_t pub_{};
   std_msgs__msg__String msg_{};
   rcl_node_t* node_ = nullptr;

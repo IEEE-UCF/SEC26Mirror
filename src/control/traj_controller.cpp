@@ -155,7 +155,7 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose, f
 
   // normal case: multi-point path
 
-  // advance progress along path if we’re close enough to the next waypoint
+  // advance progress along path if we're close enough to the next waypoint
   advanceIfNeeded(pose);
 
   // if we reached the end segment index and are basically at the final point, finish

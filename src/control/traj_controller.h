@@ -20,8 +20,7 @@
  * point.
  *
  * Intended use:
- *  - Your higher-level code converts (v,w) to wheel targets, then uses wheel
- * PID.
+ *  - The higher-level code converts (v,w) to wheel targets, then uses wheel PID.
  */
 
 class TrajectoryController {
@@ -62,7 +61,7 @@ class TrajectoryController {
     // Bigger = smoother but cuts corners
     float lookahead_dist = 0.30f;
 
-    // Cruise speed if waypoints don’t specify v
+    // Cruise speed if waypoints dont specify v
     float cruise_v = 0.50f;
 
     // Output clamps

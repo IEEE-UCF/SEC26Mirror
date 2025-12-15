@@ -54,6 +54,7 @@ ros2_ws/install/*
 build/*
 install/*
 log/*
+ros2_ws/.vscode/*
 
 # env
 *.env

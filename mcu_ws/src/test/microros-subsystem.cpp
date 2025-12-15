@@ -1,0 +1,25 @@
+#include <Arduino.h>
+#include "robot/microros/microros_manager_robot.h"
+#include "robot/microros/ExampleSubsystem.h"
+
+Subsystem::MicrorosManagerSetup managerSetup("microros_manager_test");
+Subsystem::MicrorosManager manager(managerSetup);
+Subsystem::ExampleSubsystem example;
+
+void setup() {
+  manager.init();
+  manager.begin();
+  // Register example subsystem so it can create its pubs/subs
+  manager.registerParticipant(&example);
+}
+
+void loop() {
+  manager.update();
+  // Publish a status periodically from the example subsystem when connected
+  static uint32_t last_ms = 0;
+  uint32_t now = millis();
+  if (now - last_ms > 1000) {
+    example.publishStatus("OK");
+    last_ms = now;
+  }
+}

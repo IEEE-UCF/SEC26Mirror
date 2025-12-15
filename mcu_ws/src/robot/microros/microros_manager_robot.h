@@ -15,11 +15,6 @@
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 #include <rmw_microros/rmw_microros.h>
-#include <std_msgs/msg/int32.h>
-#include <std_msgs/msg/string.h>
-#include <std_msgs/msg/bool.h>
-#include <geometry_msgs/msg/transform_stamped.h>
-#include <tf2_msgs/msg/tf_message.h>
 #include "microros_setup.h"
 
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){return false;}}
@@ -36,6 +31,17 @@
   } while (0)
 
 namespace Subsystem {
+
+// Interface for subsystems that want to own their ROS pubs/subs
+class IMicroRosParticipant {
+ public:
+  virtual ~IMicroRosParticipant() {}
+  // Called when manager creates entities; participant should create its pubs/subs here
+  virtual bool onCreate(rcl_node_t* node, rclc_executor_t* executor) = 0;
+  // Called when manager tears down entities; participant should clean up any resources
+  virtual void onDestroy() = 0;
+};
+
 class MicrorosManagerSetup : public Classes::BaseSetup {
  public:
   MicrorosManagerSetup(const char* _id) : Classes::BaseSetup(_id) {};
@@ -52,27 +58,20 @@ class MicrorosManager : public Classes::BaseSubsystem {
   void pause() override;
   void reset() override;
   const char* getInfo() override;
+  // Register a participant; it will be created/destroyed with the manager
+  void registerParticipant(IMicroRosParticipant* participant);
  
  private:
   const MicrorosManagerSetup setup_;
   rclc_support_t support_;
   rcl_node_t node_;
-  rcl_timer_t timer_;
   rclc_executor_t executor_;
   rcl_allocator_t allocator_;
-  rcl_publisher_t publisher_;
-  std_msgs__msg__Int32 msg_;
-  // Heartbeat and state publishers
-  rcl_publisher_t heartbeat_pub_;
-  std_msgs__msg__Int32 heartbeat_msg_;
-  rcl_publisher_t state_pub_;
-  std_msgs__msg__String state_msg_;
-  // TF publisher
-  rcl_publisher_t tf_pub_;
-  tf2_msgs__msg__TFMessage* tf_message_ = nullptr;
-  // Cached pose
-  float pos_x_ = 0.0f, pos_y_ = 0.0f, pos_z_ = 0.0f;
-  float roll_ = 0.0f, pitch_ = 0.0f, yaw_ = 0.0f;
+  // No publishers owned by the manager; subsystems own their pubs/subs
+  // Cached pose/state removed as TF/state publishing is delegated
+  // Registered participants
+  IMicroRosParticipant* participants_[8] = {nullptr};
+  size_t participants_count_ = 0;
 
   enum State {
     WAITING_AGENT,
@@ -82,14 +81,12 @@ class MicrorosManager : public Classes::BaseSubsystem {
   } state_;
 
   static MicrorosManager* s_instance_;
-  static void timer_callback(rcl_timer_t* timer, int64_t last_call_time);
   bool create_entities();
   void destroy_entities();
-  void update_tf_message();
  public:
   // External setters for pose and state
-  void setPose(float x, float y, float z, float roll, float pitch, float yaw);
-  void setState(const char* state);
+  void setPose(float, float, float, float, float, float) {} // no-op
+  void setState(const char*) {} // no-op
 };
 
 }  // namespace Subsystem

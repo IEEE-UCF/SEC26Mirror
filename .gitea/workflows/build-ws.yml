@@ -113,6 +113,11 @@ jobs:
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
+      - name: Pull built image and retag for Compose
+        run: |
+          docker pull ${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:${{ github.sha }}
+          docker tag ${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:${{ github.sha }} sec26:prod
+
       - name: Prepare docker-compose env (prod)
         run: |
           echo "BUILD_TARGET=prod" > .env.ci

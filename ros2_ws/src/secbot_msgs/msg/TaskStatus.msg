@@ -1,1 +1,3 @@
-# Which task is running and if it is ok.
+uint8 task_id
+bool ok
+string error_msg # empty if ok, description if not

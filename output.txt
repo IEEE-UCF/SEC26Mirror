@@ -1,0 +1,9 @@
+ubuntu@175f805bc839:~$ ros2 run robot_workshop detector_node
+[INFO] [1765762630.290917674] [detector_node]: Using: /camera/image_raw
+[INFO] [1765762630.300701751] [detector_node]: Detections: /detected_objects
+[INFO] [1765762630.308030053] [detector_node]: Debug image: /vision/debug_image
+[INFO] [1765762630.770672937] [detector_node]: [Detected - Duck #0]  Center position=(x=199.5, y=403.5)  bounding box=(157.0, 357.0, 242.0, 450.0)  size/area=3596.0  confidence=84.56%
+[INFO] [1765762630.781056373] [detector_node]: [Detected - Duck #1]  Center position=(x=390.0, y=404.0)  bounding box=(340.0, 359.0, 440.0, 449.0)  size/area=2494.0  confidence=82.75%
+[INFO] [1765762630.792565026] [detector_node]: [DEBUG IMG] Published annotated frame with 2 detections to: /vision/debug_image
+python3: /home/ubuntu/ros2_workspaces/build/robot_workshop_msgs/rosidl_generator_py/robot_workshop_msgs/msg/_duck_detection_s.c:103: robot_workshop_msgs__msg__duck_detection__convert_from_py: Assertion `PyFloat_Check(field)' failed.
+[ros2run]: Aborted

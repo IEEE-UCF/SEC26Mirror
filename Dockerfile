@@ -139,6 +139,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Cleanup apt caches
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+    #Add rqt graph
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-$ROS_DISTRO-rqt-graph 
+
 USER $USER_NAME
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]

@@ -1,0 +1,15 @@
+detector_node:
+  ros__parameters:
+    image_topic: /camera2/image_raw
+    class_name: yellow_object
+
+    pub_topic: /vision/detections
+    pub_debug_image: /vision/debug_image
+    debug_viz: true
+
+    color_name: yellow
+
+    target_hue: 25
+    hue_change: 20
+    kernel_size: 15
+    min_area_ratio: 0.0002

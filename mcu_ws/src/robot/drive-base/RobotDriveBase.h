@@ -17,7 +17,7 @@
 #include "localization-subsystem/Localization.h"
 #include "localization-subsystem/RobotConfig.h"
 
-enum class DriveMode { MANUAL, AUTO };
+enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE };
 
 struct DriveBaseSetup {
   std::vector<Drivers::MotorDriverSetup> motorSetups;
@@ -34,17 +34,21 @@ class RobotDriveBase {
   void driveVelocity(Vector2D& targetVelocity);
   void driveSetPoint(Pose2D& targetPose);
 
-  void setMotorSpeeds(int leftSpeed, int rightSpeed);
+  void manualMotorSpeeds(int leftSpeed, int rightSpeed);
 
-  void resetPose();
+  Vector2D getCurrentVelocity();
 
-  void update(float dt);
+  void resetPose(Pose2D& newPose);
+  void stop();
+
+  void update(float yaw, float dt);
 
  private:
-  void readEncoders();
-  void updateLocalization(float yaw);
-  void velocityFromPose();
   void velocityControl(float dt);
+  void setPointControl(float dt);
+  void applyMotorSpeeds(int leftSpeed, int rightSpeed);
+
+  float prevDt_ = 0.0f;
 
   DriveBaseSetup setup_;
   Localization localization_;
@@ -54,13 +58,15 @@ class RobotDriveBase {
   std::unique_ptr<Drivers::EncoderDriver> leftEncoder_;
   std::unique_ptr<Drivers::EncoderDriver> rightEncoder_;
 
-  Drivers::EncoderData leftTicks_;
-  Drivers::EncoderData rightTicks_;
+  Drivers::EncoderData leftTicks_ = Drivers::EncoderData(0);
+  Drivers::EncoderData rightTicks_ = Drivers::EncoderData(0);
 
-  DriveMode currentMode_ = DriveMode::AUTO;
+  DriveMode currentMode_ = DriveMode::MANUAL;
 
   Vector2D targetVelocity_;
   Pose2D targetPose_;
+
+  Pose2D prevPose_;
 };
 
 #endif

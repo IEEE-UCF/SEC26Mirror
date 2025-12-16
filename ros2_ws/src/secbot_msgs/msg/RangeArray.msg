@@ -1,1 +1,2 @@
-uint16[] ranges_mm
+# Array of ToF distance readings
+float32[] ranges        # distances in meters

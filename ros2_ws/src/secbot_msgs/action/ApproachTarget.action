@@ -1,8 +1,10 @@
-# goal: start navigation
-bool start
+# Approach a specific antenna/target until within range
+
+# goal: which antenna to approach
+uint8 antenna_id
 ---
-# result: finished or failed
+# result: reached target or failed
 bool success
 ---
-# feedback: percent complete (0.0–1.0)
-float32 progress
+# feedback: estimated distance remaining to target (meters)
+float32 distance_remaining

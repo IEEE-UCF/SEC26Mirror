@@ -63,9 +63,9 @@ bool MCUSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   (void)executor;
   node_ = node;
   // Initialize publisher for mcu state message
-  rcl_ret_t rc = rclc_publisher_init_best_effort(
+    rcl_ret_t rc = rclc_publisher_init_best_effort(
       &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, McuState),
-      "mcu_state");
+      "/mcu_robot/mcu_state");
   // Default to PRE_INIT
   msg_.state = 0; // PRE_INIT per McuState.msg
   return rc == RCL_RET_OK;

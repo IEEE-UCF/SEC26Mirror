@@ -21,9 +21,7 @@ class ControllerSetup : public Classes::BaseSetup {
   ~ControllerSetup() = default;
   ControllerSetup() = delete;
 
-  ControllerSetup(const char* _id) : Classes::BaseSetup(_id){};
-
-  
+  ControllerSetup(const char* _id) : Classes::BaseSetup(_id) {};
 };
 
 class ControllerDriver : public Classes::BaseDriver {

@@ -9,19 +9,23 @@ bool ControllerDriver::init() {
 }
 
 void ControllerDriver::update() {
-    int antenna; // placeholder for antenna network logic
-    switch(antenna){
-        case 0: _score[0] = true;
-        break;
-        case 1: _score[1] = true;
-        break;
-        case 2: _score[2] = true;
-        break;
-        case 3: _score[3] = true;
-        break;
-        default:
-        break;
-    }
+  int antenna;  // placeholder for antenna network logic
+  switch (antenna) {
+    case 0:
+      _score[0] = true;
+      break;
+    case 1:
+      _score[1] = true;
+      break;
+    case 2:
+      _score[2] = true;
+      break;
+    case 3:
+      _score[3] = true;
+      break;
+    default:
+      break;
+  }
 }
 
 const char* ControllerDriver::getInfo() {
@@ -34,15 +38,13 @@ const char* ControllerDriver::getInfo() {
 }
 
 bool ControllerDriver::getStatus() {
-    if(_score[0] & _score[1] & _score[2] & _score[3]){
-        return true;
-    }
+  if (_score[0] & _score[1] & _score[2] & _score[3]) {
+    return true;
+  }
 
-    return false;
+  return false;
 }
 
-void ControllerDriver::reset() {
-    _score[{false}];
-}
+void ControllerDriver::reset() { _score[{false}]; }
 
 }  // namespace Field

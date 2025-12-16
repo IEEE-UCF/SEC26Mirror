@@ -1,1 +1,3 @@
-# LED color and antenna markers.
+uint8 r
+uint8 g
+uint8 b

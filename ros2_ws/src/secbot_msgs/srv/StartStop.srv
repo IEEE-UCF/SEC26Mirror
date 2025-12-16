@@ -1,1 +1,3 @@
-# Switch tasks and start or stop the mission.
+bool start
+---
+bool ok

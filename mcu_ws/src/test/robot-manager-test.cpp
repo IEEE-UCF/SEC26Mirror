@@ -18,8 +18,9 @@ static ExampleSubsystem g_example(g_ex_setup);
 // --- RobotManager wiring ---
 // Create RobotObject entries matching timekeepers where they should run
 static RobotObject g_obj_mr(g_mr, MS_20); // run at 50 Hz
+static RobotObject g_obj_example(g_example, MS_20); // publish heartbeat at 1 Hz
 
-static std::vector<RobotObject*> g_objects{&g_obj_mr};
+static std::vector<RobotObject*> g_objects{&g_obj_mr, &g_obj_example};
 static RobotManagerSetup g_rm_setup("robot_manager", g_objects);
 static RobotManager g_rm(g_rm_setup);
 

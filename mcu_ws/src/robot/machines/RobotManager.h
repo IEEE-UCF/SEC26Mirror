@@ -11,7 +11,6 @@
 
 #include <vector>
 
-#include "McuSubsystem.h"
 // ==========================================================
 // ## 1. Instantiate All Driver and Manager Objects ##
 // ==========================================================
@@ -26,6 +25,8 @@
 #define DELAY_NS_200 200
 
 namespace Subsystem {
+// Forward declaration within namespace to keep header lightweight
+class MCUSubsystem;
 
 enum TimerConfig {
   MS_1000,  // 1 Hz
@@ -117,7 +118,6 @@ class RobotManager : public Classes::BaseSubsystem {
   const char* getInfo() override { static const char info[] = "RobotManager"; return info; }
 
  private:
-  MCUSubsystem* mcu_ = nullptr;
   const RobotManagerSetup& setup_;
   std::vector<RobotManagerTimekeeper> timekeepers_;
 };

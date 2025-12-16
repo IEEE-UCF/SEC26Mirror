@@ -2,6 +2,10 @@
 
 #include <string>
 
+/**
+ * @brief Constructor for RobotDriveBase object
+ * @param DriveBaseSetup setup object
+ */
 RobotDriveBase::RobotDriveBase(const DriveBaseSetup& setup) : setup_(setup) {
   // this is kinda dumb, also assumes one encoder per side
 
@@ -30,6 +34,10 @@ RobotDriveBase::RobotDriveBase(const DriveBaseSetup& setup) : setup_(setup) {
   }
 };
 
+/**
+ * @brief Sets drive mode to drive by velocity given a target velocity pose
+ * @param targetVelocity Vector2D velocity pose
+ */
 void RobotDriveBase::driveVelocity(Vector2D& targetVelocity) {
   currentMode_ = DriveMode::VELOCITY_DRIVE;
   targetVelocity_ = targetVelocity;
@@ -37,6 +45,10 @@ void RobotDriveBase::driveVelocity(Vector2D& targetVelocity) {
   // Reset PIDs
 }
 
+/**
+ * @brief Sets drive mode to drive given a setpoint pose
+ * @param targetPose Pose2D position pose
+ */
 void RobotDriveBase::driveSetPoint(Pose2D& targetPose) {
   currentMode_ = DriveMode::POSE_DRIVE;
   targetPose_ = targetPose;
@@ -44,6 +56,11 @@ void RobotDriveBase::driveSetPoint(Pose2D& targetPose) {
   // Reset PIDs
 }
 
+/**
+ * @brief Manual driving mode to directly control motor speeds
+ * @param leftSpeed left motor speed
+ * @param rightSpeed right motorspeed
+ */
 void RobotDriveBase::manualMotorSpeeds(int leftSpeed, int rightSpeed) {
   currentMode_ = DriveMode::MANUAL;
 
@@ -51,11 +68,21 @@ void RobotDriveBase::manualMotorSpeeds(int leftSpeed, int rightSpeed) {
   for (auto& motor : rightMotors_) motor->setPWM(rightSpeed);
 }
 
+/**
+ * @brief Applies motor speeds from PIDs
+ * @param leftSpeed left motor speed
+ * @param rightSpeed right motorspeed
+ */
 void RobotDriveBase::applyMotorSpeeds(int leftSpeed, int rightSpeed) {
   for (auto& motor : leftMotors_) motor->setPWM(leftSpeed);
   for (auto& motor : rightMotors_) motor->setPWM(rightSpeed);
 }
 
+/**
+ * @brief Calculates the current velocity based on current pose and previous
+ * pose, theres probably a better way to do this
+ * @param none
+ */
 Vector2D RobotDriveBase::getCurrentVelocity() {
   const float MIN_DT = 0.001f;
   if (prevDt_ < MIN_DT) return Vector2D();
@@ -82,14 +109,26 @@ Vector2D RobotDriveBase::getCurrentVelocity() {
   return Vector2D(robotVx, robotVy, omega);
 }
 
+/**
+ * @brief sets all motor speeds to 0, stops
+ * @param none
+ */
 void RobotDriveBase::stop() { manualMotorSpeeds(0, 0); }
 
+/**
+ * @brief Resets pose to given coordinates
+ * @param newPose Pose2D object
+ */
 void RobotDriveBase::resetPose(Pose2D& newPose) {
   localization_ = Localization(newPose.x, newPose.y, newPose.theta);
   prevPose_ = newPose;
   prevDt_ = 0.0f;
 }
 
+/**
+ * @brief Control loop for drive by target velocity mode
+ * @param dt timestep
+ */
 void RobotDriveBase::velocityControl(float dt) {
   Vector2D currentVelocity = getCurrentVelocity();
 
@@ -101,6 +140,10 @@ void RobotDriveBase::velocityControl(float dt) {
   // applyMotorSpeeds(leftPID output,rightPID output)
 }
 
+/**
+ * @brief Control loop for drive by target setpoint mode
+ * @param dt timestep
+ */
 void RobotDriveBase::setPointControl(float dt) {
   Pose2D currentPose = localization_.getPose();
   float errorX = targetPose_.getX() - currentPose.getX();
@@ -117,6 +160,12 @@ void RobotDriveBase::setPointControl(float dt) {
   // applyMotorSpeeds(leftPID output,rightPID output)
 }
 
+/**
+ * @brief Main update loop, updates encoders, localization, picks control loop
+ * based on current mode
+ * @param dt timestep
+ * @param yaw current yaw
+ */
 void RobotDriveBase::update(float yaw, float dt) {
   if (leftEncoder_ == nullptr || rightEncoder_ == nullptr) return;
 

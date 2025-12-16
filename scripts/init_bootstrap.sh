@@ -24,7 +24,9 @@ done
 
 # 2) Seed libs_external once using sentinel file
 DATA=/mcu_lib_external
-SEED=/seed
+MOUNT_SEED=/seed
+BAKED_SEED=/seed_baked
+SEED_SRC=""
 
 echo "[bootstrap] Preparing libs_external seed"
 mkdir -p "$DATA"
@@ -34,22 +36,23 @@ if [ -f "$DATA/.sec26_libs_seeded" ]; then
   exit 0
 fi
 
-if [ ! -d "$SEED" ]; then
-  echo "[bootstrap] ERROR: Seed directory not found: $SEED"
+if [ -d "$MOUNT_SEED" ] && [ -n "$(ls -A "$MOUNT_SEED" 2>/dev/null)" ]; then
+  SEED_SRC="$MOUNT_SEED"
+  echo "[bootstrap] Using mounted seed: $SEED_SRC"
+elif [ -d "$BAKED_SEED" ] && [ -n "$(ls -A "$BAKED_SEED" 2>/dev/null)" ]; then
+  SEED_SRC="$BAKED_SEED"
+  echo "[bootstrap] Mounted /seed empty or missing; using baked fallback: $SEED_SRC"
+else
+  echo "[bootstrap] ERROR: No valid seed found. Checked: $MOUNT_SEED and $BAKED_SEED"
   exit 1
 fi
 
-if [ -z "$(ls -A "$SEED" 2>/dev/null)" ]; then
-  echo "[bootstrap] ERROR: Seed directory is empty: $SEED"
-  exit 1
-fi
-
-echo "[bootstrap] Copying from $SEED to $DATA"
-cp -a "$SEED"/. "$DATA"/
+echo "[bootstrap] Copying from $SEED_SRC to $DATA"
+cp -a "$SEED_SRC"/. "$DATA"/
 
 echo "[bootstrap] Setting ownership to 1000:1000 on $DATA"
 chown -R 1000:1000 "$DATA"
 
-echo "seeded_from=$SEED" > "$DATA/.sec26_libs_seeded"
+echo "seeded_from=$SEED_SRC" > "$DATA/.sec26_libs_seeded"
 
 echo "[bootstrap] Completed successfully"

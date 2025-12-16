@@ -9,7 +9,19 @@ bool ControllerDriver::init() {
 }
 
 void ControllerDriver::update() {
-  int antenna;  // placeholder for antenna network logic
+  /*
+   * placeholder for antenna network logic
+   * message received from earth would go here
+   * getting each task is my assumption
+   * reset button also checked here
+   */
+
+  int buttonState = digitalRead(_setup._buttonPin);
+  if (buttonState == HIGH) {
+    reset();
+  }
+
+  int antenna;
   switch (antenna) {
     case 0:
       _score[0] = true;
@@ -30,10 +42,10 @@ void ControllerDriver::update() {
 
 const char* ControllerDriver::getInfo() {
   return ("\nID: " + std::string(_setup.getId()) +
-          "\nAntenna 1 Score: " + std::to_string(_score[0]) +
-          "\nAntenna 2 Score: " + std::to_string(_score[1]) +
-          "\nAntenna 3 Score: " + std::to_string(_score[2]) +
-          "\nAntenna 4 Score: " + std::to_string(_score[3]))
+          "\nAntenna 1 Done: " + std::to_string(_score[0]) +
+          "\nAntenna 2 Done: " + std::to_string(_score[1]) +
+          "\nAntenna 3 Done: " + std::to_string(_score[2]) +
+          "\nAntenna 4 Done: " + std::to_string(_score[3]))
       .c_str();
 }
 
@@ -45,6 +57,13 @@ bool ControllerDriver::getStatus() {
   return false;
 }
 
-void ControllerDriver::reset() { _score[{false}]; }
+void ControllerDriver::reset() {
+  /*
+   * placeholder for reset
+   * message received from earth would go here
+   * getting each task is my assumption
+   */
+  _score[{false}];
+}
 
 }  // namespace Field

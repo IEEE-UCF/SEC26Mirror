@@ -21,7 +21,12 @@ class ControllerSetup : public Classes::BaseSetup {
   ~ControllerSetup() = default;
   ControllerSetup() = delete;
 
-  ControllerSetup(const char* _id) : Classes::BaseSetup(_id) {};
+  ControllerSetup(const char* _id, uint8_t buttonPin)
+      : Classes::BaseSetup(_id), _buttonPin(buttonPin) {
+
+        };
+
+  const uint8_t _buttonPin;
 };
 
 class ControllerDriver : public Classes::BaseDriver {
@@ -29,13 +34,22 @@ class ControllerDriver : public Classes::BaseDriver {
   ~ControllerDriver() = default;
 
   ControllerDriver(const ControllerSetup& setup)
-      : BaseDriver(setup), _setup(setup), _score({false}) {};
-
+      : BaseDriver(setup), _setup(setup), _score({false}) {
+    pinMode(setup._buttonPin, INPUT);
+  };
+  /// @brief  Initialize driver
+  /// @return Success
   bool init() override;
+
+  /// @brief update based on changes made to field
   void update() override;
+
+  /// @brief Get info in the form of a data string
+  /// @return data string
   const char* getInfo() override;
 
   /// @brief tracks the scores of each task
+  /// @return status of all tasks completed
   bool getStatus();
 
   /// @brief reset the entire field

@@ -12,6 +12,7 @@
 #include <BaseDriver.h>
 
 #include <array>
+#include <string>
 
 namespace Field {
 
@@ -20,9 +21,9 @@ class ControllerSetup : public Classes::BaseSetup {
   ~ControllerSetup() = default;
   ControllerSetup() = delete;
 
-  ControllerSetup(const char* _id) : Classes::BaseSetup(_id), score({false}) {};
+  ControllerSetup(const char* _id) : Classes::BaseSetup(_id){};
 
-  std::array<bool, 4> score;
+  
 };
 
 class ControllerDriver : public Classes::BaseDriver {
@@ -30,7 +31,7 @@ class ControllerDriver : public Classes::BaseDriver {
   ~ControllerDriver() = default;
 
   ControllerDriver(const ControllerSetup& setup)
-      : BaseDriver(setup), _setup(setup) {};
+      : BaseDriver(setup), _setup(setup), _score({false}) {};
 
   bool init() override;
   void update() override;
@@ -44,6 +45,7 @@ class ControllerDriver : public Classes::BaseDriver {
 
  private:
   const ControllerSetup _setup;
+  std::array<bool, 4> _score;
 };
 
 };  // namespace Field

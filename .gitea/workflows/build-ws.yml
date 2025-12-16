@@ -125,9 +125,13 @@ jobs:
           echo "DISPLAY_CONFIG=" >> .env.ci
           sudo mkdir -p /tmp/.X11-unix
 
+      - name: Build init-bootstrap image
+        run: |
+          docker compose --env-file .env.ci build init-bootstrap
+
       - name: Init bootstrap (attached, stream logs)
         run: |
-          docker compose --env-file .env.ci up --no-build --exit-code-from init-bootstrap init-bootstrap
+          docker compose --env-file .env.ci up --exit-code-from init-bootstrap init-bootstrap
 
       - name: Colcon build (attached, stream logs)
         run: |

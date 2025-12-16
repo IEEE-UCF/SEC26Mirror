@@ -44,7 +44,9 @@ services:
 
   # One-shot init to chown all volumes and seed libs_external once
   init-bootstrap:
-    image: debian:stable-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.init-bootstrap
     user: root
     volumes:
       - ros2_build:/ros2_build
@@ -54,9 +56,7 @@ services:
       - mcu_build_artifacts:/mcu_build_artifacts
       - mcu_lib_external:/mcu_lib_external
       - ./mcu_ws/libs_external:/seed:ro
-      - ./scripts:/scripts:ro
-    entrypoint: ["/bin/sh","-ec"]
-    command: sh /scripts/init_bootstrap.sh
+    # Entry point is defined in Dockerfile.init-bootstrap
     restart: "no"
 
 

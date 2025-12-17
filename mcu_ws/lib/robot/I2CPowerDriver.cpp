@@ -32,7 +32,7 @@ void I2CPowerDriver::update() {
 
 float I2CPowerDriver::getVoltage() { return _data.busVoltage; }
 
-float I2CPowerDriver::getCurrentmW() { return _data.currentmA; }
+float I2CPowerDriver::getCurrentmA() { return _data.currentmA; }
 
 float I2CPowerDriver::getPowermW() { return _data.powermW; }
 

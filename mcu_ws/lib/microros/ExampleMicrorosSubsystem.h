@@ -5,6 +5,8 @@
 #include <rclc/rclc.h>
 #include <std_msgs/msg/string.h>
 #include <micro_ros_utilities/string_utilities.h>
+// Use micro-ROS time utility for periodic publishing without Arduino dependency
+#include <uxr/client/util/time.h>
 
 namespace Subsystem {
 
@@ -21,7 +23,15 @@ class ExampleSubsystem : public IMicroRosParticipant, public Classes::BaseSubsys
   // BaseSubsystem lifecycle
   bool init() override { return true; }
   void begin() override {}
-  void update() override {}
+  void update() override {
+    if (!pub_.impl) return;
+    // Publish a simple heartbeat once per second so topic has activity
+    uint64_t now = uxr_millis();
+    if (last_pub_ms_ == 0 || (now - last_pub_ms_) >= 1000) {
+      publishStatus("READY");
+      last_pub_ms_ = now;
+    }
+  }
   void pause() override {}
   void reset() override { pause(); }
   const char* getInfo() override { static const char info[] = "ExampleSubsystem"; return info; }
@@ -60,6 +70,7 @@ class ExampleSubsystem : public IMicroRosParticipant, public Classes::BaseSubsys
   rcl_publisher_t pub_{};
   std_msgs__msg__String msg_{};
   rcl_node_t* node_ = nullptr;
+  uint64_t last_pub_ms_ = 0;
 };
 
 } // namespace Subsystem

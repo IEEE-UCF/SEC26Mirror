@@ -17,6 +17,7 @@ services:
       # Ensure ROS2 workspace-level VS Code settings land at /home/ubuntu/ros2_workspaces/.vscode
       - ./ros2_ws/.vscode:/home/ubuntu/ros2_workspaces/.vscode:delegated
       - ./mcu_ws:/home/ubuntu/mcu_workspaces/sec26mcu:delegated
+      - ./ros2_ws/src/mcu_msgs:/home/ubuntu/mcu_workspaces/sec26mcu/extra_packages/mcu_msgs:delegated
       - ./scripts:/home/ubuntu/scripts
 
       # --- Build Artifacts (Persisted in Docker, kept off Host) ---

@@ -1,5 +1,6 @@
 #include "RobotDriveBase.h"
 
+#include <algorithm>
 #include <string>
 
 /**
@@ -32,6 +33,9 @@ RobotDriveBase::RobotDriveBase(const DriveBaseSetup& setup) : setup_(setup) {
       rightEncoder_ = std::move(newEncoder);
     }
   }
+  prevPose_ = localization_.getPose();
+  prevLeftTicks_ = leftEncoder_ ? leftEncoder_->getPosition().position : 0;
+  prevRightTicks_ = rightEncoder_ ? rightEncoder_->getPosition().position : 0;
 };
 
 /**
@@ -77,7 +81,7 @@ void RobotDriveBase::manualMotorSpeeds(int leftSpeed, int rightSpeed) {
  * @param leftSpeed left motor speed
  * @param rightSpeed right motorspeed
  */
-void RobotDriveBase::applyMotorSpeeds(int leftSpeed, int rightSpeed) {
+void RobotDriveBase::writeMotorSpeeds(int leftSpeed, int rightSpeed) {
   for (auto& motor : leftMotors_) motor->setPWM(leftSpeed);
   for (auto& motor : rightMotors_) motor->setPWM(rightSpeed);
 }
@@ -87,30 +91,26 @@ void RobotDriveBase::applyMotorSpeeds(int leftSpeed, int rightSpeed) {
  * differentiation if encoder fails
  * @param none
  */
-Vector2D RobotDriveBase::getCurrentVelocity() {
-  const float MIN_DT = 0.001f;
-  if (prevDt_ < MIN_DT) return Vector2D();
+Vector2D RobotDriveBase::getCurrentVelocity(float dt) {
+  if (dt < 0.001f) return currentVelocity_;
 
   long dleftTicks = leftTicks_.position - prevLeftTicks_;
   long dRightTicks = rightTicks_.position - prevRightTicks_;
 
   // encoder ticks for velocity
   if (dleftTicks != 0 || dRightTicks != 0) {
-    float leftDist = static_cast<float>(dleftTicks) * RobotConfig::IN_PER_TICK;
-    float rightDist =
+    float dleftDist = static_cast<float>(dleftTicks) * RobotConfig::IN_PER_TICK;
+    float drightDist =
         static_cast<float>(dRightTicks) * RobotConfig::IN_PER_TICK;
 
-    float leftVel = leftDist / prevDt_;
-    float rightVel = rightDist / prevDt_;
+    float leftVel = dleftDist / dt;
+    float rightVel = drightDist / dt;
 
     float vx = 0.5f * (leftVel + rightVel);
     float omega = (rightVel - leftVel) / RobotConfig::TRACK_WIDTH;
 
     return Vector2D(vx, 0.0f, omega);
   }
-
-  /*
-  //pose differentiation leftover
 
   Pose2D currentPose = localization_.getPose();
 
@@ -121,18 +121,16 @@ Vector2D RobotDriveBase::getCurrentVelocity() {
   Pose2D dPose = Pose2D(dX, dY, dTheta);
   dPose.normalizeTheta();
 
-  float worldVx = dPose.x / prevDt_;
-  float worldVy = dPose.y / prevDt_;
-  float omega = dPose.theta / prevDt_;
+  float worldVx = dPose.x / dt;
+  float worldVy = dPose.y / dt;
+  float omega = dPose.theta / dt;
 
   float cosTheta = cosf(-currentPose.theta);
   float sinTheta = sinf(-currentPose.theta);
-
   float robotVx = worldVx * cosTheta - worldVy * sinTheta;
   float robotVy = worldVx * sinTheta + worldVy * cosTheta;
 
   return Vector2D(robotVx, robotVy, omega);
-  */
 }
 
 /**
@@ -148,7 +146,6 @@ void RobotDriveBase::stop() { manualMotorSpeeds(0, 0); }
 void RobotDriveBase::resetPose(Pose2D& newPose) {
   localization_ = Localization(newPose.x, newPose.y, newPose.theta);
   prevPose_ = newPose;
-  prevDt_ = 0.0f;
 }
 
 /**
@@ -156,26 +153,42 @@ void RobotDriveBase::resetPose(Pose2D& newPose) {
  * @param dt timestep
  */
 void RobotDriveBase::velocityControl(float dt) {
-  Vector2D currentVelocity = getCurrentVelocity();
+  if (dt < 0.001f) return;
 
-  float currentVel = currentVelocity.getX();
-  float currentOmega = currentVelocity.getTheta();
+  // ramp up linear + angular velocity to prevent sudden changes
+  float linearAccelLimit = RobotConfig::MAX_ACCELERATION * dt;
+  float deltaV = std::clamp(targetVelocity_.getX() - currentVelocity_.getX(),
+                            -linearAccelLimit, linearAccelLimit);
 
-  float v = targetVelocity_.getX();
-  float omega = targetVelocity_.getTheta();
+  float angularAccelLimit = RobotConfig::MAX_ANGULAR_ACCELERATION * dt;
+  float deltaOmega =
+      std::clamp(targetVelocity_.getTheta() - currentVelocity_.getTheta(),
+                 -angularAccelLimit, angularAccelLimit);
 
-  float targetLeftVel = v - (RobotConfig::TRACK_WIDTH * omega) * 0.5f;
-  float targetRightVel = v + (RobotConfig::TRACK_WIDTH * omega) * 0.5f;
+  // ideal state we are targeting to stay within limits
+  float rampedV = currentVelocity_.getX() + deltaV;
+  float rampedOmega = currentVelocity_.getTheta() + deltaOmega;
 
-  float currentLeftVel =
-      currentVel - (RobotConfig::TRACK_WIDTH * currentOmega) * 0.5f;
-  float currentRightVel =
-      currentVel + (RobotConfig::TRACK_WIDTH * currentOmega) * 0.5f;
+  // inverse kinematics
+  float targetLeftWheelVel =
+      rampedV - (rampedOmega * RobotConfig::TRACK_WIDTH) * 0.5f;
+  float targetRightWheelVel =
+      rampedV + (rampedOmega * RobotConfig::TRACK_WIDTH) * 0.5f;
 
-  // leftPID(currentLeftVel,targetLeftVel,dt);
-  // rightPID(currentRightVel,targetRightVel,dt);
+  float actualLeftVel =
+      (static_cast<float>(leftTicks_.position - prevLeftTicks_) *
+       RobotConfig::IN_PER_TICK) /
+      dt;
+  float actualRightVel =
+      (static_cast<float>(rightTicks_.position - prevRightTicks_) *
+       RobotConfig::IN_PER_TICK) /
+      dt;
 
-  // applyMotorSpeeds(leftPID output,rightPID output)
+  // int leftOutput = leftPID.calculate(actualLeftVel, targetLeftWheelVel, dt);
+  // int rightOutput = rightPID.calculate(actualRightVel, targetRightWheelVel,
+  // dt);
+
+  // applyMotorSpeeds(leftOutput, rightOutput);
 }
 
 /**
@@ -183,32 +196,47 @@ void RobotDriveBase::velocityControl(float dt) {
  * @param dt timestep
  */
 void RobotDriveBase::setPointControl(float dt) {
-  /*
-    // this needs work
+  Pose2D currentPose = localization_.getPose();
 
-    Pose2D currentPose = localization_.getPose();
+  float deltaX = targetPose_.getX() - currentPose.getX();
+  float deltaY = targetPose_.getY() - currentPose.getY();
 
-    float errorX = targetPose_.getX() - currentPose.getX();
-    float errorY = targetPose_.getY() - currentPose.getY();
-    float errorTheta = targetPose_.getTheta() - currentPose.getTheta();
+  float distanceError = std::hypot(deltaX, deltaY);
 
-    errorTheta = std::remainder(errorTheta, 2.0f * PI);
+  float targetAngle = std::atan2(deltaY, deltaX);
 
-    float cosTheta = cosf(-currentPose.getTheta());
-    float sinTheta = sinf(-currentPose.getTheta());
+  float angleError = targetAngle - currentPose.getTheta();
+  angleError = std::remainder(angleError, 2 * PI);
 
-    float robotErrorX = errorX * cosTheta - errorY * sinTheta;
-    float robotErrorY = errorX * sinTheta - errorY * sinTheta;
+  // stop if close to target
+  const float DISTANCE_THRESHOLD = 0.5f;
+  if (distanceError < DISTANCE_THRESHOLD) {
+    targetVelocity_ = Vector2D(0, 0, 0);
+    velocityControl(dt);
+    return;
+  }
 
-    float distance = hypotf(robotErrorX * robotErrorX, robotErrorY *
-    robotErrorY);
+  // control gains may need to be adjusted
+  const float K_LINEAR = 2.0f;   // Proportional gain for forward speed
+  const float K_ANGULAR = 4.0f;  // Proportional gain for turning speed
 
-    float v_cmd = 0.0f;
-    float omega_cmd = 0.0f;
+  float v_cmd = K_LINEAR * distanceError;
+  float omega_cmd = K_ANGULAR * angleError;
 
-    targetVelocity_ = Vector2D(v_cmd, 0, omega_cmd);
+  // --- Optimization: Slow down forward speed if we aren't facing the target
+  // yet --- This prevents the robot from driving in huge arcs. As the angle
+  // error increases, cos(angleError) decreases, slowing down Vx.
+  v_cmd *= std::max(0.0f, std::cos(angleError));
 
-    velocityControl(dt); */
+  // clamp to set limits
+  v_cmd =
+      std::clamp(v_cmd, -RobotConfig::MAX_VELOCITY, RobotConfig::MAX_VELOCITY);
+  omega_cmd = std::clamp(omega_cmd, -RobotConfig::MAX_ANGULAR_VELOCITY,
+                         RobotConfig::MAX_ANGULAR_VELOCITY);
+
+  targetVelocity_ = Vector2D(v_cmd, 0.0f, omega_cmd);
+
+  velocityControl(dt);
 }
 
 /**
@@ -222,6 +250,9 @@ void RobotDriveBase::update(float yaw, float dt) {
 
   leftTicks_ = leftEncoder_->getPosition();
   rightTicks_ = rightEncoder_->getPosition();
+
+  currentVelocity_ = getCurrentVelocity(dt);
+
   localization_.update(leftTicks_.position, rightTicks_.position, yaw);
 
   switch (currentMode_) {
@@ -229,19 +260,14 @@ void RobotDriveBase::update(float yaw, float dt) {
       break;
     case DriveMode::VELOCITY_DRIVE:
       velocityControl(dt);
-      prevDt_ = dt;
-      prevPose_ = localization_.getPose();
-      prevLeftTicks_ = leftTicks_.position;
-      prevRightTicks_ = rightTicks_.position;
       break;
     case DriveMode::POSE_DRIVE:
       setPointControl(dt);
-      prevDt_ = dt;
-      prevPose_ = localization_.getPose();
-      prevLeftTicks_ = leftTicks_.position;
-      prevRightTicks_ = rightTicks_.position;
       break;
     default:
       break;
   }
+  prevPose_ = localization_.getPose();
+  prevLeftTicks_ = leftTicks_.position;
+  prevRightTicks_ = rightTicks_.position;
 }

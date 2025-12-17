@@ -36,7 +36,7 @@ class RobotDriveBase {
 
   void manualMotorSpeeds(int leftSpeed, int rightSpeed);
 
-  Vector2D getCurrentVelocity();
+  Vector2D getCurrentVelocity(float dt);
 
   void resetPose(Pose2D& newPose);
   void stop();
@@ -46,9 +46,7 @@ class RobotDriveBase {
  private:
   void velocityControl(float dt);
   void setPointControl(float dt);
-  void applyMotorSpeeds(int leftSpeed, int rightSpeed);
-
-  float prevDt_ = 0.0f;
+  void writeMotorSpeeds(int leftSpeed, int rightSpeed);
 
   DriveBaseSetup setup_;
   Localization localization_;
@@ -60,11 +58,12 @@ class RobotDriveBase {
 
   Drivers::EncoderData leftTicks_ = Drivers::EncoderData(0);
   Drivers::EncoderData rightTicks_ = Drivers::EncoderData(0);
-  long prevLeftTicks_ = 0;
-  long prevRightTicks_ = 0;
+  long prevLeftTicks_;
+  long prevRightTicks_;
 
   DriveMode currentMode_ = DriveMode::MANUAL;
 
+  Vector2D currentVelocity_;
   Vector2D targetVelocity_;
   Pose2D targetPose_;
 

@@ -45,7 +45,7 @@ class EncoderDriver : public Classes::BaseDriver {
   bool init() override;
   void update() override;
   EncoderData getPosition() { return position_; }
-  char* getInfo() override;
+  const char* getInfo() override;
 
  private:
   const EncoderDriverSetup setup_;

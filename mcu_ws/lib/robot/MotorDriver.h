@@ -38,7 +38,7 @@ class MotorDriver : public Classes::BaseDriver {
 
   bool init() override;
   void update() override;
-  char* getInfo() override;
+    const char* getInfo() override;
 
   void setPWM(int speed);
 

@@ -54,7 +54,7 @@ class TOFDriver : public Classes::BaseDriver {
 
   /// @brief Get info in the form of a data string
   /// @return data string
-  std::string getInfo() override;
+  const char* getInfo() override;
 
  private:
   const TOFDriverSetup setup_;

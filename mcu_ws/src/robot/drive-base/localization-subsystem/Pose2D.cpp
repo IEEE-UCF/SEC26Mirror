@@ -9,12 +9,6 @@ void Pose2D::add(const Pose2D& pose) {
 }
 
 void Pose2D::rotate(float angle) {
-  const float cosA = cosf(angle);
-  const float sinA = sin(angle);
-
-  const float new_x = x * cosA - y * sinA;
-  const float new_y = y * sinA + y * cosA;
-
-  x = new_x;
-  y = new_y;
+  theta += angle;
+  normalizeTheta();
 }

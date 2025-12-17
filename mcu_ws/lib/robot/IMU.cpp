@@ -33,12 +33,12 @@ void IMUDriver::update() {
         break;
 
       case SH2_ROTATION_VECTOR:
-        data_.qi = sensorValue_.un.rotationVector.i;
-        data_.qj = sensorValue_.un.rotationVector.j;
-        data_.qk = sensorValue_.un.rotationVector.k;
-        data_.qr = sensorValue_.un.rotationVector.real;
+        data_.qx = sensorValue_.un.rotationVector.i;
+        data_.qy = sensorValue_.un.rotationVector.j;
+        data_.qz = sensorValue_.un.rotationVector.k;
+        data_.qw = sensorValue_.un.rotationVector.real;
 
-        data_.yaw = calculateYaw(data_.qi, data_.qj, data_.qk, data_.qr);
+        data_.yaw = calculateYaw(data_.qx, data_.qy, data_.qz, data_.qw);
         break;
 
       default:
@@ -48,18 +48,10 @@ void IMUDriver::update() {
 }
 
 // yaw in radians
-float IMUDriver::calculateYaw(float qi, float qj, float qk, float qr) {
-  float sqr = qr * qr;
-  float sqi = qi * qi;
-  float sqj = qj * qj;
-  float sqk = qk * qk;
-
-  float t3 = +2.0f * (qr * qk + qi * qj);
-  float t4 = +1.0f - 2.0f * (sqj + sqk);
-
-  float yaw = atan2(t3, t4);
-
-  return yaw;
+float IMUDriver::calculateYaw(float qx, float qy, float qz, float qw) {
+  float t3 = 2.0f * (qw * qz + qx * qy);
+  float t4 = 1.0f - 2.0f * (qy * qy + qz * qz);
+  return atan2(t3, t4);
 }
 
 const char* IMUDriver::getInfo() {

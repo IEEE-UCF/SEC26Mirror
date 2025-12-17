@@ -172,13 +172,15 @@ jobs:
           echo "hash=${{ hashFiles('Dockerfile', 'docker-compose.yml', '.gitea/workflows/build-ws.yml') }}" >> $GITHUB_OUTPUT
 
       - name: Restore colcon build cache (tarballs)
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         id: colcon-cache-restore
         with:
           path: .colcon-cache
           key: colcon-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
           restore-keys: |
             colcon-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_cache_platform.outputs.slug }}-
+            colcon-shared-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
+            colcon-shared-${{ steps.sanitize_cache_platform.outputs.slug }}-
 
       - name: Seed ros2_src volume from repo (no bind mount)
         run: |
@@ -327,6 +329,20 @@ jobs:
               tar -tzf "$f" | sed -n '1,50p' || true;
             fi
           done
+
+      - name: Save primary colcon cache (if miss)
+        if: steps.colcon-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .colcon-cache
+          key: colcon-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
+
+      - name: Save shared fallback cache (if miss)
+        if: steps.colcon-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .colcon-cache
+          key: colcon-shared-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
 
       - name: Stop containers (CI override)
         if: always()

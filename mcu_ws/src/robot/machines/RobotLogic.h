@@ -41,7 +41,8 @@ static MCUSubsystem g_mcu(g_mcu_setup, g_mcu_cbs);
 // Define callbacks after g_mcu is declared
 static bool mcu_init_cb() {
 	// Perform any one-time hardware checks; succeed for now
-	return true;
+	bool ok = g_mr.init();
+	return ok;
 }
 
 static bool mcu_arm_cb() {
@@ -74,11 +75,9 @@ static void mcu_reset_cb() {
 }
 
 // --- RobotManager wiring ---
-// MicrorosManager as init-only RobotObject (no update); MCU handles all updates
-static RobotObject g_obj_mr_init_only(static_cast<const Classes::BaseClass&>(g_mr), MS_20);
 static RobotObject g_obj_mcu(g_mcu, MS_20);   // single updater at 50 Hz
 
-static std::vector<RobotObject*> g_objects{&g_obj_mr_init_only, &g_obj_mcu};
+static std::vector<RobotObject*> g_objects{&g_obj_mcu};
 static RobotManagerSetup g_rm_setup("robot_manager", g_objects);
 static RobotManager g_rm(g_rm_setup);
 

@@ -13,6 +13,8 @@
 #include "robot/machines/McuSubsystem.h"
 #include "robot/machines/HeartbeatSubsystem.h"
 #include <microros_manager_robot.h>
+#include "PCA9685Manager.h"
+#include "ROBOTCONFIG.h"
 
 using namespace Subsystem;
 
@@ -37,6 +39,13 @@ static MCUSubsystemSetup g_mcu_setup("mcu_subsystem");
 static MCUSubsystemCallbacks g_mcu_cbs{mcu_init_cb, mcu_arm_cb, mcu_begin_cb,
 																			 mcu_update_cb, mcu_stop_cb, mcu_reset_cb};
 static MCUSubsystem g_mcu(g_mcu_setup, g_mcu_cbs);
+
+// --- PCA9685 manager (servo driver) ---
+static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
+static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
+// create a single PCA device instance; manager owns the driver
+static Robot::PCA9685Driver* g_pca0 = g_pca_mgr.createDriver(
+	Robot::PCA9685DriverSetup("pca0", DEFAULT_PCA9685_ADDR, DEFAULT_PCA9685_FREQ));
 
 // Define callbacks after g_mcu is declared
 static bool mcu_init_cb() {
@@ -76,8 +85,10 @@ static void mcu_reset_cb() {
 
 // --- RobotManager wiring ---
 static RobotObject g_obj_mcu(g_mcu, MS_20);   // single updater at 50 Hz
+// Manager for PCA9685 updated at 50 Hz
+static RobotObject g_obj_pca(g_pca_mgr, MS_20);
 
-static std::vector<RobotObject*> g_objects{&g_obj_mcu};
+static std::vector<RobotObject*> g_objects{&g_obj_mcu, &g_obj_pca};
 static RobotManagerSetup g_rm_setup("robot_manager", g_objects);
 static RobotManager g_rm(g_rm_setup);
 

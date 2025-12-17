@@ -7,11 +7,11 @@ bool IMUDriver::init() {
 
   if (!imu_.begin_I2C()) {
     initSuccess_ = false;
-    return initSucess_;
+    return initSuccess_;
   }
   if (!imu_.enableReport(SH2_ACCELEROMETER) ||
       !imu_.enableReport(SH2_GYROSCOPE_CALIBRATED) ||
-      !imu.enableReport(SH2_ROTATION_VECTOR)) {
+      !imu_.enableReport(SH2_ROTATION_VECTOR)) {
     initSuccess_ = false;
   }
   return initSuccess_;
@@ -62,8 +62,8 @@ float IMUDriver::calculateYaw(float qi, float qj, float qk, float qr) {
   return yaw;
 }
 
-char* IMUDriver::getInfo() {
-  snprintf(infoBuffer_, sizeof(infoBuffer_), "IMU: %s", setup_.id);
+const char* IMUDriver::getInfo() {
+  snprintf(infoBuffer_, sizeof(infoBuffer_), "IMU: %s", setup_.getId());
   return infoBuffer_;
 }
 

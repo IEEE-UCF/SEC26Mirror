@@ -1,0 +1,20 @@
+services:
+  devcontainer:
+    volumes:
+      # Override dev bind with named volume for CI runners (long syntax for clarity)
+      - type: volume
+        source: ros2_src
+        target: /home/ubuntu/ros2_workspaces/src/sec26ros
+      - type: volume
+        source: ros2_build
+        target: /home/ubuntu/ros2_workspaces/build
+      - type: volume
+        source: ros2_install
+        target: /home/ubuntu/ros2_workspaces/install
+      - type: volume
+        source: ros2_log
+        target: /home/ubuntu/ros2_workspaces/log
+
+volumes:
+  ros2_src:
+    name: ros2_src

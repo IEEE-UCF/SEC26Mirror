@@ -72,6 +72,11 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Compute src hash
+        id: src_hash
+        run: |
+          echo "hash=${{ hashFiles('ros2_ws/src/**', 'Dockerfile', 'docker-compose.yml', '.gitea/workflows/build-ws.yml') }}" >> $GITHUB_OUTPUT
+
       - name: Sanitize branch name for Docker tag
         id: sanitize
         run: |
@@ -118,30 +123,177 @@ jobs:
           docker pull ${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:${{ github.sha }}
           docker tag ${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:${{ github.sha }} sec26:prod
 
-      - name: Prepare docker-compose env (prod)
+      - name: Build init-bootstrap image (CI override)
         run: |
           echo "BUILD_TARGET=prod" > .env.ci
           echo "NETWORK_MODE_CONFIG=bridge" >> .env.ci
           echo "DISPLAY_CONFIG=" >> .env.ci
           sudo mkdir -p /tmp/.X11-unix
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci build init-bootstrap
 
-      - name: Build init-bootstrap image
+      - name: Init bootstrap (attached, stream logs, CI override)
         run: |
-          docker compose --env-file .env.ci build init-bootstrap
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci up --exit-code-from init-bootstrap init-bootstrap
 
-      - name: Init bootstrap (attached, stream logs)
-        run: |
-          docker compose --env-file .env.ci up --exit-code-from init-bootstrap init-bootstrap
+      - name: Restore colcon build cache (tarballs)
+        uses: actions/cache@v4
+        id: colcon-cache-restore
+        with:
+          path: .colcon-cache
+          key: colcon-linux-${{ steps.src_hash.outputs.hash }}
+          restore-keys: |
+            colcon-linux-
 
-      - name: Colcon build (attached, stream logs)
+      
+          
+      - name: Seed ros2_src volume from repo (no bind mount)
         run: |
-          docker compose --env-file .env.ci run --rm devcontainer bash -lc '
+          set -euxo pipefail
+          tar cz -C ros2_ws/src . | docker run --rm -i -v ros2_src:/volume alpine sh -c "cd /volume && rm -rf ./* && tar xz"
+
+
+      - name: Start devcontainer (CI override)
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci up -d devcontainer
+
+      - name: Assert ROS volumes mounted inside devcontainer
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
             set -euo pipefail;
-            cd /home/ubuntu/ros2_workspaces;
-            colcon build
+            for d in build install log; do
+              if mountpoint -q "/home/ubuntu/ros2_workspaces/$d"; then
+                echo "OK: /home/ubuntu/ros2_workspaces/$d is a mount";
+              else
+                echo "ERROR: /home/ubuntu/ros2_workspaces/$d is NOT a mount" >&2; exit 1;
+              fi;
+            done;
+            echo "Mount lines:"; grep "/home/ubuntu/ros2_workspaces" /proc/mounts || true;
           '
 
-      - name: Stop containers
+      - name: Restore build/install/log inside devcontainer (from tarballs)
+        run: |
+          set -euxo pipefail
+          mkdir -p .colcon-cache
+          # Prepare directories
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
+            set -euo pipefail;
+            WS=/home/ubuntu/ros2_workspaces;
+            mkdir -p "$WS/build" "$WS/install" "$WS/log";
+          '
+          # Restore each tarball if present
+          if [ -f .colcon-cache/ros2_build.tgz ]; then
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/build/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/build' < ./.colcon-cache/ros2_build.tgz || true
+          fi
+          if [ -f .colcon-cache/ros2_install.tgz ]; then
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/install/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/install' < ./.colcon-cache/ros2_install.tgz || true
+          fi
+          if [ -f .colcon-cache/ros2_log.tgz ]; then
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/log/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/log' < ./.colcon-cache/ros2_log.tgz || true
+          fi
+
+      - name: Dependencies + Colcon build (CI override)
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
+            set -euo pipefail;
+            cd /home/ubuntu/ros2_workspaces;
+            # Source ROS environment; disable nounset to avoid AMENT_* unbound var
+            set +u; . /opt/ros/$ROS_DISTRO/setup.bash; set -u;
+            # Install dependencies and build in one step
+            sudo apt-get update;
+            rosdep update || true;
+            rosdep install --from-paths src src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python;
+            echo "Discovered packages:";
+            colcon list || true;
+            colcon build --base-paths src src/sec26ros --continue-on-error
+          '
+
+      - name: Debug inspect ROS workspace inside devcontainer
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
+            set -euxo pipefail;
+            WS=/home/ubuntu/ros2_workspaces;
+            echo "===== Workspace top-level =====";
+            ls -al "$WS" | head -n 100 || true;
+            echo "===== Mounts referencing workspace =====";
+            grep "$WS" /proc/mounts || true;
+            df -h | grep -E "ros2_workspaces|overlay|docker" || true;
+            echo "===== Build dir =====";
+            ls -al "$WS/build" | head -n 100 || true;
+            du -sh "$WS/build" || true;
+            find "$WS/build" -maxdepth 2 -type f | wc -l || true;
+            echo "===== Install dir =====";
+            ls -al "$WS/install" | head -n 100 || true;
+            du -sh "$WS/install" || true;
+            find "$WS/install" -maxdepth 2 -type f | wc -l || true;
+            echo "===== Log dir =====";
+            ls -al "$WS/log" | head -n 100 || true;
+            du -sh "$WS/log" || true;
+            find "$WS/log" -maxdepth 2 -type f | wc -l || true;
+          '
+
+      - name: Debug check Docker volumes before save
+        run: |
+          set -euxo pipefail
+          echo "Docker volumes present:";
+          docker volume ls || true
+          for VOL in ros2_build ros2_install ros2_log; do
+            echo "\n===== Inspecting $VOL =====";
+            docker volume inspect "$VOL" || true
+            docker run --rm -e VOL="$VOL" -v "$VOL":/volume alpine sh -lc '
+              echo "-- Top-level listing for $VOL:";
+              ls -al /volume | sed -n '1,80p' || true;
+              echo "-- Disk usage for $VOL:";
+              du -sh /volume || true;
+              echo "-- File count (depth<=2) for $VOL:";
+              find /volume -maxdepth 2 -type f | wc -l || true;
+            '
+          done
+
+      - name: Save workspace folders from devcontainer to tarballs
+        run: |
+          set -euxo pipefail
+          mkdir -p .colcon-cache
+          # Save build
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
+            set -euo pipefail;
+            WS=/home/ubuntu/ros2_workspaces; cd "$WS/build" 2>/dev/null || mkdir -p "$WS/build" && cd "$WS/build";
+            tar -czf - . || true;
+          ' > ./.colcon-cache/ros2_build.tgz
+          # Save install
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
+            set -euo pipefail;
+            WS=/home/ubuntu/ros2_workspaces; cd "$WS/install" 2>/dev/null || mkdir -p "$WS/install" && cd "$WS/install";
+            tar -czf - . || true;
+          ' > ./.colcon-cache/ros2_install.tgz
+          # Save log
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
+            set -euo pipefail;
+            WS=/home/ubuntu/ros2_workspaces; cd "$WS/log" 2>/dev/null || mkdir -p "$WS/log" && cd "$WS/log";
+            tar -czf - . || true;
+          ' > ./.colcon-cache/ros2_log.tgz
+
+      - name: Debug check cache directory after save
+        run: |
+          set -euxo pipefail
+          echo "Cache directory listing:";
+          ls -lah .colcon-cache || true
+          echo "Cache directory disk usage:";
+          du -sh .colcon-cache || true
+          echo "Tarball sizes:";
+          for f in .colcon-cache/*.tgz; do
+            if [ -f "$f" ]; then
+              ls -lah "$f";
+            fi
+          done
+          echo "Preview first 50 entries from each tarball:";
+          for f in .colcon-cache/*.tgz; do
+            if [ -f "$f" ]; then
+              echo "\n--- $f ---";
+              tar -tzf "$f" | sed -n '1,50p' || true;
+            fi
+          done
+
+      - name: Stop containers (CI override)
         if: always()
         run: |
-          docker compose --env-file .env.ci down -v --remove-orphans
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci down -v --remove-orphans

@@ -1,1 +1,10 @@
-# ROS ↔ Teensy Bridge (I2C): Connects ROS to Teensy. Includes a fake node so sim runs without hardware. Configuration for CMake build system.
+cmake_minimum_required(VERSION 3.8)
+project(secbot_bridge_i2c)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+find_package(ament_cmake REQUIRED)
+
+ament_package()

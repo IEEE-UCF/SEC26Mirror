@@ -13,12 +13,12 @@ services:
       - PLATFORMIO_CORE_DIR=/home/ubuntu/.platformio
     volumes:
       # --- Source Code (Synced with Host) ---
-      - ./ros2_ws:/home/ubuntu/ros2_workspaces/src/sec26ros:delegated
+      - ./ros2_ws/src:/home/ubuntu/ros2_workspaces/src/sec26ros:delegated
       # Ensure ROS2 workspace-level VS Code settings land at /home/ubuntu/ros2_workspaces/.vscode
       - ./ros2_ws/.vscode:/home/ubuntu/ros2_workspaces/.vscode:delegated
       - ./mcu_ws:/home/ubuntu/mcu_workspaces/sec26mcu:delegated
       - ./ros2_ws/src/mcu_msgs:/home/ubuntu/mcu_workspaces/sec26mcu/extra_packages/mcu_msgs:delegated
-      - ./scripts:/home/ubuntu/scripts
+      - ./scripts:/home/ubuntu/scripts    
 
       # --- Build Artifacts (Persisted in Docker, kept off Host) ---
       # This prevents "root" owned files appearing on your laptop 

@@ -5,6 +5,7 @@ on:
     branches: [ "master" ]
     paths:
       - 'mcu_ws/**'
+      - '.gitea/workflows/platformio-robot.yml'
   workflow_dispatch:
 
 jobs:
@@ -22,14 +23,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install CMake
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake
-
-      - name: Install PlatformIO
-        run: pip install platformio
-
       - name: Prepare MCU extra packages (mcu_msgs)
         shell: bash
         run: |
@@ -43,6 +36,40 @@ jobs:
             echo "mcu_msgs not found at ros2_ws/src/mcu_msgs" >&2
             exit 1
           fi
+
+      - name: Cache PlatformIO packages and build artifacts
+        id: pio-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            mcu_ws/.pio
+            mcu_ws/.pioenvs
+            mcu_ws/libs_external/esp32/micro_ros_platformio/build
+            mcu_ws/libs_external/esp32/micro_ros_platformio/libmicroros
+            mcu_ws/libs_external/teensy/micro_ros_platformio/build
+            mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
+            ~/.cache/pip
+          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
+          restore-keys: |
+            platformio-${{ runner.os }}-
+
+      - name: Show PlatformIO cache status
+        run: |
+          if [ "${{ steps.pio-cache.outputs.cache-hit }}" = 'true' ]; then
+            echo "::notice::PlatformIO cache hit"
+          else
+            echo "::notice::PlatformIO cache miss"
+          fi
+
+      - name: Install CMake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
 
       - name: Build all PlatformIO environments
         working-directory: mcu_ws/

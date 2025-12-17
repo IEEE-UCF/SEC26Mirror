@@ -64,7 +64,7 @@ class I2CPowerDriver : public Classes::BaseDriver {
 
   /// @brief  Get current
   /// @return float
-  float getCurrentmW();
+  float getCurrentmA();
 
   /// @brief  Get power
   /// @return float

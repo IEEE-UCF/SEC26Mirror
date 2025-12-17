@@ -109,7 +109,9 @@ Vector2D RobotDriveBase::getCurrentVelocity() {
     return Vector2D(vx, 0.0f, omega);
   }
 
-  // pose differentiation
+  /*
+  //pose differentiation leftover
+
   Pose2D currentPose = localization_.getPose();
 
   float dX = currentPose.getX() - prevPose_.getX();
@@ -130,6 +132,7 @@ Vector2D RobotDriveBase::getCurrentVelocity() {
   float robotVy = worldVx * sinTheta + worldVy * cosTheta;
 
   return Vector2D(robotVx, robotVy, omega);
+  */
 }
 
 /**
@@ -180,34 +183,32 @@ void RobotDriveBase::velocityControl(float dt) {
  * @param dt timestep
  */
 void RobotDriveBase::setPointControl(float dt) {
-  Pose2D currentPose = localization_.getPose();
+  /*
+    // this needs work
 
-  float errorX = targetPose_.getX() - currentPose.getX();
-  float errorY = targetPose_.getY() - currentPose.getY();
-  float errorTheta = targetPose_.getTheta() - currentPose.getTheta();
+    Pose2D currentPose = localization_.getPose();
 
-  Pose2D errorPose = Pose2D(errorX, errorY, errorTheta);
-  errorPose.normalizeTheta();
+    float errorX = targetPose_.getX() - currentPose.getX();
+    float errorY = targetPose_.getY() - currentPose.getY();
+    float errorTheta = targetPose_.getTheta() - currentPose.getTheta();
 
-  float distance =
-      std::sqrt(errorPose.x * errorPose.x + errorPose.y * errorPose.y);
+    errorTheta = std::remainder(errorTheta, 2.0f * PI);
 
-  /* need to think about this
+    float cosTheta = cosf(-currentPose.getTheta());
+    float sinTheta = sinf(-currentPose.getTheta());
 
-  // Outer-loop gains (tune as needed). PD on heading can help.
-  const float Kp_linear = 1.0f;   // m/s per m
-  const float Kp_angular = 2.0f;  // rad/s per rad
+    float robotErrorX = errorX * cosTheta - errorY * sinTheta;
+    float robotErrorY = errorX * sinTheta - errorY * sinTheta;
 
-  float v_cmd = Kp_linear * distance;
-  float omega_cmd = Kp_angular * errorPose.theta;
+    float distance = hypotf(robotErrorX * robotErrorX, robotErrorY *
+    robotErrorY);
 
-  // Reuse velocityControl: set body-level target and let velocityControl run
-  // wheel PIDs
-  targetVelocity_ = Vector2D(v_cmd, 0.0f, omega_cmd);
+    float v_cmd = 0.0f;
+    float omega_cmd = 0.0f;
 
-  */
+    targetVelocity_ = Vector2D(v_cmd, 0, omega_cmd);
 
-  velocityControl(dt);
+    velocityControl(dt); */
 }
 
 /**

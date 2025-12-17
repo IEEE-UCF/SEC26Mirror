@@ -17,7 +17,7 @@ void Vector2D::rotate(float angle) {
   const float sinA = sin(angle);
 
   const float new_x = x * cosA - y * sinA;
-  const float new_y = y * sinA + y * cosA;
+  const float new_y = x * sinA + y * cosA;
 
   x = new_x;
   y = new_y;

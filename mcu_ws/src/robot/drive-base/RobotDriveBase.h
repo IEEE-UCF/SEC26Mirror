@@ -60,6 +60,8 @@ class RobotDriveBase {
 
   Drivers::EncoderData leftTicks_ = Drivers::EncoderData(0);
   Drivers::EncoderData rightTicks_ = Drivers::EncoderData(0);
+  long prevLeftTicks_ = 0;
+  long prevRightTicks_ = 0;
 
   DriveMode currentMode_ = DriveMode::MANUAL;
 

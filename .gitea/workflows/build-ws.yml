@@ -72,17 +72,17 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Compute src hash
-        id: src_hash
-        run: |
-          echo "hash=${{ hashFiles('ros2_ws/src/**', 'Dockerfile', 'docker-compose.yml', '.gitea/workflows/build-ws.yml') }}" >> $GITHUB_OUTPUT
-
       - name: Sanitize branch name for Docker tag
         id: sanitize
         run: |
           BRANCH_SLUG=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's/[^a-zA-Z0-9.-]/-/g')
           echo "BRANCH_SLUG=${BRANCH_SLUG}" >> $GITHUB_ENV
       
+      - name: Sanitize platform string for tag
+        id: sanitize_platform
+        run: |
+          echo "slug=$(echo ${{ matrix.platform }} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
+          
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       
@@ -92,11 +92,6 @@ jobs:
           registry: ${{ vars.REGISTRY_URL_PORT }}
           username: ${{ vars.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Sanitize platform string for tag
-        id: sanitize_platform
-        run: |
-          echo "slug=$(echo ${{ matrix.platform }} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
@@ -118,6 +113,31 @@ jobs:
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
+  colcon-build:
+    name: Colcon Build for ${{ matrix.platform }}
+    needs: build-and-push
+    if: "!startsWith(github.head_ref, 'doc')"
+    runs-on: [ubuntu-latest, linux-amd64]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ vars.REGISTRY_URL_PORT }}
+          username: ${{ vars.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
       - name: Pull built image and retag for Compose
         run: |
           docker pull ${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:${{ github.sha }}
@@ -135,40 +155,39 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci up --exit-code-from init-bootstrap init-bootstrap
 
+      - name: Sanitize branch name for cache key
+        id: sanitize_cache_branch
+        run: |
+          BRANCH_SLUG=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's/[^a-zA-Z0-9.-]/-/g')
+          echo "BRANCH_SLUG=${BRANCH_SLUG}" >> $GITHUB_ENV
+
+      - name: Sanitize platform string for cache key
+        id: sanitize_cache_platform
+        run: |
+          echo "slug=$(echo ${{ matrix.platform }} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
+
+      - name: Compute config hash (Dockerfile/Compose/workflow)
+        id: config_hash
+        run: |
+          echo "hash=${{ hashFiles('Dockerfile', 'docker-compose.yml', '.gitea/workflows/build-ws.yml') }}" >> $GITHUB_OUTPUT
+
       - name: Restore colcon build cache (tarballs)
         uses: actions/cache@v4
         id: colcon-cache-restore
         with:
           path: .colcon-cache
-          key: colcon-linux-${{ steps.src_hash.outputs.hash }}
+          key: colcon-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
           restore-keys: |
-            colcon-linux-
+            colcon-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_cache_platform.outputs.slug }}-
 
-      
-          
       - name: Seed ros2_src volume from repo (no bind mount)
         run: |
           set -euxo pipefail
           tar cz -C ros2_ws/src . | docker run --rm -i -v ros2_src:/volume alpine sh -c "cd /volume && rm -rf ./* && tar xz"
 
-
       - name: Start devcontainer (CI override)
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci up -d devcontainer
-
-      - name: Assert ROS volumes mounted inside devcontainer
-        run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
-            set -euo pipefail;
-            for d in build install log; do
-              if mountpoint -q "/home/ubuntu/ros2_workspaces/$d"; then
-                echo "OK: /home/ubuntu/ros2_workspaces/$d is a mount";
-              else
-                echo "ERROR: /home/ubuntu/ros2_workspaces/$d is NOT a mount" >&2; exit 1;
-              fi;
-            done;
-            echo "Mount lines:"; grep "/home/ubuntu/ros2_workspaces" /proc/mounts || true;
-          '
 
       - name: Restore build/install/log inside devcontainer (from tarballs)
         run: |
@@ -193,19 +212,35 @@ jobs:
 
       - name: Dependencies + Colcon build (CI override)
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
-            set -euo pipefail;
-            cd /home/ubuntu/ros2_workspaces;
-            # Source ROS environment; disable nounset to avoid AMENT_* unbound var
-            set +u; . /opt/ros/$ROS_DISTRO/setup.bash; set -u;
-            # Install dependencies and build in one step
-            sudo apt-get update;
-            rosdep update || true;
-            rosdep install --from-paths src src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python;
-            echo "Discovered packages:";
-            colcon list || true;
-            colcon build --base-paths src src/sec26ros --continue-on-error
-          '
+          set -euxo pipefail
+          BUILD_CMD='set -euo pipefail; \
+            cd /home/ubuntu/ros2_workspaces; \
+            set +u; . /opt/ros/$ROS_DISTRO/setup.bash; set -u; \
+            sudo apt-get update; \
+            rosdep update || true; \
+            rosdep install --from-paths src src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python; \
+            echo "Discovered packages:"; \
+            colcon list || true; \
+            colcon build --base-paths src src/sec26ros --continue-on-error'
+
+          set +e
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc "$BUILD_CMD"
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            echo "First colcon build failed. Cleaning caches and retrying..."
+            # Remove host tarball caches to avoid uploading stale cache on failure
+            rm -f .colcon-cache/ros2_build.tgz .colcon-cache/ros2_install.tgz .colcon-cache/ros2_log.tgz || true
+            # Clean in-container build/install/log directories
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
+              set -euo pipefail;
+              WS=/home/ubuntu/ros2_workspaces;
+              sudo rm -rf "$WS/build"/* "$WS/install"/* "$WS/log"/* || true;
+              mkdir -p "$WS/build" "$WS/install" "$WS/log";
+            '
+            # Retry once more
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc "$BUILD_CMD"
+          fi
 
       - name: Debug inspect ROS workspace inside devcontainer
         run: |

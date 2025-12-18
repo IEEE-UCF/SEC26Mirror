@@ -17,9 +17,10 @@ void TOFDriver::update() {
   range_.range = sensor_.readRangeContinuousMillimeters();
 }
 
-std::string TOFDriver::getInfo() {
-  std::string info =
-      "\nID: " + getId() + "\nData (mm): " + std::to_string(range_.range);
-  return info;
+const char* TOFDriver::getInfo() {
+  static char buf[128];
+  snprintf(buf, sizeof(buf), "ID: %s\nData (mm): %u", setup_.getId(),
+           range_.range);
+  return buf;
 }
 }  // namespace Drivers

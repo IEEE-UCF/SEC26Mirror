@@ -1,9 +1,2 @@
-/** Placeholder file */
-#include <Arduino.h>
-void setup() {
-
-}
-
-void loop() {
-    
-}
+/** Robot entrypoint wired via RobotLogic */
+#include "machines/RobotLogic.h"

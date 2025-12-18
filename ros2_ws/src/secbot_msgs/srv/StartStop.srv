@@ -1,4 +1,3 @@
 # Start or stop the mission execution
 bool start    # true = start mission, false = stop mission
----
 bool ok       # true if the request was accepted and applied

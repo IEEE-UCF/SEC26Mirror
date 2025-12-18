@@ -5,6 +5,7 @@ on:
     branches: [ "master" ]
     paths:
       - 'mcu_ws/**'
+      - '.gitea/workflows/platformio-robot.yml'
   workflow_dispatch:
 
 jobs:
@@ -21,6 +22,45 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+
+      - name: Prepare MCU extra packages (mcu_msgs)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p mcu_ws/extra_packages
+          # Copy mcu_msgs from ros2_ws into PlatformIO extra_packages
+          if [ -d ros2_ws/src/mcu_msgs ]; then
+            rm -rf mcu_ws/extra_packages/mcu_msgs
+            cp -a ros2_ws/src/mcu_msgs mcu_ws/extra_packages/mcu_msgs
+          else
+            echo "mcu_msgs not found at ros2_ws/src/mcu_msgs" >&2
+            exit 1
+          fi
+
+      - name: Cache PlatformIO packages and build artifacts
+        id: pio-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            mcu_ws/.pio
+            mcu_ws/.pioenvs
+            mcu_ws/libs_external/esp32/micro_ros_platformio/build
+            mcu_ws/libs_external/esp32/micro_ros_platformio/libmicroros
+            mcu_ws/libs_external/teensy/micro_ros_platformio/build
+            mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
+            ~/.cache/pip
+          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
+          restore-keys: |
+            platformio-${{ runner.os }}-
+
+      - name: Show PlatformIO cache status
+        run: |
+          if [ "${{ steps.pio-cache.outputs.cache-hit }}" = 'true' ]; then
+            echo "::notice::PlatformIO cache hit"
+          else
+            echo "::notice::PlatformIO cache miss"
+          fi
 
       - name: Install CMake
         run: |
@@ -40,3 +80,25 @@ jobs:
           # Build all environments defined in platformio.ini
           # `pio run` without -e builds every env
           pio run
+
+      - name: Preview MCU artifacts (count + list)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          shopt -s globstar nullglob
+          files=(
+            mcu_ws/.pio/build/*/firmware.*
+            mcu_ws/.pio/build/*/**/*.{bin,hex,elf,uf2}
+          )
+          echo "Found ${#files[@]} files to upload:";
+          for f in "${files[@]}"; do echo " - $f"; done
+
+      - name: Upload MCU build artifacts (all environments)
+        uses: actions/upload-artifact@v3
+        with:
+          name: mcu-build-artifacts-all
+          path: |
+            mcu_ws/.pio/build/*/firmware.*
+            mcu_ws/.pio/build/*/**/*.{bin,hex,elf,uf2}
+          if-no-files-found: ignore
+          retention-days: 7

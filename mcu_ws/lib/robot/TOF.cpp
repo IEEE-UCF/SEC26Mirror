@@ -19,7 +19,8 @@ void TOFDriver::update() {
 
 const char* TOFDriver::getInfo() {
   static char buf[128];
-  snprintf(buf, sizeof(buf), "ID: %s\nData (mm): %u", setup_.getId(), range_.range);
+  snprintf(buf, sizeof(buf), "ID: %s\nData (mm): %u", setup_.getId(),
+           range_.range);
   return buf;
 }
 }  // namespace Drivers

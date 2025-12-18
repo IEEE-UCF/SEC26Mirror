@@ -1,1 +1,7 @@
-# ToF distances and basic IMU values.
+# Lightweight IMU data (no covariance, no bias)
+float32 ax      # linear acceleration x (m/s^2)
+float32 ay      # linear acceleration y (m/s^2)
+float32 az      # linear acceleration z (m/s^2)
+float32 gx      # angular velocity x (rad/s)
+float32 gy      # angular velocity y (rad/s)
+float32 gz      # angular velocity z (rad/s)

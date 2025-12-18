@@ -87,26 +87,18 @@ jobs:
           set -euxo pipefail
           shopt -s globstar nullglob
           files=(
-            mcu_ws/.pio/build/robot/firmware.*
-            mcu_ws/.pio/build/robot/**/*.hex
-            mcu_ws/.pio/build/robot/**/*.elf
-            mcu_ws/.pio/build/robotcomms/firmware.*
-            mcu_ws/.pio/build/robotcomms/**/*.bin
-            mcu_ws/.pio/build/robotcomms/**/*.elf
+            mcu_ws/.pio/build/*/firmware.*
+            mcu_ws/.pio/build/*/**/*.{bin,hex,elf,uf2}
           )
           echo "Found ${#files[@]} files to upload:";
           for f in "${files[@]}"; do echo " - $f"; done
 
-      - name: Upload MCU build artifacts
+      - name: Upload MCU build artifacts (all environments)
         uses: actions/upload-artifact@v3
         with:
-          name: mcu-build-artifacts
+          name: mcu-build-artifacts-all
           path: |
-            mcu_ws/.pio/build/robot/firmware.*
-            mcu_ws/.pio/build/robot/**/*.hex
-            mcu_ws/.pio/build/robot/**/*.elf
-            mcu_ws/.pio/build/robotcomms/firmware.*
-            mcu_ws/.pio/build/robotcomms/**/*.bin
-            mcu_ws/.pio/build/robotcomms/**/*.elf
+            mcu_ws/.pio/build/*/firmware.*
+            mcu_ws/.pio/build/*/**/*.{bin,hex,elf,uf2}
           if-no-files-found: ignore
           retention-days: 7

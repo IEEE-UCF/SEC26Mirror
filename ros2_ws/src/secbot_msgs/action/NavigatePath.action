@@ -5,5 +5,5 @@ bool start
 # result: finished or failed
 bool success
 
-# feedback: percent complete (0.0–1.0)
+# feedback: percent complete (0.0-1.0)
 float32 progress

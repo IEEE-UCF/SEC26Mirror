@@ -8,7 +8,7 @@
 #ifndef POSE2D_H
 #define POSE2D_H
 
-#include <Arduino.h>
+#define PI 3.1415926535897932384626433832795
 
 #include <cmath>
 

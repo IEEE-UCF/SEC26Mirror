@@ -36,5 +36,5 @@ void Vector2D::elementMult(const Vector2D& other) {
 }
 
 void Vector2D::constrainTheta(float constraint) {
-  theta = constrain(theta, -constraint, constraint);
+  theta = std::clamp(theta, -constraint, constraint);
 }

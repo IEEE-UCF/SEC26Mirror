@@ -8,6 +8,7 @@
 #ifndef VECTOR2D_H
 #define VECTOR2D_H
 
+#include <algorithm>
 #include <cmath>
 
 class Vector2D {

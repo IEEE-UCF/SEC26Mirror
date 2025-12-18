@@ -12,8 +12,10 @@
 #include "robot/machines/RobotManager.h"
 #include "robot/machines/McuSubsystem.h"
 #include "robot/machines/HeartbeatSubsystem.h"
+#include "robot/subsystems/BatterySubsystem.h"
 #include <microros_manager_robot.h>
 #include "PCA9685Manager.h"
+#include "I2CPowerDriver.h"
 #include "ROBOTCONFIG.h"
 
 using namespace Subsystem;
@@ -25,6 +27,12 @@ static MicrorosManager g_mr(g_mr_setup);
 // --- Heartbeat subsystem ---
 static HeartbeatSubsystemSetup g_hb_setup("heartbeat_subsystem");
 static HeartbeatSubsystem g_hb(g_hb_setup);
+
+// --- Battery subsystem ---
+static Drivers::I2CPowerDriverSetup g_power_driver_setup("power_driver", 0x40, 10.0f, 0.015f);
+static Drivers::I2CPowerDriver g_power_driver(g_power_driver_setup);
+static BatterySubsystemSetup g_battery_setup("battery_subsystem", &g_power_driver);
+static BatterySubsystem g_battery(g_battery_setup);
 
 // --- MCU subsystem wired with callbacks ---
 // Forward-declare callbacks so we can construct the subsystem first
@@ -50,7 +58,11 @@ static Robot::PCA9685Driver* g_pca0 = g_pca_mgr.createDriver(
 // Define callbacks after g_mcu is declared
 static bool mcu_init_cb() {
 	// Perform any one-time hardware checks; succeed for now
-	bool ok = g_mr.init();
+	bool ok = true;
+	ok = ok && g_mr.init();
+	ok = ok && g_hb.init();
+	ok = ok && g_battery.init();
+	ok = ok && g_pca_mgr.init();
 	return ok;
 }
 
@@ -61,8 +73,10 @@ static bool mcu_arm_cb() {
 
 static bool mcu_begin_cb() {
 	// Register participants before beginning, all within callbacks
-	g_mr.registerParticipant(&g_hb);
 	g_mr.registerParticipant(&g_mcu);
+	// Register other subsystems
+	g_mr.registerParticipant(&g_hb);
+	g_mr.registerParticipant(&g_battery);
 	g_mr.begin();
 	return true;
 }
@@ -72,6 +86,8 @@ static void mcu_update_cb() {
 	g_mr.update();
 	// Let heartbeat decide when to publish via its internal timer
 	g_hb.update();
+	// Update battery subsystem
+	g_battery.update();
 }
 
 static void mcu_stop_cb() {

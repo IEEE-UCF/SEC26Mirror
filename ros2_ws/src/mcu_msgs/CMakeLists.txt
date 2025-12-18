@@ -33,9 +33,23 @@ if(BUILD_TESTING)
 endif()
 
 find_package(rosidl_default_generators REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/ArmSusbsytem.msg"
+  "msg/BatteryHealth.msg"
+  "msg/DriveBase.msg"
+  "msg/DroneControl.msg"
+  "msg/DroneState.msg"
   "msg/McuState.msg"
- )
+  "msg/MiniRobotControl.msg"
+  "msg/MiniRobotState.msg"
+  "msg/RC.msg"
+  "msg/RobotInputs.msg"
+  DEPENDENCIES std_msgs geometry_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
 
 ament_package()

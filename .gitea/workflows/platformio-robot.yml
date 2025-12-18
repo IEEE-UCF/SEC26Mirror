@@ -70,7 +70,6 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-
       - name: Build all PlatformIO environments
         working-directory: mcu_ws/
         shell: bash
@@ -81,3 +80,25 @@ jobs:
           # Build all environments defined in platformio.ini
           # `pio run` without -e builds every env
           pio run
+
+      - name: Preview MCU artifacts (count + list)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          shopt -s globstar nullglob
+          files=(
+            mcu_ws/.pio/build/*/firmware.*
+            mcu_ws/.pio/build/*/**/*.{bin,hex,elf,uf2}
+          )
+          echo "Found ${#files[@]} files to upload:";
+          for f in "${files[@]}"; do echo " - $f"; done
+
+      - name: Upload MCU build artifacts (all environments)
+        uses: actions/upload-artifact@v3
+        with:
+          name: mcu-build-artifacts-all
+          path: |
+            mcu_ws/.pio/build/*/firmware.*
+            mcu_ws/.pio/build/*/**/*.{bin,hex,elf,uf2}
+          if-no-files-found: ignore
+          retention-days: 7

@@ -9,8 +9,107 @@ on:
   workflow_dispatch:
 
 jobs:
+  # 0. Build MCU artifacts on amd64 to avoid ARM64 compile issues
+  build-mcu-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Prepare MCU extra packages (mcu_msgs)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p mcu_ws/extra_packages
+          if [ -d ros2_ws/src/mcu_msgs ]; then
+            rm -rf mcu_ws/extra_packages/mcu_msgs
+            cp -a ros2_ws/src/mcu_msgs mcu_ws/extra_packages/mcu_msgs
+          else
+            echo "mcu_msgs not found at ros2_ws/src/mcu_msgs" >&2
+            exit 1
+          fi
+
+      - name: Cache PlatformIO packages and build artifacts
+        id: pio-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            mcu_ws/.pio
+            mcu_ws/.pioenvs
+            mcu_ws/libs_external/esp32/micro_ros_platformio/build
+            mcu_ws/libs_external/esp32/micro_ros_platformio/libmicroros
+            mcu_ws/libs_external/teensy/micro_ros_platformio/build
+            mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
+            ~/.cache/pip
+          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
+          restore-keys: |
+            platformio-${{ runner.os }}-
+
+      - name: Show PlatformIO cache status
+        run: |
+          if [ "${{ steps.pio-cache.outputs.cache-hit }}" = 'true' ]; then
+            echo "::notice::PlatformIO cache hit"
+          else
+            echo "::notice::PlatformIO cache miss"
+          fi
+
+      - name: Install CMake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build all PlatformIO environments
+        working-directory: mcu_ws/
+        shell: bash
+        run: |
+          pio pkg install || true
+          # Build only the required environments to speed up CI
+          pio run -e robot -e robotcomms
+
+      - name: Preview MCU artifacts (count + list)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          shopt -s globstar nullglob
+          files=(
+            mcu_ws/.pio/build/robot/firmware.*
+            mcu_ws/.pio/build/robot/**/*.hex
+            mcu_ws/.pio/build/robot/**/*.elf
+            mcu_ws/.pio/build/robotcomms/firmware.*
+            mcu_ws/.pio/build/robotcomms/**/*.bin
+            mcu_ws/.pio/build/robotcomms/**/*.elf
+          )
+          echo "Found ${#files[@]} files to upload:";
+          for f in "${files[@]}"; do echo " - $f"; done
+
+      - name: Upload MCU build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: mcu-build-artifacts
+          path: |
+            mcu_ws/.pio/build/robot/firmware.*
+            mcu_ws/.pio/build/robot/**/*.hex
+            mcu_ws/.pio/build/robot/**/*.elf
+            mcu_ws/.pio/build/robotcomms/firmware.*
+            mcu_ws/.pio/build/robotcomms/**/*.bin
+            mcu_ws/.pio/build/robotcomms/**/*.elf
+          if-no-files-found: ignore
+          retention-days: 7
   # 1. Robot Job - Always Runs
   deploy-robot:
+    needs: build-mcu-artifacts
     runs-on: rpi-ros2
     
     # Force all steps to run inside your specific directory
@@ -19,6 +118,17 @@ jobs:
         working-directory: /home/ieee/SEC26
 
     steps:
+      - name: 📦 Download MCU build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: mcu-build-artifacts
+          path: /home/ieee/SEC26/mcu_ws/prebuilt
+        continue-on-error: true
+
+      - name: 📄 List downloaded artifacts
+        run: |
+          echo "Listing prebuilt artifacts (if any):"
+          ls -R mcu_ws/prebuilt || echo "No prebuilt artifacts found"
       - name: LEDs On
         run: |
           echo "⚡ LED Flashing (daemonized) during deployment"

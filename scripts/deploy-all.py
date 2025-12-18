@@ -12,6 +12,52 @@ MCU_WS = Path("/home/ubuntu/mcu_workspaces/sec26mcu")
 ROS_WS = Path("/home/ubuntu/ros2_workspaces")
 ROS_INSTALL_SETUP = ROS_WS / "install" / "setup.bash"
 TEST_PKG_LAUNCH = Path("/home/ubuntu/ros2_workspaces/src/sec26ros/test_package/launch/test_node.launch.py")
+PREBUILT_DIR = MCU_WS / "prebuilt"
+
+
+def stage_prebuilt_artifacts():
+    # Copy prebuilt firmware into PlatformIO build folders so upload can run without compiling.
+    if not PREBUILT_DIR.exists():
+        print(f"ℹ️ No prebuilt directory found at {PREBUILT_DIR}; will fall back to normal build")
+        return
+
+    robot_build_dir = MCU_WS / ".pio" / "build" / "robot"
+    robotcomms_build_dir = MCU_WS / ".pio" / "build" / "robotcomms"
+    robot_build_dir.mkdir(parents=True, exist_ok=True)
+    robotcomms_build_dir.mkdir(parents=True, exist_ok=True)
+
+    # Search broadly in PREBUILT_DIR to handle nested paths from artifact download
+    robot_candidates = []
+    robotcomms_candidates = []
+    for pattern in ["**/robot/firmware.*", "**/robot/**/*.hex", "**/robot/**/*.elf"]:
+        robot_candidates.extend(PREBUILT_DIR.glob(pattern))
+    for pattern in ["**/robotcomms/firmware.*", "**/robotcomms/**/*.bin", "**/robotcomms/**/*.elf"]:
+        robotcomms_candidates.extend(PREBUILT_DIR.glob(pattern))
+
+    staged = False
+    if robot_candidates:
+        # Prefer firmware.hex if present; else take first match
+        preferred = next((p for p in robot_candidates if p.name == "firmware.hex"), robot_candidates[0])
+        target = robot_build_dir / "firmware.hex"
+        print(f"📦 Staging Teensy artifact: {preferred} -> {target}")
+        target.write_bytes(preferred.read_bytes())
+        staged = True
+
+    if robotcomms_candidates:
+        # Prefer firmware.bin for ESP32; fall back to firmware.elf if needed
+        preferred = next((p for p in robotcomms_candidates if p.suffix == ".bin" and p.name.startswith("firmware")), None)
+        if preferred is None:
+            preferred = next((p for p in robotcomms_candidates if p.name == "firmware.elf"), robotcomms_candidates[0])
+        # Keep original extension
+        target = robotcomms_build_dir / preferred.name
+        print(f"📦 Staging Comm ESP32 artifact: {preferred} -> {target}")
+        target.write_bytes(preferred.read_bytes())
+        staged = True
+
+    if staged:
+        print("✅ Prebuilt artifacts staged into .pio/build/{robot,robotcomms}")
+    else:
+        print("ℹ️ No matching prebuilt artifacts found; will fall back to normal build")
 
 
 def run(cmd, env=None, cwd=None, shell=False):
@@ -43,6 +89,8 @@ def flash_mcu():
     if not script.exists():
         print(f"❌ Missing script: {script}")
         sys.exit(1)
+    # Stage artifacts (if any) before flashing, to enable upload without rebuild
+    stage_prebuilt_artifacts()
     print("🚀 Flashing MCU (Teensy + Comm ESP32)...")
     run(["bash", str(script)])
     print("✅ MCU flashing completed")

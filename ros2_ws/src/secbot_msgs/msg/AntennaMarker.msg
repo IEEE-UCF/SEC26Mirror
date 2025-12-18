@@ -1,1 +1,2 @@
-# LED color and antenna markers.
+uint8 antenna_id
+secbot_msgs/LedColor color

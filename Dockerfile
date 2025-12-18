@@ -112,6 +112,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-gpiozero \
         python3-lgpio \
         python3-rpi.gpio \
+        python3-serial \
         python3-requests && \
     rm -rf /var/lib/apt/lists/*
 

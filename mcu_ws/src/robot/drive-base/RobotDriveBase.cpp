@@ -98,7 +98,7 @@ Vector2D RobotDriveBase::getCurrentVelocity(float dt) {
   long dRightTicks = rightTicks_.position - prevRightTicks_;
 
   // encoder ticks for velocity
-  if (dleftTicks != 0 || dRightTicks != 0) {
+  if (dleftTicks != 0 && dRightTicks != 0) {
     float dleftDist = static_cast<float>(dleftTicks) * RobotConfig::IN_PER_TICK;
     float drightDist =
         static_cast<float>(dRightTicks) * RobotConfig::IN_PER_TICK;

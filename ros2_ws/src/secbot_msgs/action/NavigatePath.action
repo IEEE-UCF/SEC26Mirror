@@ -1,8 +1,1 @@
-# goal
-uint8 antenna_id
----
-# result
-bool success
----
-# feedback
-float32 distance_remaining
+# Long-running goals with feedback.

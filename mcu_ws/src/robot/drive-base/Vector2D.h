@@ -8,8 +8,6 @@
 #ifndef VECTOR2D_H
 #define VECTOR2D_H
 
-#include <Arduino.h>
-
 #include <cmath>
 
 class Vector2D {

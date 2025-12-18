@@ -37,11 +37,16 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/AntennaMarker.msg"
+  "msg/ArmCommand.msg"
   "msg/ArmSusbsytem.msg"
   "msg/BatteryHealth.msg"
   "msg/DriveBase.msg"
+  "msg/DriveCommand.msg"
   "msg/DroneControl.msg"
   "msg/DroneState.msg"
+  "msg/IRCommand.msg"
+  "msg/LedColor.msg"
   "msg/McuState.msg"
   "msg/MiniRobotControl.msg"
   "msg/MiniRobotState.msg"

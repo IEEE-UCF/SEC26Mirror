@@ -13,9 +13,11 @@
 #include "robot/machines/McuSubsystem.h"
 #include "robot/machines/HeartbeatSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
+#include "robot/subsystems/SensorSubsystem.h"
 #include <microros_manager_robot.h>
 #include "PCA9685Manager.h"
 #include "I2CPowerDriver.h"
+#include "TOF.h"
 #include "ROBOTCONFIG.h"
 
 using namespace Subsystem;
@@ -33,6 +35,13 @@ static Drivers::I2CPowerDriverSetup g_power_driver_setup("power_driver", 0x40, 1
 static Drivers::I2CPowerDriver g_power_driver(g_power_driver_setup);
 static BatterySubsystemSetup g_battery_setup("battery_subsystem", &g_power_driver);
 static BatterySubsystem g_battery(g_battery_setup);
+
+// --- Sensor subsystem (TOF) ---
+static Drivers::TOFDriverSetup g_tof_setup("tof_sensor", 500, 0);
+static Drivers::TOFDriver g_tof_driver(g_tof_setup);
+static std::vector<Drivers::TOFDriver*> g_tof_drivers = {&g_tof_driver};
+static SensorSubsystemSetup g_sensor_setup("sensor_subsystem", g_tof_drivers);
+static SensorSubsystem g_sensor(g_sensor_setup);
 
 // --- MCU subsystem wired with callbacks ---
 // Forward-declare callbacks so we can construct the subsystem first
@@ -61,7 +70,7 @@ static bool mcu_init_cb() {
 	bool ok = true;
 	ok = ok && g_mr.init();
 	ok = ok && g_hb.init();
-	ok = ok && g_battery.init();
+	ok = ok && g_battery.init();	ok = ok && g_sensor.init();	ok = ok && g_sensor.init();
 	ok = ok && g_pca_mgr.init();
 	return ok;
 }
@@ -77,6 +86,7 @@ static bool mcu_begin_cb() {
 	// Register other subsystems
 	g_mr.registerParticipant(&g_hb);
 	g_mr.registerParticipant(&g_battery);
+	g_mr.registerParticipant(&g_sensor);
 	g_mr.begin();
 	return true;
 }
@@ -88,6 +98,8 @@ static void mcu_update_cb() {
 	g_hb.update();
 	// Update battery subsystem
 	g_battery.update();
+	// Update sensor subsystem
+	g_sensor.update();
 }
 
 static void mcu_stop_cb() {

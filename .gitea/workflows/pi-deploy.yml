@@ -51,8 +51,6 @@ jobs:
             mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
             ~/.cache/pip
           key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
-          restore-keys: |
-            platformio-${{ runner.os }}-
 
       - name: Show PlatformIO cache status
         run: |

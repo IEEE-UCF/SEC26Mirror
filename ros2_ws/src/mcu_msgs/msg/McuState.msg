@@ -1,3 +1,6 @@
+# MCU state message
+std_msgs/Header header
+
 uint8 PRE_INIT=0
 uint8 INIT=1
 uint8 INIT_FAIL=2

@@ -47,8 +47,8 @@ void RobotDriveBase::driveVelocity(Vector2D& targetVelocity) {
   targetVelocity_ = targetVelocity;
 
   // Reset PIDs
-  // leftPID.reset()
-  // rightPID.reset()
+  leftWheelPID_.reset();
+  rightWheelPID_.reset();
 }
 
 /**
@@ -60,8 +60,8 @@ void RobotDriveBase::driveSetPoint(Pose2D& targetPose) {
   targetPose_ = targetPose;
 
   // Reset PIDs
-  // leftPID.reset()
-  // rightPID.reset()
+  leftWheelPID_.reset();
+  rightWheelPID_.reset();
 }
 
 /**
@@ -184,11 +184,13 @@ void RobotDriveBase::velocityControl(float dt) {
        RobotConfig::IN_PER_TICK) /
       dt;
 
-  // int leftOutput = leftPID.calculate(actualLeftVel, targetLeftWheelVel, dt);
-  // int rightOutput = rightPID.calculate(actualRightVel, targetRightWheelVel,
-  // dt);
+  float leftWheelOutput =
+      leftWheelPID_.update(targetLeftWheelVel, actualLeftVel, dt);
+  float rightWheelOutput =
+      rightWheelPID_.update(targetRightWheelVel, actualRightVel, dt);
 
-  // applyMotorSpeeds(leftOutput, rightOutput);
+  writeMotorSpeeds(static_cast<int>(leftWheelOutput),
+                   static_cast<int>(rightWheelOutput));
 }
 
 /**

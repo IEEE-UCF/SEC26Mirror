@@ -120,7 +120,7 @@ TankPwmCmd CraterEntryTask::update(const Pose2D& pose, float dt) {
   }
 
   // Coarse progress by phase (keeping this VERY simple on purpose)
-  // approach=0..0.33, descend=0.33..0.66, exit=0.66..1.0
+  // approach = 0..0.33, descend = 0.33..0.66, exit = 0.66..1.0
   switch (state_) {
     case State::kApproachRim: {
       TankPwmCmd cmd = approach_.update(pose, dt_s);

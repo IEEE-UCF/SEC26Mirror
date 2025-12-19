@@ -42,7 +42,7 @@ if [[ -f "$TEENSY_HEX" ]]; then
     CLI="$HOME/.platformio/packages/tool-teensy/teensy_loader_cli"
     if [[ -x "$CLI" ]]; then
         echo "▶️ Flashing via teensy_loader_cli (TEENSY41)"
-        for attempt in {1..3}; do
+        for attempt in {1..5}; do
             echo "🔄 Teensy flash attempt $attempt/3"
             if timeout 20 "$CLI" -mmcu=TEENSY41 -v -w -s "$TEENSY_HEX"; then
                 echo "--------------------------------"
@@ -63,7 +63,7 @@ if [[ -f "$TEENSY_HEX" ]]; then
         fi
     else
         echo "ℹ️ teensy_loader_cli not found; using PlatformIO upload"
-        for attempt in {1..3}; do
+        for attempt in {1..5}; do
             echo "🔄 Teensy flash attempt $attempt/3"
             if timeout 20 pio run -t upload -e robot; then
                 echo "--------------------------------"
@@ -85,7 +85,7 @@ if [[ -f "$TEENSY_HEX" ]]; then
     fi
 else
     echo "ℹ️ Prebuilt Teensy firmware not found; building and uploading"
-    for attempt in {1..3}; do
+    for attempt in {1..5}; do
         echo "🔄 Teensy flash attempt $attempt/3"
         if timeout 20 pio run -t upload -e robot; then
             echo "--------------------------------"
@@ -122,7 +122,7 @@ if [[ -f "$ESP32_BIN" ]]; then
         ESTOOL="$HOME/.platformio/packages/tool-esptoolpy/esptool.py"
         if [[ -f "$ESTOOL" ]]; then
             echo "▶️ Flashing via esptool.py on $PORT (offset 0x10000)"
-            for attempt in {1..3}; do
+            for attempt in {1..5}; do
                 echo "🔄 ESP32 flash attempt $attempt/3"
                 if timeout 20 python3 "$ESTOOL" --chip esp32 --port "$PORT" --baud 921600 write_flash -z 0x10000 "$ESP32_BIN"; then
                     echo "--------------------------------"
@@ -143,7 +143,7 @@ if [[ -f "$ESP32_BIN" ]]; then
             fi
         else
             echo "ℹ️ esptool.py not found; using PlatformIO upload"
-            for attempt in {1..3}; do
+            for attempt in {1..5}; do
                 echo "🔄 ESP32 flash attempt $attempt/3"
                 if timeout 20 pio run -t upload -e robotcomms; then
                     echo "--------------------------------"
@@ -166,7 +166,7 @@ if [[ -f "$ESP32_BIN" ]]; then
     fi
 else
     echo "ℹ️ Prebuilt ESP32 firmware not found; building and uploading"
-    for attempt in {1..3}; do
+    for attempt in {1..5}; do
         echo "🔄 ESP32 flash attempt $attempt/3"
         if timeout 20 pio run -t upload -e robotcomms; then
             echo "--------------------------------"

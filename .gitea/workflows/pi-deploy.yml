@@ -50,9 +50,9 @@ jobs:
             mcu_ws/libs_external/teensy/micro_ros_platformio/build
             mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
             ~/.cache/pip
-          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
+          key: platformio-lite-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
           restore-keys: |
-            platformio-${{ runner.os }}-
+            platformio-lite-${{ runner.os }}-
 
       - name: Show PlatformIO cache status
         run: |
@@ -70,7 +70,7 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build all PlatformIO environments
+      - name: Build robot and robotcomms PlatformIO environments
         working-directory: mcu_ws/
         shell: bash
         run: |

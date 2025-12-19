@@ -43,8 +43,8 @@ class DriveSubsystem : public IMicroRosParticipant,
   void reset() override;
   const char* getInfo() override;
 
-  bool onCreate(rcl_node_t* node, rclc_executor* executor) override;
-  bool onDestroy() override;
+  bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
+  void onDestroy() override;
 
   void publishData();
 
@@ -55,10 +55,10 @@ class DriveSubsystem : public IMicroRosParticipant,
   RobotDriveBase driveBase_;
 
   rcl_node_t* node_ = nullptr;
-  rcl_executor_t* executor_ = nullptr;
+  rclc_executor_t* executor_ = nullptr;
   rcl_publisher_t drive_pub_;
   rcl_subscription_t drive_sub_;
 
   mcu_msgs__msg__DriveBase drive_msg_;
-}
+};
 }  // namespace Subsystem

@@ -6,7 +6,7 @@ static char frame_name[] = "odom";
 static char child_frame[] = "base_link";
 
 void DriveSubsystem::update() {
-  if (everyMs(100)) driveBase_.update();
+  if (everyMs(100)) driveBase_.update(0.0f, 0.1f);
   if (everyMs(1000)) publishData();
 }
 
@@ -17,11 +17,11 @@ void DriveSubsystem::pause() {}
 void DriveSubsystem::reset() { pause(); }
 
 const char* DriveSubsystem::getInfo() {
-  const char info[] = "DriveSubsystem";
+  static const char info[] = "DriveSubsystem";
   return info;
 }
 
-bool DriveSubsystem::onCreate(rcl_node_t* node, rclc_executor* executor) {
+bool DriveSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   node_ = node;
   executor_ = executor;
 
@@ -51,19 +51,17 @@ bool DriveSubsystem::onCreate(rcl_node_t* node, rclc_executor* executor) {
   return true;
 }
 
-bool DriveSubsystem::onDestroy() {
+void DriveSubsystem::onDestroy() {
   rcl_publisher_fini(&drive_pub_, node_);
   rcl_subscription_fini(&drive_sub_, node_);
-  mcu_msgs__msg__DriveBase__fini(&drive_msg_, node_);
+  mcu_msgs__msg__DriveBase__fini(&drive_msg_);
 
   node_ = nullptr;
-
-  return true;
 }
 
 void DriveSubsystem::publishData() {
   Pose2D currentPose = driveBase_.getCurrentPose();
-  Vector2D currentVelocity = driveBase_.getCurrentVelocity();
+  Vector2D currentVelocity = driveBase_.getCurrentVelocity(0.1f);
   int64_t time_ns = rmw_uros_epoch_nanos();
 
   drive_msg_.header.frame_id.data = frame_name;
@@ -96,26 +94,30 @@ void DriveSubsystem::publishData() {
 }
 
 // void* context is the pointer to the current subsystem instance
-static void DriveSubsystem::drive_callback(const void* msvin, void* context) {
+void DriveSubsystem::drive_callback(const void* msvin, void* context) {
   DriveSubsystem* instance = (DriveSubsystem*)context;
   const mcu_msgs__msg__DriveBase* msg = (const mcu_msgs__msg__DriveBase*)msvin;
 
   switch (msg->drive_mode) {
-    case mcu_msgs__msg__DriveBase__DRIVE_VECTOR:
-      instance->driveBase_.driveVelocity(Vector2D(
-          msg->goal_velocity.linear.x, 0, msg->goal_velocity.angular.z));
+    case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
+      Vector2D vel(msg->goal_velocity.linear.x, 0, msg->goal_velocity.angular.z);
+      instance->driveBase_.driveVelocity(vel);
       break;
-    case mcu_msgs__msg__DriveBase__DRIVE_GOAL:
+    }
+    case mcu_msgs__msg__DriveBase__DRIVE_GOAL: {
       double qz = msg->goal_transform.transform.rotation.z;
       double qw = msg->goal_transform.transform.rotation.w;
       float targetYaw = atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
-      instance->driveBase_.driveSetPoint(
-          Pose2D(msg->goal_transform.transform.translation.x,
-                 msg->goal_transform.transform.translation.y, targetYaw));
+      Pose2D pose(msg->goal_transform.transform.translation.x,
+                  msg->goal_transform.transform.translation.y, targetYaw);
+      instance->driveBase_.driveSetPoint(pose);
       break;
-    default:
-      instance->driveBase_.driveVelocity(Vector2D(0, 0, 0));
+    }
+    default: {
+      Vector2D vel(0, 0, 0);
+      instance->driveBase_.driveVelocity(vel);
       break;
+    }
   }
 }
 }  // namespace Subsystem

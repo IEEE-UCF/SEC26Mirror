@@ -62,6 +62,12 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     apt-get update && \
     rosdep update && \
     rosdep install --from-paths src --ignore-src -y && \
+    git clone https://github.com/IEEE-UCF/SEC26Mirror.git /tmp/sec26mirror && \
+    cd /tmp/sec26mirror && \
+    git checkout 6e5be2c && \
+    rosdep install --from-paths ros2_ws/src --ignore-src -y --skip-keys ament_python || true && \
+    cd / && \
+    rm -rf /tmp/sec26mirror && \
     rm -rf /var/lib/apt/lists/*
 
 # Fix permissions so the user/group own their workspace

@@ -71,7 +71,6 @@ class RobotDriveBase {
   Vector2D currentVelocity_;
   Vector2D targetVelocity_;
   Pose2D targetPose_;
-
   Pose2D prevPose_;
 };
 

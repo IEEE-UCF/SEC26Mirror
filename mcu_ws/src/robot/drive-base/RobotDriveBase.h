@@ -45,6 +45,9 @@ class RobotDriveBase {
 
   void update(float yaw, float dt);
 
+  DriveMode getCurrentMode() const { return currentMode_; };
+  Pose2D getCurrentPose() { return localization_.getPose(); };
+
  private:
   void velocityControl(float dt);
   void setPointControl(float dt);

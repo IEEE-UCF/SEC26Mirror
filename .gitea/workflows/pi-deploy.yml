@@ -50,7 +50,7 @@ jobs:
             mcu_ws/libs_external/teensy/micro_ros_platformio/build
             mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
             ~/.cache/pip
-          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
+          key: platformio-lite-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
 
       - name: Show PlatformIO cache status
         run: |
@@ -68,7 +68,7 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build all PlatformIO environments
+      - name: Build robot and robotcomms PlatformIO environments
         working-directory: mcu_ws/
         shell: bash
         run: |
@@ -156,13 +156,19 @@ jobs:
           echo "🚀 Rebuilding from: /home/ieee/SEC26/docker-compose.yml"
           COMPOSE_FILE="docker-compose.yml"
           
-          # 1. Stop existing services
-          docker compose -f $COMPOSE_FILE --project-directory . down || true
+          # Check if Dockerfile has changed
+          if git diff HEAD~1 HEAD --name-only 2>/dev/null | grep -q "Dockerfile\|docker-compose"; then
+            echo "📝 Dockerfile or docker-compose changed; full down/rebuild/up cycle"
+            docker compose -f $COMPOSE_FILE --project-directory . down || true
+          else
+            echo "📝 No Dockerfile/docker-compose changes; only stopping and restarting"
+            docker compose -f $COMPOSE_FILE --project-directory . stop || true
+          fi
           
-          # 2. Rebuild the image
+          # Rebuild the image
           docker compose -f $COMPOSE_FILE --project-directory . build
           
-          # 3. Start the container
+          # Start the container
           docker compose -f $COMPOSE_FILE --project-directory . up -d
 
       - name: ▶️ Run and activate ROS2 things

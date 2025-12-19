@@ -9,7 +9,7 @@
 
 #include <BaseSubsystem.h>
 #include <mcu_msgs/msg/drive_base.h>
-#include <micro_ros_utilties/type_utilities.h>
+#include <micro_ros_utilities/type_utilities.h>
 #include <microros_manager_robot.h>
 
 #include "TimedSubsystem.h"
@@ -30,7 +30,7 @@ class DriveSubsystemSetup : public Classes::BaseSetup {
 };
 
 class DriveSubsystem : public IMicroRosParticipant,
-                       public Classes::TimedSubsystem {
+                       public Subsystem::TimedSubsystem {
  public:
   explicit DriveSubsystem(const DriveSubsystemSetup& setup)
       : Subsystem::TimedSubsystem(setup),

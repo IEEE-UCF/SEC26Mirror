@@ -27,8 +27,8 @@ class I2CMuxDriver : public Classes::BaseDriver {
   ~I2CMuxDriver() override = default;
   I2CMuxDriver(const I2CMuxDriverSetup& setup)
       : Classes::BaseDriver(setup),
+        mux(setup.i2cAddress_),
         setup_(setup),
-        mux(setup_.i2cAddress_),
         currentChannel_(255) {}
 
   bool init() override;

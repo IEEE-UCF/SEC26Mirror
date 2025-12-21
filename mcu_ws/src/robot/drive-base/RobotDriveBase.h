@@ -16,6 +16,7 @@
 #include "Vector2D.h"
 #include "localization-subsystem/Localization.h"
 #include "localization-subsystem/RobotConfig.h"
+#include "pid_controller.h"
 
 enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE };
 
@@ -23,7 +24,8 @@ struct DriveBaseSetup {
   std::vector<Drivers::MotorDriverSetup> motorSetups;
   std::vector<Drivers::EncoderDriverSetup> encoderSetups;
 
-  // PID Config
+  PIDController::Config leftWheelPIDSetup;
+  PIDController::Config rightWheelPIDSetup;
 };
 
 class RobotDriveBase {
@@ -43,10 +45,16 @@ class RobotDriveBase {
 
   void update(float yaw, float dt);
 
+  DriveMode getCurrentMode() const { return currentMode_; };
+  Pose2D getCurrentPose() { return localization_.getPose(); };
+
  private:
   void velocityControl(float dt);
   void setPointControl(float dt);
   void writeMotorSpeeds(int leftSpeed, int rightSpeed);
+
+  PIDController leftWheelPID_;
+  PIDController rightWheelPID_;
 
   DriveBaseSetup setup_;
   Localization localization_;
@@ -66,7 +74,6 @@ class RobotDriveBase {
   Vector2D currentVelocity_;
   Vector2D targetVelocity_;
   Pose2D targetPose_;
-
   Pose2D prevPose_;
 };
 

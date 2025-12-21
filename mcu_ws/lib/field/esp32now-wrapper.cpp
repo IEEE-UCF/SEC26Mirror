@@ -14,7 +14,7 @@ bool EspNow::init() {
   peerInfo.encrypt = false;
   return (esp_now_add_peer(&peerInfo) == ESP_OK);
 }
-void EspNow::onDataRecv(const esp_now_recv_info_t *sender_info,
+void EspNow::onDataRecv(const uint8_t *mac_addr,
                         const uint8_t *incomingData, int len) {
   if (s_instance != nullptr) {
     if (len != sizeof(s_instance->recievedmessage)) {
@@ -27,7 +27,7 @@ void EspNow::onDataRecv(const esp_now_recv_info_t *sender_info,
     s_instance->esp_state = RECEIVED;
   }
 }
-void EspNow::onDataSent(const esp_now_send_info_t *receiver_info,
+void EspNow::onDataSent(const uint8_t *mac_addr,
                         esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success"

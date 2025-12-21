@@ -15,6 +15,7 @@
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/ArmSubsystem.h"
+#include "robot/subsystems/RCSubsystem.h"
 #include <microros_manager_robot.h>
 #include "PCA9685Manager.h"
 #include "I2CPowerDriver.h"
@@ -71,6 +72,10 @@ static Drivers::EncoderDriver g_arm_encoder(g_encoder_setup);
 static ArmSubsystemSetup g_arm_setup("arm_subsystem", g_pca0, &g_arm_encoder);
 static ArmSubsystem g_arm(g_arm_setup);
 
+// --- RC subsystem ---
+static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial1);
+static RCSubsystem g_rc(g_rc_setup);
+
 // Define callbacks after g_mcu is declared
 static bool mcu_init_cb() {
 	// Perform any one-time hardware checks; succeed for now
@@ -81,6 +86,7 @@ static bool mcu_init_cb() {
 	ok = ok && g_pca_mgr.init();
 	ok = ok && g_arm_encoder.init();
 	ok = ok && g_arm.init();
+	ok = ok && g_rc.init();
 	return ok;
 }
 
@@ -97,6 +103,7 @@ static bool mcu_begin_cb() {
 	g_mr.registerParticipant(&g_battery);
 	g_mr.registerParticipant(&g_sensor);
   g_mr.registerParticipant(&g_arm);
+  g_mr.registerParticipant(&g_rc);
 	g_mr.begin();
 	return true;
 }
@@ -112,6 +119,8 @@ static void mcu_update_cb() {
 	g_sensor.update();
   // Update arm subsystem
   g_arm.update();
+  // Update RC subsystem
+  g_rc.update();
 }
 
 static void mcu_stop_cb() {

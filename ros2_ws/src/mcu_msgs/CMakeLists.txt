@@ -52,6 +52,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MiniRobotState.msg"
   "msg/RC.msg"
   "msg/RobotInputs.msg"
+  "srv/ArmControl.srv"
   DEPENDENCIES std_msgs geometry_msgs
 )
 

@@ -77,7 +77,7 @@ void SensorSubsystem::publishData() {
     for (size_t i = 0; i < setup_.drivers_.size(); i++) {
         if (setup_.drivers_[i]) {
             setup_.drivers_[i]->update();
-            TOFDriverData data = setup_.drivers_[i]->read();
+            Drivers::TOFDriverData data = setup_.drivers_[i]->read();
             // Convert from mm to meters
             msg_.data.data[i] = data.range / 1000.0f;
         } else {

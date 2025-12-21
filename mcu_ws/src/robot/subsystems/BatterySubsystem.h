@@ -31,7 +31,7 @@ class BatterySubsystem : public IMicroRosParticipant,
   void begin() override {}
   void update() override;
   void pause() override {}
-  void reset() override {}
+  void reset() override;
   const char* getInfo() override;
 
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;

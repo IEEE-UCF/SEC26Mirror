@@ -1,244 +1,181 @@
-#include "crater_entry.h"
+/**
+ * @file crater_entry.cpp
+ * @author Rafeed Khan
+ * @brief Implementation of crater entry task
+ */
+
+#include "secbot_autonomy/crater_entry.hpp"
 
 #include <cmath>
 
 namespace secbot {
+
 namespace {
-
-static inline float clampf(float x, float lo, float hi) {
-  return (x < lo) ? lo : (x > hi) ? hi : x;
+float clamp01(float x) {
+  if (x < 0.0f) return 0.0f;
+  if (x > 1.0f) return 1.0f;
+  return x;
 }
-
 }  // namespace
 
-CraterEntryTask::CraterEntryTask(const Config& cfg)
-    : cfg_(cfg),
-      approach_(cfg_.approach_cfg),
-      descend_(cfg_.descend_cfg),
-      exit_(cfg_.exit_cfg) {}
+CraterEntryTask::CraterEntryTask(rclcpp::Node::SharedPtr node,
+                                 const CraterEntryConfig& cfg)
+    : TaskBase(node), cfg_(cfg) {
+  cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(
+      cfg_.cmd_vel_topic, 10);
 
-void CraterEntryTask::start(const Pose2D& pose) {
-  start_pose_ = pose;
+  pose_sub_ = node_->create_subscription<secbot_msgs::msg::Pose2D>(
+      cfg_.pose_topic, 10,
+      std::bind(&CraterEntryTask::onPose, this, std::placeholders::_1));
+}
 
-  t_total_ = 0.0f;
-  t_state_ = 0.0f;
+void CraterEntryTask::onPose(const secbot_msgs::msg::Pose2D::SharedPtr msg) {
+  current_x_ = msg->x;
+  current_y_ = msg->y;
+  current_theta_ = msg->theta;
+  pose_valid_ = true;
+}
+
+void CraterEntryTask::enterState(State s) {
+  state_ = s;
+  state_entry_time_ = node_->now();
+
+  // Capture phase start position for distance tracking
+  phase_start_x_ = current_x_;
+  phase_start_y_ = current_y_;
+}
+
+void CraterEntryTask::publishVelocity(float linear, float angular) {
+  geometry_msgs::msg::Twist msg;
+  msg.linear.x = linear;
+  msg.angular.z = angular;
+  cmd_vel_pub_->publish(msg);
+}
+
+void CraterEntryTask::stopMotion() {
+  publishVelocity(0.0f, 0.0f);
+}
+
+float CraterEntryTask::distanceFromPhaseStart() const {
+  float dx = current_x_ - phase_start_x_;
+  float dy = current_y_ - phase_start_y_;
+  return std::sqrt(dx * dx + dy * dy);
+}
+
+void CraterEntryTask::start() {
+  if (!pose_valid_) {
+    RCLCPP_WARN(node_->get_logger(), "CraterEntry: No pose data yet, starting anyway");
+  }
+
+  status_ = TaskStatus::kRunning;
   progress_ = 0.0f;
+  start_time_ = node_->now();
 
-  // Force the segment distances into the sub-configs
-  cfg_.approach_cfg.distance_m = cfg_.approach_distance_m;
-  cfg_.descend_cfg.distance_m  = cfg_.descend_distance_m;
-  cfg_.exit_cfg.distance_m     = -std::fabs(cfg_.exit_distance_m);  // reverse
+  enterState(State::kApproachRim);
 
-  // Rebuild primitives with updated configs (pretty cheap and deterministic!)
-  approach_ = DriveStraight(cfg_.approach_cfg);
-  descend_  = DriveStraight(cfg_.descend_cfg);
-  exit_     = DriveStraight(cfg_.exit_cfg);
+  RCLCPP_INFO(node_->get_logger(), "CraterEntry: Starting");
+}
 
-  status_ = CraterEntryStatus::kRunning;
-  enterState(State::kApproachRim, pose);
+void CraterEntryTask::step() {
+  if (status_ != TaskStatus::kRunning) {
+    return;
+  }
+
+  if (!pose_valid_) {
+    // Wait for pose data
+    return;
+  }
+
+  float t_total = (node_->now() - start_time_).seconds();
+  float t_state = (node_->now() - state_entry_time_).seconds();
+
+  // Timeout check
+  if (cfg_.timeout_s > 0.0f && t_total > cfg_.timeout_s) {
+    RCLCPP_WARN(node_->get_logger(), "CraterEntry: Timeout");
+    stopMotion();
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    return;
+  }
+
+  float dist = distanceFromPhaseStart();
+
+  switch (state_) {
+    case State::kApproachRim: {
+      // Drive forward to rim
+      progress_ = 0.33f * clamp01(dist / cfg_.approach_distance_m);
+
+      if (dist >= cfg_.approach_distance_m - cfg_.distance_tolerance_m) {
+        stopMotion();
+        enterState(State::kDescendToLine);
+        RCLCPP_DEBUG(node_->get_logger(), "CraterEntry: Reached rim, descending");
+      } else {
+        publishVelocity(cfg_.approach_speed, 0.0f);
+      }
+    } break;
+
+    case State::kDescendToLine: {
+      // Drive forward into crater
+      progress_ = 0.33f + 0.33f * clamp01(dist / cfg_.descend_distance_m);
+
+      if (dist >= cfg_.descend_distance_m - cfg_.distance_tolerance_m) {
+        stopMotion();
+        enterState(State::kDwellOnLine);
+        RCLCPP_DEBUG(node_->get_logger(), "CraterEntry: Touched line, dwelling");
+      } else {
+        publishVelocity(cfg_.descend_speed, 0.0f);
+      }
+    } break;
+
+    case State::kDwellOnLine: {
+      // Stop and dwell
+      progress_ = 0.66f;
+      stopMotion();
+
+      if (t_state >= cfg_.dwell_time_s) {
+        enterState(State::kExitCrater);
+        RCLCPP_DEBUG(node_->get_logger(), "CraterEntry: Dwell complete, exiting");
+      }
+    } break;
+
+    case State::kExitCrater: {
+      // Reverse out
+      progress_ = 0.66f + 0.34f * clamp01(dist / cfg_.exit_distance_m);
+
+      if (dist >= cfg_.exit_distance_m - cfg_.distance_tolerance_m) {
+        stopMotion();
+        status_ = TaskStatus::kSucceeded;
+        progress_ = 1.0f;
+        state_ = State::kDone;
+        RCLCPP_INFO(node_->get_logger(), "CraterEntry: Complete!");
+      } else {
+        publishVelocity(-cfg_.exit_speed, 0.0f);  // Negative = reverse
+      }
+    } break;
+
+    case State::kDone:
+    case State::kIdle:
+    default:
+      stopMotion();
+      break;
+  }
 }
 
 void CraterEntryTask::cancel() {
-  status_ = CraterEntryStatus::kFailed;
-  state_ = State::kFail;
-
-  approach_.cancel();
-  descend_.cancel();
-  exit_.cancel();
-}
-
-void CraterEntryTask::enterState(State s, const Pose2D& pose) {
-  state_ = s;
-  t_state_ = 0.0f;
-
-  switch (state_) {
-    case State::kApproachRim:
-      // goal: approach rim gently and straight
-      approach_.start(pose);
-      break;
-
-    case State::kDescendToLine:
-      // goal: go far enough down that the tread/wheel touches the crater line (around 3")
-      descend_.start(pose);
-      break;
-
-    case State::kDwellOnLine:
-      // goal: stop briefly to ensure contact/settle
-      break;
-
-    case State::kExitCrater:
-      // goal: reverse out
-      exit_.start(pose);
-      break;
-
-    case State::kDone:
-      break;
-
-    case State::kFail:
-      break;
-
-    default:
-      break;
+  if (status_ == TaskStatus::kRunning) {
+    stopMotion();
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    RCLCPP_INFO(node_->get_logger(), "CraterEntry: Cancelled");
   }
 }
 
-TankPwmCmd CraterEntryTask::update(const Pose2D& pose, float dt) {
-  TankPwmCmd out{};
-
-  // Idle: do nothing!!!!!!!!
-  if (status_ == CraterEntryStatus::kIdle) {
-    out.finished = true;
-    out.success = false;
-    out.left_pwm = 0;
-    out.right_pwm = 0;
-    return out;
-  }
-
-  // Already terminal: keep returning stop
-  if (status_ == CraterEntryStatus::kSucceeded || status_ == CraterEntryStatus::kFailed) {
-    out.finished = true;
-    out.success = (status_ == CraterEntryStatus::kSucceeded);
-    out.left_pwm = 0;
-    out.right_pwm = 0;
-    return out;
-  }
-
-  // Running timers
-  const float dt_s = (dt > 0.0f) ? dt : 0.0f;
-  t_total_ += dt_s;
-  t_state_ += dt_s;
-
-  // Global timeout
-  if (cfg_.timeout_s > 0.0f && t_total_ > cfg_.timeout_s) {
-    status_ = CraterEntryStatus::kFailed;
-    state_ = State::kFail;
-    out.finished = true;
-    out.success = false;
-    out.left_pwm = 0;
-    out.right_pwm = 0;
-    return out;
-  }
-
-  // Coarse progress by phase (keeping this VERY simple on purpose)
-  // approach = 0..0.33, descend = 0.33..0.66, exit = 0.66..1.0
-  switch (state_) {
-    case State::kApproachRim: {
-      TankPwmCmd cmd = approach_.update(pose, dt_s);
-
-      // progress slice
-      progress_ = 0.33f * clampf(approach_.progress(), 0.0f, 1.0f);
-
-      if (cmd.finished) {
-        if (!cmd.success && cfg_.fail_fast) {
-          status_ = CraterEntryStatus::kFailed;
-          state_ = State::kFail;
-          out.finished = true;
-          out.success = false;
-          out.left_pwm = 0;
-          out.right_pwm = 0;
-          return out;
-        }
-        enterState(State::kDescendToLine, pose);
-        // fallthrough next update tick
-        out.left_pwm = 0;
-        out.right_pwm = 0;
-        out.finished = false;
-        out.success = false;
-        return out;
-      }
-
-      return cmd;
-    }
-
-    case State::kDescendToLine: {
-      TankPwmCmd cmd = descend_.update(pose, dt_s);
-
-      // progress slice
-      progress_ = 0.33f + 0.33f * clampf(descend_.progress(), 0.0f, 1.0f);
-
-      if (cmd.finished) {
-        if (!cmd.success && cfg_.fail_fast) {
-          status_ = CraterEntryStatus::kFailed;
-          state_ = State::kFail;
-          out.finished = true;
-          out.success = false;
-          out.left_pwm = 0;
-          out.right_pwm = 0;
-          return out;
-        }
-
-        // I'm assuming we've reached the “line touch” region if descend distance is tuned right
-        // The rules define the line around 3" down from the crater rim
-        // so we have to tune cfg.descend_distance_m to guarantee contact
-        enterState(State::kDwellOnLine, pose);
-        out.left_pwm = 0;
-        out.right_pwm = 0;
-        out.finished = false;
-        out.success = false;
-        return out;
-      }
-
-      return cmd;
-    }
-
-    case State::kDwellOnLine: {
-      // goal: hold still briefly (contact/settle)
-      progress_ = 0.66f;
-
-      out.left_pwm = 0;
-      out.right_pwm = 0;
-      out.finished = false;
-      out.success = false;
-
-      if (t_state_ >= cfg_.dwell_time_s) {
-        enterState(State::kExitCrater, pose);
-      }
-
-      return out;
-    }
-
-    case State::kExitCrater: {
-      TankPwmCmd cmd = exit_.update(pose, dt_s);
-
-      progress_ = 0.66f + 0.34f * clampf(exit_.progress(), 0.0f, 1.0f);
-
-      if (cmd.finished) {
-        if (!cmd.success && cfg_.fail_fast) {
-          status_ = CraterEntryStatus::kFailed;
-          state_ = State::kFail;
-          out.finished = true;
-          out.success = false;
-          out.left_pwm = 0;
-          out.right_pwm = 0;
-          return out;
-        }
-
-        status_ = CraterEntryStatus::kSucceeded;
-        state_ = State::kDone;
-
-        out.finished = true;
-        out.success = true;
-        out.left_pwm = 0;
-        out.right_pwm = 0;
-        progress_ = 1.0f;
-        return out;
-      }
-
-      return cmd;
-    }
-
-    default:
-      break;
-  }
-
-  // If we ever land here, fail safe!!!
-  status_ = CraterEntryStatus::kFailed;
-  state_ = State::kFail;
-  out.finished = true;
-  out.success = false;
-  out.left_pwm = 0;
-  out.right_pwm = 0;
-  return out;
+void CraterEntryTask::reset() {
+  TaskBase::reset();
+  stopMotion();
+  state_ = State::kIdle;
+  phase_start_x_ = 0.0f;
+  phase_start_y_ = 0.0f;
 }
 
 }  // namespace secbot

@@ -1,196 +1,193 @@
 /**
  * @file keypad_enter.cpp
  * @author Rafeed Khan
- * @brief Implementation for KeypadEnter (Antenna #4 keypad typing: 73738#)
+ * @brief Implementation of keypad entry task for Antenna #4
  */
 
-#include "keypad_enter.h"
+#include "secbot_autonomy/keypad_enter.hpp"
 
 namespace secbot {
 
-static inline float safe_dt(float dt) { return (dt > 0.0f) ? dt : 0.0f; }
-
-KeypadEnter::KeypadEnter(const Config& cfg, const IO& io) : cfg_(cfg), io_(io) {}
-
-float KeypadEnter::clamp01_(float x) {
+float KeypadEnterTask::clamp01(float x) {
   if (x < 0.0f) return 0.0f;
   if (x > 1.0f) return 1.0f;
   return x;
 }
 
-uint8_t KeypadEnter::codeLen_() const {
-  if (!cfg_.code) return 0;
-  uint8_t n = 0;
-  while (cfg_.code[n] != '\0' && n < 32) n++;  // cap so we don't go insane
-  return n;
+KeypadEnterTask::KeypadEnterTask(rclcpp::Node::SharedPtr node,
+                                 const KeypadEnterConfig& cfg)
+    : TaskBase(node), cfg_(cfg) {
+  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+      cfg_.arm_command_topic, 10);
+
+  key_target_pub_ = node_->create_publisher<std_msgs::msg::Char>(
+      cfg_.key_target_topic, 10);
+
+  at_key_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
+      cfg_.at_key_topic, 10,
+      std::bind(&KeypadEnterTask::onAtKey, this, std::placeholders::_1));
 }
 
-void KeypadEnter::enterState_(State s) {
+void KeypadEnterTask::onAtKey(const std_msgs::msg::Bool::SharedPtr msg) {
+  at_key_ = msg->data;
+  at_key_valid_ = true;
+}
+
+void KeypadEnterTask::enterState(State s) {
   state_ = s;
-  t_state_ = 0.0f;
+  state_entry_time_ = node_->now();
 }
 
-void KeypadEnter::start() {
-  // If arm hooks aren’t wired yet, fail FAST!!! (so you don't “think it worked”)
-  if (io_.set_key_target == nullptr || io_.set_pusher_norm == nullptr || codeLen_() == 0) {
-    status_ = PrimitiveStatus::kFailed;
-    state_ = State::kFailed;
-    progress_ = 0.0f;
+void KeypadEnterTask::commandPusher(int16_t position) {
+  secbot_msgs::msg::ArmCommand msg;
+  msg.joint_id = cfg_.pusher_joint_id;
+  msg.position = position;
+  msg.speed = cfg_.actuator_speed;
+  arm_pub_->publish(msg);
+}
+
+void KeypadEnterTask::commandKeyTarget(char key) {
+  std_msgs::msg::Char msg;
+  msg.data = key;
+  key_target_pub_->publish(msg);
+}
+
+void KeypadEnterTask::start() {
+  if (cfg_.code.empty()) {
+    RCLCPP_ERROR(node_->get_logger(), "KeypadEnter: No code configured");
+    status_ = TaskStatus::kFailed;
     return;
   }
 
-  // reset runtime
-  t_state_ = 0.0f;
-  t_total_ = 0.0f;
+  status_ = TaskStatus::kRunning;
+  progress_ = 0.0f;
+  start_time_ = node_->now();
 
-  // reset sequence
+  // Reset sequence
   idx_ = 0;
   cur_key_ = cfg_.code[0];
+  at_key_ = false;
 
-  // ALWAYS start released
-  io_.set_pusher_norm(cfg_.release_pos_norm);
+  // Start with pusher released
+  commandPusher(cfg_.release_position);
+  enterState(State::kSettle);
 
-  status_ = PrimitiveStatus::kRunning;
-  enterState_(State::kSettle);
-  progress_ = 0.0f;
+  RCLCPP_INFO(node_->get_logger(), "KeypadEnter: Starting (code: %s)",
+              cfg_.code.c_str());
 }
 
-void KeypadEnter::cancel() {
-  if (io_.set_pusher_norm) {
-    io_.set_pusher_norm(cfg_.release_pos_norm);
-  }
-  status_ = PrimitiveStatus::kFailed;
-  state_ = State::kFailed;
-}
-
-void KeypadEnter::reset() {
-  if (io_.set_pusher_norm) {
-    io_.set_pusher_norm(cfg_.release_pos_norm);
-  }
-  status_ = PrimitiveStatus::kIdle;
-  state_ = State::kIdle;
-  t_state_ = 0.0f;
-  t_total_ = 0.0f;
-  idx_ = 0;
-  cur_key_ = '\0';
-  progress_ = 0.0f;
-}
-
-TankPwmCmd KeypadEnter::update(float dt) {
-  TankPwmCmd out{};
-  out.left_pwm = 0;
-  out.right_pwm = 0;
-  out.finished = false;
-  out.success = false;
-
-  // idle: do nothing
-  if (status_ == PrimitiveStatus::kIdle) {
-    out.finished = true;
-    out.success = false;
-    return out;
+void KeypadEnterTask::step() {
+  if (status_ != TaskStatus::kRunning) {
+    return;
   }
 
-  // terminal states: keep returning stop
-  if (status_ == PrimitiveStatus::kSucceeded || status_ == PrimitiveStatus::kFailed) {
-    out.finished = true;
-    out.success = (status_ == PrimitiveStatus::kSucceeded);
-    return out;
+  float t_total = (node_->now() - start_time_).seconds();
+  float t_state = (node_->now() - state_entry_time_).seconds();
+
+  // Timeout check
+  if (cfg_.timeout_s > 0.0f && t_total >= cfg_.timeout_s) {
+    RCLCPP_WARN(node_->get_logger(), "KeypadEnter: Timeout");
+    commandPusher(cfg_.release_position);
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    return;
   }
 
-  // running
-  const float dts = safe_dt(dt);
-  t_state_ += dts;
-  t_total_ += dts;
-
-  // global timeout (don't hang forever)
-  if (cfg_.timeout_s > 0.0f && t_total_ >= cfg_.timeout_s) {
-    cancel();
-    out.finished = true;
-    out.success = false;
-    return out;
+  // Progress: based on current index
+  float code_len = static_cast<float>(cfg_.code.length());
+  if (code_len > 0) {
+    progress_ = clamp01(static_cast<float>(idx_) / code_len);
   }
 
-  // progress: idx / len (keeping it simple and predictable here fellas)
-  {
-    const float n = (codeLen_() == 0) ? 1.0f : static_cast<float>(codeLen_());
-    progress_ = clamp01_(static_cast<float>(idx_) / n);
-  }
-
+  // State machine
   switch (state_) {
-    case State::kSettle: {
-      // chill, stay released
-      io_.set_pusher_norm(cfg_.release_pos_norm);
+    case State::kSettle:
+      // Keep released while settling
+      commandPusher(cfg_.release_position);
 
-      if (t_state_ >= cfg_.settle_s) {
+      if (t_state >= cfg_.settle_s) {
         cur_key_ = cfg_.code[idx_];
-        io_.set_key_target(cur_key_);
-        enterState_(State::kMoveToKey);
+        commandKeyTarget(cur_key_);
+        at_key_ = false;  // Reset for new target
+        enterState(State::kMoveToKey);
+        RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Moving to key '%c'", cur_key_);
       }
-    } break;
+      break;
 
-    case State::kMoveToKey: {
-      // command target EVERY tick (pretty cheap and robust huh?)
-      io_.set_key_target(cur_key_);
-      io_.set_pusher_norm(cfg_.release_pos_norm);
+    case State::kMoveToKey:
+      // Command target continuously
+      commandKeyTarget(cur_key_);
+      commandPusher(cfg_.release_position);
 
-      const bool at_key = (io_.at_key_target != nullptr) ? io_.at_key_target() : false;
-
-      // If we have "at_key" feedback, use it. Otherwise time out and move on
-      if (at_key || t_state_ >= cfg_.move_timeout_s) {
-        io_.set_pusher_norm(cfg_.press_pos_norm);
-        enterState_(State::kPressHold);
+      // Transition when at key or timeout
+      if ((at_key_valid_ && at_key_) || t_state >= cfg_.move_timeout_s) {
+        commandPusher(cfg_.press_position);
+        enterState(State::kPressHold);
+        RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Pressing key '%c'", cur_key_);
       }
-    } break;
+      break;
 
-    case State::kPressHold: {
-      // PRESS (down)
-      io_.set_pusher_norm(cfg_.press_pos_norm);
+    case State::kPressHold:
+      // Hold key pressed
+      commandPusher(cfg_.press_position);
 
-      if (t_state_ >= cfg_.press_hold_s) {
-        io_.set_pusher_norm(cfg_.release_pos_norm);
-        enterState_(State::kReleaseHold);
+      if (t_state >= cfg_.press_hold_s) {
+        commandPusher(cfg_.release_position);
+        enterState(State::kReleaseHold);
       }
-    } break;
+      break;
 
-    case State::kReleaseHold: {
-      // RELEASE (up)
-      io_.set_pusher_norm(cfg_.release_pos_norm);
+    case State::kReleaseHold:
+      // Hold released
+      commandPusher(cfg_.release_position);
 
-      if (t_state_ >= cfg_.release_hold_s) {
-        // next character
+      if (t_state >= cfg_.release_hold_s) {
         idx_++;
 
-        if (idx_ >= codeLen_()) {
-          // DONE DONE DONE
-          io_.set_pusher_norm(cfg_.release_pos_norm);
-          status_ = PrimitiveStatus::kSucceeded;
+        if (idx_ >= cfg_.code.length()) {
+          // All keys entered!
+          status_ = TaskStatus::kSucceeded;
           progress_ = 1.0f;
-          enterState_(State::kDone);
+          state_ = State::kDone;
+          RCLCPP_INFO(node_->get_logger(), "KeypadEnter: Complete!");
         } else {
-          // move to next key
+          // Move to next key
           cur_key_ = cfg_.code[idx_];
-          io_.set_key_target(cur_key_);
-          enterState_(State::kMoveToKey);
+          commandKeyTarget(cur_key_);
+          at_key_ = false;
+          enterState(State::kMoveToKey);
+          RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Moving to key '%c'", cur_key_);
         }
       }
-    } break;
+      break;
 
-    case State::kDone: {
-      // keep released so we don't keep mashing keys like a dumbass
-      io_.set_pusher_norm(cfg_.release_pos_norm);
-    } break;
+    case State::kDone:
+      commandPusher(cfg_.release_position);
+      break;
 
-    case State::kFailed:
     case State::kIdle:
     default:
-      cancel();
       break;
   }
+}
 
-  // return completion flags in the REAL TankPwmCmd fields (no out.status nonsense)
-  out.finished = (status_ == PrimitiveStatus::kSucceeded || status_ == PrimitiveStatus::kFailed);
-  out.success = (status_ == PrimitiveStatus::kSucceeded);
-  return out;
+void KeypadEnterTask::cancel() {
+  if (status_ == TaskStatus::kRunning) {
+    commandPusher(cfg_.release_position);
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    RCLCPP_INFO(node_->get_logger(), "KeypadEnter: Cancelled at key %d ('%c')",
+                idx_, cur_key_);
+  }
+}
+
+void KeypadEnterTask::reset() {
+  TaskBase::reset();
+  commandPusher(cfg_.release_position);
+  state_ = State::kIdle;
+  idx_ = 0;
+  cur_key_ = '\0';
+  at_key_ = false;
 }
 
 }  // namespace secbot

@@ -16,7 +16,7 @@
 
 #include "secbot_autonomy/task_base.hpp"
 
-#include <secbot_msgs/msg/arm_command.hpp>
+#include <mcu_msgs/msg/arm_command.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/bool.hpp>
 
@@ -139,7 +139,7 @@ class CrankTurnTask : public TaskBase {
   bool task_complete_signal_ = false;
 
   // ROS interfaces
-  rclcpp::Publisher<secbot_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
+  rclcpp::Publisher<mcu_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr encoder_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr complete_sub_;
 };

@@ -15,17 +15,8 @@ find_package(action_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   # Messages
-  "msg/AntennaMarker.msg"
-  "msg/ArmCommand.msg"
-  "msg/DriveCommand.msg"
   "msg/DuckDetection.msg"
   "msg/DuckDetections.msg"
-  "msg/IRCommand.msg"
-  "msg/ImuLite.msg"
-  "msg/LedColor.msg"
-  "msg/Odom2D.msg"
-  "msg/Pose2D.msg"
-  "msg/RangeArray.msg"
   "msg/TaskStatus.msg"
   # Actions
   "action/ApproachTarget.action"

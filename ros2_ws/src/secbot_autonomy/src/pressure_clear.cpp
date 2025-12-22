@@ -19,7 +19,7 @@ float clamp01(float x) {
 PressureClearTask::PressureClearTask(rclcpp::Node::SharedPtr node,
                                      const PressureClearConfig& cfg)
     : TaskBase(node), cfg_(cfg) {
-  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+  arm_pub_ = node_->create_publisher<mcu_msgs::msg::ArmCommand>(
       cfg_.arm_command_topic, 10);
 
   if (cfg_.intake_speed != 0) {
@@ -43,7 +43,7 @@ void PressureClearTask::enterState(State s) {
 }
 
 void PressureClearTask::commandSweeper(int16_t position) {
-  secbot_msgs::msg::ArmCommand msg;
+  mcu_msgs::msg::ArmCommand msg;
   msg.joint_id = cfg_.sweeper_joint_id;
   msg.position = position;
   msg.speed = cfg_.actuator_speed;

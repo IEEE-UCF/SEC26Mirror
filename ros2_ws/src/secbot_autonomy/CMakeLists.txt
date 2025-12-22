@@ -12,6 +12,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(secbot_msgs REQUIRED)
+find_package(mcu_msgs REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -33,6 +34,7 @@ ament_target_dependencies(secbot_tasks
   std_msgs
   geometry_msgs
   secbot_msgs
+  mcu_msgs
 )
 
 # Autonomy node executable
@@ -50,6 +52,7 @@ ament_target_dependencies(autonomy_node
   std_msgs
   geometry_msgs
   secbot_msgs
+  mcu_msgs
 )
 
 # Install targets

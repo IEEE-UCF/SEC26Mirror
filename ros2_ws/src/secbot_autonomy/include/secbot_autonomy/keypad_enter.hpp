@@ -15,7 +15,7 @@
 
 #include "secbot_autonomy/task_base.hpp"
 
-#include <secbot_msgs/msg/arm_command.hpp>
+#include <mcu_msgs/msg/arm_command.hpp>
 #include <std_msgs/msg/char.hpp>
 #include <std_msgs/msg/bool.hpp>
 
@@ -116,7 +116,7 @@ class KeypadEnterTask : public TaskBase {
   bool at_key_valid_ = false;
 
   // ROS interfaces
-  rclcpp::Publisher<secbot_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
+  rclcpp::Publisher<mcu_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
   rclcpp::Publisher<std_msgs::msg::Char>::SharedPtr key_target_pub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr at_key_sub_;
 };

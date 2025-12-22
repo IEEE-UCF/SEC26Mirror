@@ -19,7 +19,7 @@ float clamp01(float x) {
 ButtonPressTask::ButtonPressTask(rclcpp::Node::SharedPtr node,
                                  const ButtonPressConfig& cfg)
     : TaskBase(node), cfg_(cfg) {
-  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+  arm_pub_ = node_->create_publisher<mcu_msgs::msg::ArmCommand>(
       cfg_.arm_command_topic, 10);
 }
 
@@ -30,7 +30,7 @@ void ButtonPressTask::enterState(State s) {
 }
 
 void ButtonPressTask::commandPusher(int16_t position) {
-  secbot_msgs::msg::ArmCommand msg;
+  mcu_msgs::msg::ArmCommand msg;
   msg.joint_id = cfg_.pusher_joint_id;
   msg.position = position;
   msg.speed = cfg_.actuator_speed;

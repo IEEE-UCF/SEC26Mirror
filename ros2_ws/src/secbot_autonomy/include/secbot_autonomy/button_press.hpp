@@ -15,7 +15,7 @@
 
 #include "secbot_autonomy/task_base.hpp"
 
-#include <secbot_msgs/msg/arm_command.hpp>
+#include <mcu_msgs/msg/arm_command.hpp>
 
 #include <cstdint>
 
@@ -102,7 +102,7 @@ class ButtonPressTask : public TaskBase {
   rclcpp::Time state_entry_time_;
 
   // ROS interfaces
-  rclcpp::Publisher<secbot_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
+  rclcpp::Publisher<mcu_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
 };
 
 }  // namespace secbot

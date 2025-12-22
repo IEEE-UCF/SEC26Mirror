@@ -15,7 +15,7 @@
 
 #include "secbot_autonomy/task_base.hpp"
 
-#include <secbot_msgs/msg/arm_command.hpp>
+#include <mcu_msgs/msg/arm_command.hpp>
 #include <std_msgs/msg/bool.hpp>
 
 #include <cstdint>
@@ -111,7 +111,7 @@ class FlagPlantTask : public TaskBase {
   bool release_confirmed_ = false;
 
   // ROS interfaces
-  rclcpp::Publisher<secbot_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
+  rclcpp::Publisher<mcu_msgs::msg::ArmCommand>::SharedPtr arm_pub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr flag_sub_;
 };
 

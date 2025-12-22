@@ -17,7 +17,7 @@ float KeypadEnterTask::clamp01(float x) {
 KeypadEnterTask::KeypadEnterTask(rclcpp::Node::SharedPtr node,
                                  const KeypadEnterConfig& cfg)
     : TaskBase(node), cfg_(cfg) {
-  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+  arm_pub_ = node_->create_publisher<mcu_msgs::msg::ArmCommand>(
       cfg_.arm_command_topic, 10);
 
   key_target_pub_ = node_->create_publisher<std_msgs::msg::Char>(
@@ -39,7 +39,7 @@ void KeypadEnterTask::enterState(State s) {
 }
 
 void KeypadEnterTask::commandPusher(int16_t position) {
-  secbot_msgs::msg::ArmCommand msg;
+  mcu_msgs::msg::ArmCommand msg;
   msg.joint_id = cfg_.pusher_joint_id;
   msg.position = position;
   msg.speed = cfg_.actuator_speed;

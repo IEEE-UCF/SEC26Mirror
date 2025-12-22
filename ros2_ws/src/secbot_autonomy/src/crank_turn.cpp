@@ -50,7 +50,7 @@ void CrankTurnTask::enterState(State s) {
 }
 
 void CrankTurnTask::commandMotor(int16_t speed) {
-  secbot_msgs::msg::ArmCommand msg;
+  mcu_msgs::msg::ArmCommand msg;
   msg.joint_id = cfg_.crank_joint_id;
   msg.position = speed;  // Using position field for speed command
   msg.speed = cfg_.spin_speed;
@@ -66,7 +66,7 @@ void CrankTurnTask::stopMotor() {
 CrankTurnTask::CrankTurnTask(rclcpp::Node::SharedPtr node,
                              const CrankTurnConfig& cfg)
     : TaskBase(node), cfg_(cfg) {
-  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+  arm_pub_ = node_->create_publisher<mcu_msgs::msg::ArmCommand>(
       cfg_.arm_command_topic, 10);
 
   encoder_sub_ = node_->create_subscription<std_msgs::msg::Float32>(

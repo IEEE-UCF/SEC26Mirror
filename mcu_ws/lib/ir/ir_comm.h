@@ -66,7 +66,7 @@ class IRNecReceiver : public Classes::BaseDriver {
   IRNecReceiver(const IRNecSetup &setup)
       : Classes::BaseDriver(setup), _setup(setup) {}
   //@breif intialize the receving channel and allow a background task queue for
-  //receiving
+  // receiving
   bool init() override;
   //@brief returns either true or false if received a message or not
   bool checkMessage(uint16_t &addr, uint16_t &cmd);

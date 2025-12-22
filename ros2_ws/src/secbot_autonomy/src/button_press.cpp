@@ -1,224 +1,154 @@
 /**
  * @file button_press.cpp
  * @author Rafeed Khan
- * @brief Implementation for ButtonPressTask (Antenna #1 button task)
+ * @brief Implementation of button press task for Antenna #1
  */
 
-#include "button_press.h"
-
-#include <cmath>
+#include "secbot_autonomy/button_press.hpp"
 
 namespace secbot {
 
-static float clamp01(float x) {
+namespace {
+float clamp01(float x) {
   if (x < 0.0f) return 0.0f;
   if (x > 1.0f) return 1.0f;
   return x;
 }
+}  // namespace
+
+ButtonPressTask::ButtonPressTask(rclcpp::Node::SharedPtr node,
+                                 const ButtonPressConfig& cfg)
+    : TaskBase(node), cfg_(cfg) {
+  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+      cfg_.arm_command_topic, 10);
+}
 
 void ButtonPressTask::enterState(State s) {
   state_ = s;
+  state_entry_time_ = node_->now();
   t_state_ = 0.0f;
+}
 
-  // reset contact debounce tracking when entering states that care about it
-  contact_stable_t_ = 0.0f;
-  last_contact_ = false;
+void ButtonPressTask::commandPusher(int16_t position) {
+  secbot_msgs::msg::ArmCommand msg;
+  msg.joint_id = cfg_.pusher_joint_id;
+  msg.position = position;
+  msg.speed = cfg_.actuator_speed;
+  arm_pub_->publish(msg);
 }
 
 void ButtonPressTask::start() {
-  // If you start without actuator wiring, fail FAST (so you don't "think it
-  // worked")
-  if (io_.set_pusher_norm == nullptr) {
-    active_ = false;
-    finished_ = true;
-    success_ = false;
-    progress_ = 0.0f;
-    state_ = State::kFailed;
+  status_ = TaskStatus::kRunning;
+  presses_done_ = 0;
+  progress_ = 0.0f;
+  start_time_ = node_->now();
+
+  // Start with pusher retracted
+  commandPusher(cfg_.release_position);
+  enterState(State::kSettle);
+
+  RCLCPP_INFO(node_->get_logger(), "ButtonPress: Starting (%d presses)",
+              cfg_.presses_total);
+}
+
+void ButtonPressTask::step() {
+  if (status_ != TaskStatus::kRunning) {
     return;
   }
 
-  active_ = true;
-  finished_ = false;
-  success_ = false;  // becomes true only when we complete all presses
-  presses_done_ = 0;
+  // Update time in current state
+  t_state_ = (node_->now() - state_entry_time_).seconds();
+  float t_total = (node_->now() - start_time_).seconds();
 
-  t_total_ = 0.0f;
-  progress_ = 0.0f;
-
-  // ALWAYS start with pusher released
-  io_.set_pusher_norm(cfg_.release_pos_norm);
-
-  enterState(State::kSettle);
-}
-
-void ButtonPressTask::cancel() {
-  // Stop commanding anything aggressive, Retract + fail
-  if (io_.set_pusher_norm) {
-    io_.set_pusher_norm(cfg_.release_pos_norm);
+  // Timeout check
+  if (cfg_.timeout_s > 0.0f && t_total >= cfg_.timeout_s) {
+    RCLCPP_WARN(node_->get_logger(), "ButtonPress: Timeout");
+    commandPusher(cfg_.release_position);
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    return;
   }
 
-  active_ = false;
-  finished_ = true;
-  success_ = false;
-  progress_ = clamp01(progress_);
-  state_ = State::kFailed;
-}
+  // Progress calculation
+  const float total = (cfg_.presses_total == 0)
+                          ? 1.0f
+                          : static_cast<float>(cfg_.presses_total);
+  float phase_frac = 0.0f;
 
-void ButtonPressTask::reset() {
-  // Return to a clean idle state
-  if (io_.set_pusher_norm) {
-    io_.set_pusher_norm(cfg_.release_pos_norm);
+  if (state_ == State::kSettle && cfg_.settle_s > 0.0f) {
+    phase_frac = clamp01(t_state_ / cfg_.settle_s) * (1.0f / total) * 0.10f;
+  } else if (state_ == State::kPressHold && cfg_.press_hold_s > 0.0f) {
+    phase_frac = clamp01(t_state_ / cfg_.press_hold_s) * (1.0f / total) * 0.50f;
+  } else if (state_ == State::kReleaseHold && cfg_.release_hold_s > 0.0f) {
+    phase_frac = clamp01(t_state_ / cfg_.release_hold_s) * (1.0f / total) * 0.40f;
   }
+  progress_ = clamp01((static_cast<float>(presses_done_) / total) + phase_frac);
 
-  active_ = false;
-  finished_ = true;
-  success_ = true;
-  presses_done_ = 0;
-
-  t_state_ = 0.0f;
-  t_total_ = 0.0f;
-
-  contact_stable_t_ = 0.0f;
-  last_contact_ = false;
-
-  progress_ = 0.0f;
-  state_ = State::kIdle;
-}
-
-TankPwmCmd ButtonPressTask::update(float dt) {
-  TankPwmCmd out{};
-  out.left_pwm = 0;
-  out.right_pwm = 0;
-  out.finished = finished_;
-  out.success = success_;
-
-  // If not active, behave like "no task loaded"
-  if (!active_) {
-    out.finished = true;
-    out.success = success_;
-    return out;
-  }
-
-  // Defensive dt
-  if (dt < 0.0f) dt = 0.0f;
-
-  t_state_ += dt;
-  t_total_ += dt;
-
-  // Global timeout: if something jams, we don't sit here forever
-  if (cfg_.timeout_s > 0.0f && t_total_ >= cfg_.timeout_s) {
-    cancel();
-    out.finished = finished_;
-    out.success = success_;
-    return out;
-  }
-
-  // sensor is optional, timing always drives the press sequence (no blocking!!)
-  bool contact = false;
-  if (cfg_.use_contact_sensor && io_.read_contact) {
-    contact = io_.read_contact();
-    if (contact == last_contact_) {
-      contact_stable_t_ += dt;
-    } else {
-      contact_stable_t_ = 0.0f;
-      last_contact_ = contact;
-    }
-  }
-
-  // Progress: presses_done_ is the main truth
-  {
-    const float total = (cfg_.presses_total == 0)
-                            ? 1.0f
-                            : static_cast<float>(cfg_.presses_total);
-    float phase_frac = 0.0f;
-
-    if (state_ == State::kSettle && cfg_.settle_s > 0.0f) {
-      phase_frac = clamp01(t_state_ / cfg_.settle_s) * (1.0f / total) * 0.10f;
-    } else if (state_ == State::kPressHold && cfg_.press_hold_s > 0.0f) {
-      phase_frac =
-          clamp01(t_state_ / cfg_.press_hold_s) * (1.0f / total) * 0.50f;
-    } else if (state_ == State::kReleaseHold && cfg_.release_hold_s > 0.0f) {
-      phase_frac =
-          clamp01(t_state_ / cfg_.release_hold_s) * (1.0f / total) * 0.40f;
-    }
-
-    progress_ =
-        clamp01((static_cast<float>(presses_done_) / total) + phase_frac);
-  }
-
-  // --------------------------
-  // STATE MACHINE TIME!!!!
-  // --------------------------
+  // State machine
   switch (state_) {
-    case State::kSettle: {
-      // keep released while settling
-      io_.set_pusher_norm(cfg_.release_pos_norm);
-
+    case State::kSettle:
+      // Keep released while settling
       if (t_state_ >= cfg_.settle_s) {
-        // begin press #1
-        io_.set_pusher_norm(cfg_.press_pos_norm);
+        commandPusher(cfg_.press_position);
         enterState(State::kPressHold);
       }
-    } break;
+      break;
 
-    case State::kPressHold: {
-      // PRESS position (this is the "button depressed" part!!!)
-      io_.set_pusher_norm(cfg_.press_pos_norm);
-
-      // optional contact check (still time-capped)
-      const bool contact_ok =
-          (!cfg_.use_contact_sensor || !io_.read_contact)
-              ? false
-              : (contact && contact_stable_t_ >= cfg_.contact_debounce_s);
-
-      if (t_state_ >= cfg_.press_hold_s || contact_ok) {
-        // release between presses
-        io_.set_pusher_norm(cfg_.release_pos_norm);
+    case State::kPressHold:
+      // Holding in pressed position
+      if (t_state_ >= cfg_.press_hold_s) {
+        commandPusher(cfg_.release_position);
         enterState(State::kReleaseHold);
       }
-    } break;
+      break;
 
-    case State::kReleaseHold: {
-      // RELEASE position
-      io_.set_pusher_norm(cfg_.release_pos_norm);
-
+    case State::kReleaseHold:
+      // Holding in released position
       if (t_state_ >= cfg_.release_hold_s) {
         presses_done_++;
 
-        // done after 3 presses (per rules yknow?!!?!!)
         if (presses_done_ >= cfg_.presses_total) {
-          active_ = false;
-          finished_ = true;
-          success_ = true;
+          // Done!!!!!!!!
+          RCLCPP_INFO(node_->get_logger(), "ButtonPress: Completed %d presses",
+                      presses_done_);
+          status_ = TaskStatus::kSucceeded;
           progress_ = 1.0f;
           enterState(State::kDone);
         } else {
-          // next press
-          io_.set_pusher_norm(cfg_.press_pos_norm);
+          // Next press
+          commandPusher(cfg_.press_position);
           enterState(State::kPressHold);
         }
       }
-    } break;
+      break;
 
-    case State::kDone: {
-      // keep released after finishing (don't keep pressing like an idiot)
-      io_.set_pusher_norm(cfg_.release_pos_norm);
-    } break;
-
-    case State::kFailed: {
-      io_.set_pusher_norm(cfg_.release_pos_norm);
-    } break;
+    case State::kDone:
+      // Keep retracted
+      break;
 
     case State::kIdle:
     default:
-      // Shouldn't happen while active, but fail safe anyways HAAHAHAHA
-      cancel();
+      //This SHOULDNT happen while running
+      status_ = TaskStatus::kFailed;
       break;
   }
+}
 
-  out.finished = finished_;
-  out.success = success_;
-  return out;
+void ButtonPressTask::cancel() {
+  if (status_ == TaskStatus::kRunning) {
+    commandPusher(cfg_.release_position);
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    RCLCPP_INFO(node_->get_logger(), "ButtonPress: Cancelled");
+  }
+}
+
+void ButtonPressTask::reset() {
+  TaskBase::reset();
+  commandPusher(cfg_.release_position);
+  state_ = State::kIdle;
+  presses_done_ = 0;
+  t_state_ = 0.0f;
 }
 
 }  // namespace secbot

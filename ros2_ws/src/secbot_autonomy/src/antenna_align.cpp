@@ -66,7 +66,7 @@ AntennaAlignTask::AntennaAlignTask(rclcpp::Node::SharedPtr node, const Config& c
       cfg_.cmd_vel_topic, 10);
 
   // Subscribe to pose for alignment feedback
-  pose_sub_ = node_->create_subscription<secbot_msgs::msg::Pose2D>(
+  pose_sub_ = node_->create_subscription<geometry_msgs::msg::Pose2D>(
       cfg_.pose_topic, 10,
       std::bind(&AntennaAlignTask::onPose, this, std::placeholders::_1));
 }
@@ -257,7 +257,7 @@ void AntennaAlignTask::onApproachFeedback(
   progress_ = 0.7f * approach_progress;
 }
 
-void AntennaAlignTask::onPose(const secbot_msgs::msg::Pose2D::SharedPtr msg) {
+void AntennaAlignTask::onPose(const geometry_msgs::msg::Pose2D::SharedPtr msg) {
   current_x_ = msg->x;
   current_y_ = msg->y;
   current_theta_ = msg->theta;

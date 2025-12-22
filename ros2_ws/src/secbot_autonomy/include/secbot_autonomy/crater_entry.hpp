@@ -19,7 +19,7 @@
 #include "secbot_autonomy/task_base.hpp"
 
 #include <geometry_msgs/msg/twist.hpp>
-#include <secbot_msgs/msg/pose2_d.hpp>
+#include <geometry_msgs/msg/pose2_d.hpp>
 
 #include <cstdint>
 
@@ -96,7 +96,7 @@ class CraterEntryTask : public TaskBase {
   float distanceFromPhaseStart() const;
 
   // Pose callback
-  void onPose(const secbot_msgs::msg::Pose2D::SharedPtr msg);
+  void onPose(const geometry_msgs::msg::Pose2D::SharedPtr msg);
 
   CraterEntryConfig cfg_;
   State state_ = State::kIdle;
@@ -116,7 +116,7 @@ class CraterEntryTask : public TaskBase {
 
   // ROS interfaces
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
-  rclcpp::Subscription<secbot_msgs::msg::Pose2D>::SharedPtr pose_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Pose2D>::SharedPtr pose_sub_;
 };
 
 }  // namespace secbot

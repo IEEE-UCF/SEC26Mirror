@@ -24,12 +24,12 @@ CraterEntryTask::CraterEntryTask(rclcpp::Node::SharedPtr node,
   cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(
       cfg_.cmd_vel_topic, 10);
 
-  pose_sub_ = node_->create_subscription<secbot_msgs::msg::Pose2D>(
+  pose_sub_ = node_->create_subscription<geometry_msgs::msg::Pose2D>(
       cfg_.pose_topic, 10,
       std::bind(&CraterEntryTask::onPose, this, std::placeholders::_1));
 }
 
-void CraterEntryTask::onPose(const secbot_msgs::msg::Pose2D::SharedPtr msg) {
+void CraterEntryTask::onPose(const geometry_msgs::msg::Pose2D::SharedPtr msg) {
   current_x_ = msg->x;
   current_y_ = msg->y;
   current_theta_ = msg->theta;

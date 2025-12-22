@@ -18,7 +18,7 @@
 
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <geometry_msgs/msg/twist.hpp>
-#include <secbot_msgs/msg/pose2_d.hpp>
+#include <geometry_msgs/msg/pose2_d.hpp>
 #include <secbot_msgs/action/approach_target.hpp>
 
 #include <cstdint>
@@ -106,7 +106,7 @@ class AntennaAlignTask : public TaskBase {
       const std::shared_ptr<const ApproachTarget::Feedback> feedback);
 
   // Pose callback
-  void onPose(const secbot_msgs::msg::Pose2D::SharedPtr msg);
+  void onPose(const geometry_msgs::msg::Pose2D::SharedPtr msg);
 
   // Utility
   static float wrapAngle(float angle);
@@ -140,7 +140,7 @@ class AntennaAlignTask : public TaskBase {
   // ROS interfaces
   rclcpp_action::Client<ApproachTarget>::SharedPtr approach_client_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
-  rclcpp::Subscription<secbot_msgs::msg::Pose2D>::SharedPtr pose_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Pose2D>::SharedPtr pose_sub_;
   GoalHandle::SharedPtr goal_handle_;
 };
 

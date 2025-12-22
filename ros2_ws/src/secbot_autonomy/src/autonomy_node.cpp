@@ -10,8 +10,7 @@
 
 namespace secbot {
 
-AutonomyNode::AutonomyNode()
-    : Node("autonomy_node") {
+AutonomyNode::AutonomyNode() : Node("autonomy_node") {
   // Declare parameters
   this->declare_parameter("step_rate_hz", 50.0);
   step_rate_hz_ = this->get_parameter("step_rate_hz").as_double();
@@ -62,28 +61,45 @@ void AutonomyNode::initializeTasks() {
 
 TaskBase* AutonomyNode::getTaskById(TaskId id) {
   switch (id) {
-    case TaskId::kAntennaAlign:  return antenna_align_.get();
-    case TaskId::kButtonPress:   return button_press_.get();
-    case TaskId::kCrankTurn:     return crank_turn_.get();
-    case TaskId::kCraterEntry:   return crater_entry_.get();
-    case TaskId::kFlagPlant:     return flag_plant_.get();
-    case TaskId::kKeypadEnter:   return keypad_enter_.get();
-    case TaskId::kPressureClear: return pressure_clear_.get();
-    default: return nullptr;
+    case TaskId::kAntennaAlign:
+      return antenna_align_.get();
+    case TaskId::kButtonPress:
+      return button_press_.get();
+    case TaskId::kCrankTurn:
+      return crank_turn_.get();
+    case TaskId::kCraterEntry:
+      return crater_entry_.get();
+    case TaskId::kFlagPlant:
+      return flag_plant_.get();
+    case TaskId::kKeypadEnter:
+      return keypad_enter_.get();
+    case TaskId::kPressureClear:
+      return pressure_clear_.get();
+    default:
+      return nullptr;
   }
 }
 
 std::string AutonomyNode::taskIdToName(TaskId id) const {
   switch (id) {
-    case TaskId::kNone:          return "none";
-    case TaskId::kAntennaAlign:  return "antenna_align";
-    case TaskId::kButtonPress:   return "button_press";
-    case TaskId::kCrankTurn:     return "crank_turn";
-    case TaskId::kCraterEntry:   return "crater_entry";
-    case TaskId::kFlagPlant:     return "flag_plant";
-    case TaskId::kKeypadEnter:   return "keypad_enter";
-    case TaskId::kPressureClear: return "pressure_clear";
-    default: return "unknown";
+    case TaskId::kNone:
+      return "none";
+    case TaskId::kAntennaAlign:
+      return "antenna_align";
+    case TaskId::kButtonPress:
+      return "button_press";
+    case TaskId::kCrankTurn:
+      return "crank_turn";
+    case TaskId::kCraterEntry:
+      return "crater_entry";
+    case TaskId::kFlagPlant:
+      return "flag_plant";
+    case TaskId::kKeypadEnter:
+      return "keypad_enter";
+    case TaskId::kPressureClear:
+      return "pressure_clear";
+    default:
+      return "unknown";
   }
 }
 
@@ -93,7 +109,8 @@ void AutonomyNode::startTask(TaskId id) {
 
   TaskBase* task = getTaskById(id);
   if (!task) {
-    RCLCPP_WARN(this->get_logger(), "Invalid task ID: %d", static_cast<int>(id));
+    RCLCPP_WARN(this->get_logger(), "Invalid task ID: %d",
+                static_cast<int>(id));
     return;
   }
 
@@ -157,7 +174,8 @@ void AutonomyNode::onTaskCommand(const std_msgs::msg::UInt8::SharedPtr msg) {
 
 void AutonomyNode::onAntennaTarget(const std_msgs::msg::UInt8::SharedPtr msg) {
   antenna_target_id_ = msg->data;
-  RCLCPP_DEBUG(this->get_logger(), "Antenna target set to: %d", antenna_target_id_);
+  RCLCPP_DEBUG(this->get_logger(), "Antenna target set to: %d",
+               antenna_target_id_);
 }
 
 void AutonomyNode::publishStatus() {

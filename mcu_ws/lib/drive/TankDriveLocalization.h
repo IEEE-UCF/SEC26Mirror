@@ -13,6 +13,7 @@
 #define _USE_MATH_DEFINES
 #include <Arduino.h>
 #include <Pose2D.h>
+
 #include <cmath>
 
 namespace Drive {
@@ -23,10 +24,10 @@ namespace Drive {
  */
 class TankDriveLocalizationSetup {
  public:
-  TankDriveLocalizationSetup(const char* _id, float _track_width, float _wheel_diameter,
-                    int _raw_ticks_per_rev, int _gear_ratio,
-                    float _start_x = 0.0f, float _start_y = 0.0f,
-                    float _start_theta = 0.0f)
+  TankDriveLocalizationSetup(const char* _id, float _track_width,
+                             float _wheel_diameter, int _raw_ticks_per_rev,
+                             int _gear_ratio, float _start_x = 0.0f,
+                             float _start_y = 0.0f, float _start_theta = 0.0f)
       : id(_id),
         track_width(_track_width),
         wheel_diameter(_wheel_diameter),

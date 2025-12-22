@@ -1,7 +1,8 @@
-#include <Arduino.h>
 #include "microros_manager_robot.h"
-#include <micro_ros_utilities/type_utilities.h>
+
+#include <Arduino.h>
 #include <micro_ros_utilities/string_utilities.h>
+#include <micro_ros_utilities/type_utilities.h>
 #include <uxr/client/util/time.h>
 
 namespace Subsystem {
@@ -10,10 +11,15 @@ MicrorosManager* MicrorosManager::s_instance_ = nullptr;
 
 bool MicrorosManager::create_entities() {
   allocator_ = rcl_get_default_allocator();
-  if (rclc_support_init(&support_, 0, NULL, &allocator_) != RCL_RET_OK) return false;
-  if (rclc_node_init_default(&node_, "robot_manager", "", &support_) != RCL_RET_OK) return false;
+  if (rclc_support_init(&support_, 0, NULL, &allocator_) != RCL_RET_OK)
+    return false;
+  if (rclc_node_init_default(&node_, "robot_manager", "", &support_) !=
+      RCL_RET_OK)
+    return false;
   executor_ = rclc_executor_get_zero_initialized_executor();
-  if (rclc_executor_init(&executor_, &support_.context, 1, &allocator_) != RCL_RET_OK) return false;
+  if (rclc_executor_init(&executor_, &support_.context, 1, &allocator_) !=
+      RCL_RET_OK)
+    return false;
   // Let registered participants create their pubs/subs
   for (size_t i = 0; i < participants_count_; ++i) {
     if (participants_[i] && !participants_[i]->onCreate(&node_, &executor_)) {
@@ -51,7 +57,10 @@ void MicrorosManager::begin() {
 void MicrorosManager::update() {
   switch (state_) {
     case WAITING_AGENT:
-      EXECUTE_EVERY_N_MS(500, state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+      EXECUTE_EVERY_N_MS(500,
+                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 1))
+                                      ? AGENT_AVAILABLE
+                                      : WAITING_AGENT;);
       break;
     case AGENT_AVAILABLE:
       state_ = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
@@ -60,7 +69,10 @@ void MicrorosManager::update() {
       }
       break;
     case AGENT_CONNECTED:
-      EXECUTE_EVERY_N_MS(200, state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+      EXECUTE_EVERY_N_MS(200,
+                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 1))
+                                      ? AGENT_CONNECTED
+                                      : AGENT_DISCONNECTED;);
       if (state_ == AGENT_CONNECTED) {
         rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(100));
       }
@@ -81,9 +93,7 @@ void MicrorosManager::pause() {
   state_ = WAITING_AGENT;
 }
 
-void MicrorosManager::reset() {
-  pause();
-}
+void MicrorosManager::reset() { pause(); }
 
 const char* MicrorosManager::getInfo() {
   static const char info[] = "MicrorosManager";
@@ -91,11 +101,13 @@ const char* MicrorosManager::getInfo() {
 }
 
 void MicrorosManager::registerParticipant(IMicroRosParticipant* participant) {
-  if (participants_count_ < (sizeof(participants_) / sizeof(participants_[0]))) {
+  if (participants_count_ <
+      (sizeof(participants_) / sizeof(participants_[0]))) {
     participants_[participants_count_++] = participant;
   }
 }
 
-// Publishing responsibilities are delegated to subsystems; setters are no-ops in header
+// Publishing responsibilities are delegated to subsystems; setters are no-ops
+// in header
 
 }  // namespace Subsystem

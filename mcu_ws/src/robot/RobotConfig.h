@@ -4,7 +4,8 @@
  * @brief Robot constants for calculations
  * @date 12/11/2025
  * @note This file contains default robot configuration constants.
- *       For use with TankDriveLocalization, pass these values via TankDriveLocalizationSetup.
+ *       For use with TankDriveLocalization, pass these values via
+ * TankDriveLocalizationSetup.
  */
 
 #ifndef ROBOTCONFIG_H

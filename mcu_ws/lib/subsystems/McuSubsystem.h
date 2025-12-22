@@ -41,7 +41,7 @@ class MCUSubsystemCallbacks {
   MCUSubsystemCallbacks() = default;
   /*
   Ran in series once.
-  True: successful init. 
+  True: successful init.
   False unsuccessful init.
   */
   bool (*mcu_init_)() = nullptr;
@@ -66,7 +66,8 @@ class MCUSubsystemCallbacks {
 class MCUSubsystem : public IMicroRosParticipant,
                      public Classes::BaseSubsystem {
  public:
-  explicit MCUSubsystem(const MCUSubsystemSetup& setup, const MCUSubsystemCallbacks& cb)
+  explicit MCUSubsystem(const MCUSubsystemSetup& setup,
+                        const MCUSubsystemCallbacks& cb)
       : Classes::BaseSubsystem(setup), setup_(setup), cb_(cb), data_() {}
 
   bool init() override;

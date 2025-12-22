@@ -22,7 +22,7 @@ class EncoderDriverSetup : public Classes::BaseSetup {
   EncoderDriverSetup() = delete;
 
   EncoderDriverSetup(const char* _id, int p1, int p2)
-      : Classes::BaseSetup(_id), pin1(p1), pin2(p2) {};
+      : Classes::BaseSetup(_id), pin1(p1), pin2(p2){};
 
  private:
 };
@@ -40,7 +40,7 @@ class EncoderDriver : public Classes::BaseDriver {
       : BaseDriver(setup),
         setup_(setup),
         encoder_(setup.pin1, setup.pin2),
-        position_(0) {};
+        position_(0){};
 
   bool init() override;
   void update() override;

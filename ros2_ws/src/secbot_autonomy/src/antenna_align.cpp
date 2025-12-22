@@ -14,9 +14,9 @@ namespace {
 constexpr float kPi = 3.14159265358979323846f;
 
 // Alignment control gains (for fine heading adjustment)
-constexpr float kAlignKp = 1.5f;           // P gain for angular velocity
-constexpr float kMaxAngularVel = 0.5f;     // rad/s
-constexpr float kMinAngularVel = 0.08f;    // rad/s, minimum to overcome friction
+constexpr float kAlignKp = 1.5f;         // P gain for angular velocity
+constexpr float kMaxAngularVel = 0.5f;   // rad/s
+constexpr float kMinAngularVel = 0.08f;  // rad/s, minimum to overcome friction
 }  // namespace
 
 // Static helpers
@@ -33,11 +33,16 @@ float AntennaAlignTask::clamp(float val, float lo, float hi) {
 
 AntennaFace AntennaAlignTask::faceForId(uint8_t antenna_id) {
   switch (antenna_id) {
-    case 1: return AntennaFace::kSouth;
-    case 2: return AntennaFace::kSouth;
-    case 3: return AntennaFace::kWest;
-    case 4: return AntennaFace::kNorth;
-    default: return AntennaFace::kUnknown;
+    case 1:
+      return AntennaFace::kSouth;
+    case 2:
+      return AntennaFace::kSouth;
+    case 3:
+      return AntennaFace::kWest;
+    case 4:
+      return AntennaFace::kNorth;
+    default:
+      return AntennaFace::kUnknown;
   }
 }
 
@@ -45,21 +50,27 @@ float AntennaAlignTask::headingForFace(AntennaFace face) {
   // Robot heading to face the antenna (opposite of face direction)
   // Face points outward from antenna, robot should face inward
   switch (face) {
-    case AntennaFace::kNorth: return -0.5f * kPi;  // Robot faces south
-    case AntennaFace::kSouth: return 0.5f * kPi;   // Robot faces north
-    case AntennaFace::kEast:  return kPi;          // Robot faces west
-    case AntennaFace::kWest:  return 0.0f;         // Robot faces east
-    default: return 0.0f;
+    case AntennaFace::kNorth:
+      return -0.5f * kPi;  // Robot faces south
+    case AntennaFace::kSouth:
+      return 0.5f * kPi;  // Robot faces north
+    case AntennaFace::kEast:
+      return kPi;  // Robot faces west
+    case AntennaFace::kWest:
+      return 0.0f;  // Robot faces east
+    default:
+      return 0.0f;
   }
 }
 
 // Constructor
 
-AntennaAlignTask::AntennaAlignTask(rclcpp::Node::SharedPtr node, const Config& cfg)
+AntennaAlignTask::AntennaAlignTask(rclcpp::Node::SharedPtr node,
+                                   const Config& cfg)
     : TaskBase(node), cfg_(cfg) {
   // Create action client for approach
-  approach_client_ = rclcpp_action::create_client<ApproachTarget>(
-      node_, cfg_.approach_action);
+  approach_client_ =
+      rclcpp_action::create_client<ApproachTarget>(node_, cfg_.approach_action);
 
   // Publisher for fine alignment commands
   cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(
@@ -91,7 +102,7 @@ void AntennaAlignTask::start() {
   // Check action server availability
   if (!approach_client_->wait_for_action_server(std::chrono::seconds(1))) {
     RCLCPP_ERROR(node_->get_logger(),
-        "AntennaAlign: ApproachTarget action server not available");
+                 "AntennaAlign: ApproachTarget action server not available");
     status_ = TaskStatus::kFailed;
     return;
   }
@@ -107,7 +118,7 @@ void AntennaAlignTask::start() {
   approach_success_ = false;
 
   RCLCPP_INFO(node_->get_logger(),
-      "AntennaAlign: Starting approach to antenna %d", antenna_id_);
+              "AntennaAlign: Starting approach to antenna %d", antenna_id_);
 
   startApproach();
 }
@@ -133,7 +144,8 @@ void AntennaAlignTask::step() {
       // Waiting for approach action to complete
       if (approach_done_) {
         if (approach_success_) {
-          RCLCPP_INFO(node_->get_logger(), "AntennaAlign: Approach complete, aligning");
+          RCLCPP_INFO(node_->get_logger(),
+                      "AntennaAlign: Approach complete, aligning");
           state_ = State::kAligning;
           progress_ = 0.7f;
         } else {
@@ -212,10 +224,11 @@ void AntennaAlignTask::startApproach() {
   auto goal_msg = ApproachTarget::Goal();
   goal_msg.antenna_id = antenna_id_;
 
-  auto send_goal_options = rclcpp_action::Client<ApproachTarget>::SendGoalOptions();
+  auto send_goal_options =
+      rclcpp_action::Client<ApproachTarget>::SendGoalOptions();
 
-  send_goal_options.result_callback =
-      std::bind(&AntennaAlignTask::onApproachResult, this, std::placeholders::_1);
+  send_goal_options.result_callback = std::bind(
+      &AntennaAlignTask::onApproachResult, this, std::placeholders::_1);
 
   send_goal_options.feedback_callback =
       std::bind(&AntennaAlignTask::onApproachFeedback, this,
@@ -235,16 +248,15 @@ void AntennaAlignTask::publishTwist(float linear, float angular) {
   cmd_vel_pub_->publish(msg);
 }
 
-void AntennaAlignTask::stopMotion() {
-  publishTwist(0.0f, 0.0f);
-}
+void AntennaAlignTask::stopMotion() { publishTwist(0.0f, 0.0f); }
 
 // Callbacks
 
-void AntennaAlignTask::onApproachResult(const GoalHandle::WrappedResult& result) {
+void AntennaAlignTask::onApproachResult(
+    const GoalHandle::WrappedResult& result) {
   approach_done_ = true;
-  approach_success_ = (result.code == rclcpp_action::ResultCode::SUCCEEDED)
-                      && result.result->success;
+  approach_success_ = (result.code == rclcpp_action::ResultCode::SUCCEEDED) &&
+                      result.result->success;
 }
 
 void AntennaAlignTask::onApproachFeedback(

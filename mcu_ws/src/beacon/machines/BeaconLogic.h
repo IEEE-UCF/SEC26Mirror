@@ -9,11 +9,11 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <microros_manager_robot.h>
 
+#include "UWBDriver.h"
 #include "beacon/machines/UWBSubsystem.h"
 #include "robot/machines/HeartbeatSubsystem.h"
-#include <microros_manager_robot.h>
-#include "UWBDriver.h"
 
 using namespace Subsystem;
 
@@ -41,9 +41,7 @@ static HeartbeatSubsystem g_hb(g_hb_setup);
 static Drivers::UWBDriverSetup g_uwb_driver_setup(
     "uwb_driver",
     Drivers::UWBMode::ANCHOR,  // Beacon is an ANCHOR (responder)
-    BEACON_ID,
-    UWB_CS_PIN,
-    UWB_RST_PIN);
+    BEACON_ID, UWB_CS_PIN, UWB_RST_PIN);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver);
@@ -68,7 +66,9 @@ void setup() {
 
   if (!ok) {
     Serial.println("ERROR: Failed to initialize subsystems!");
-    while (1) { delay(1000); }
+    while (1) {
+      delay(1000);
+    }
   }
 
   // Register micro-ROS participants and begin

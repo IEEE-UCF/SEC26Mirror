@@ -8,14 +8,15 @@
 #ifndef ROBOTDRIVEBASE_H
 #define ROBOTDRIVEBASE_H
 
+#include <Pose2D.h>
+#include <TankDriveLocalization.h>
+#include <Vector2D.h>
+
 #include <memory>
 #include <vector>
 
 #include "EncoderDriver.h"
 #include "MotorDriver.h"
-#include <Vector2D.h>
-#include <Pose2D.h>
-#include <TankDriveLocalization.h>
 #include "pid_controller.h"
 
 enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE };

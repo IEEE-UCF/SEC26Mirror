@@ -23,7 +23,7 @@ class ButtonSetup : public Classes::BaseSetup {
 
   ButtonSetup(const char* _id, const std::array<uint8_t, 3>& pins,
               const uint8_t ledPin, const uint8_t swPin)
-      : BaseSetup(_id), _rygPins(pins), _ledPin(ledPin), _swPin(swPin) {};
+      : BaseSetup(_id), _rygPins(pins), _ledPin(ledPin), _swPin(swPin){};
 
   const std::array<uint8_t, 3> _rygPins;  // r, y, g
   const uint8_t _ledPin, _swPin;

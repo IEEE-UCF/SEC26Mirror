@@ -4,7 +4,8 @@
  * @file traj_controller.cpp
  * @author Rafeed Khan
  * @brief Trajectory following logic (Pure-Pursuit style) for MCU drive bases.
- * No dynamic allocation, deterministic O(1) update time (amortized along a path).
+ * No dynamic allocation, deterministic O(1) update time (amortized along a
+ * path).
  */
 
 #include "traj_controller.h"
@@ -55,7 +56,8 @@ void TrajectoryController::reset() {
   lookahead_y_ = 0.0f;
 }
 
-TrajectoryController::Command TrajectoryController::update(const Pose2D& pose, float dt) {
+TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
+                                                           float dt) {
   Command cmd{};
 
   // if no path, do nothing
@@ -114,7 +116,7 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose, f
     const float s = std::sin(pose.theta);
     const float rx = lx - pose.x;
     const float ry = ly - pose.y;
-    const float x_local =  c * rx + s * ry;
+    const float x_local = c * rx + s * ry;
     const float y_local = -s * rx + c * ry;
 
     const float L = hypot2(x_local, y_local);
@@ -138,7 +140,8 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose, f
     float v_cmd = v_des;
 
     // optionally reduce v so we keep the same curvature even when w saturates
-    if (cfg_.preserve_curvature_on_w_saturation && (std::fabs(w_des) > cfg_.max_w)) {
+    if (cfg_.preserve_curvature_on_w_saturation &&
+        (std::fabs(w_des) > cfg_.max_w)) {
       if (std::fabs(curvature) > 1e-6f) {
         v_cmd = clamp(w_cmd / curvature, 0.0f, cfg_.max_v);
       }
@@ -158,7 +161,8 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose, f
   // advance progress along path if we're close enough to the next waypoint
   advanceIfNeeded(pose);
 
-  // if we reached the end segment index and are basically at the final point, finish
+  // if we reached the end segment index and are basically at the final point,
+  // finish
   const Waypoint& last = pts_[count_ - 1];
   const float dx_goal = last.x - pose.x;
   const float dy_goal = last.y - pose.y;
@@ -199,7 +203,7 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose, f
   const float s = std::sin(pose.theta);
   const float rx = lx - pose.x;
   const float ry = ly - pose.y;
-  const float x_local =  c * rx + s * ry;
+  const float x_local = c * rx + s * ry;
   const float y_local = -s * rx + c * ry;
 
   const float L = hypot2(x_local, y_local);
@@ -227,8 +231,10 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose, f
   float w_cmd = clamp(w_des, -cfg_.max_w, cfg_.max_w);
   float v_cmd = v_des;
 
-  // keep the turn radius correct when w saturates (simple but very effective!!!!)
-  if (cfg_.preserve_curvature_on_w_saturation && (std::fabs(w_des) > cfg_.max_w)) {
+  // keep the turn radius correct when w saturates (simple but very
+  // effective!!!!)
+  if (cfg_.preserve_curvature_on_w_saturation &&
+      (std::fabs(w_des) > cfg_.max_w)) {
     if (std::fabs(curvature) > 1e-6f) {
       v_cmd = clamp(w_cmd / curvature, 0.0f, cfg_.max_v);
     }
@@ -259,7 +265,8 @@ void TrajectoryController::advanceIfNeeded(const Pose2D& pose) {
   }
 }
 
-void TrajectoryController::computeLookaheadPoint(const Pose2D& pose, float* lx, float* ly) {
+void TrajectoryController::computeLookaheadPoint(const Pose2D& pose, float* lx,
+                                                 float* ly) {
   // default to last point if something goes wrong
   *lx = pts_[count_ - 1].x;
   *ly = pts_[count_ - 1].y;
@@ -294,12 +301,14 @@ void TrajectoryController::computeLookaheadPoint(const Pose2D& pose, float* lx, 
     px = ax + t * sx;
     py = ay + t * sy;
 
-    // remaining distance left on this segment from projection point to segment end
+    // remaining distance left on this segment from projection point to segment
+    // end
     const float ex = bx - px;
     const float ey = by - py;
     float seg_rem = hypot2(ex, ey);
 
-    // if the lookahead fits within the remainder of this segment, interpolate right here
+    // if the lookahead fits within the remainder of this segment, interpolate
+    // right here
     if (remaining <= seg_rem && seg_rem > 1e-9f) {
       const float u = remaining / seg_rem;
       *lx = px + u * ex;
@@ -342,11 +351,13 @@ void TrajectoryController::computeLookaheadPoint(const Pose2D& pose, float* lx, 
   *ly = pts_[count_ - 1].y;
 }
 
-void TrajectoryController::chassisToWheelSpeeds(float v, float w, float track_width,
-                                               float* left, float* right) {
+void TrajectoryController::chassisToWheelSpeeds(float v, float w,
+                                                float track_width, float* left,
+                                                float* right) {
   if (!left || !right) return;
 
-  // track_width is meters between left/right wheel contact patches (or effective width)
+  // track_width is meters between left/right wheel contact patches (or
+  // effective width)
   const float half = 0.5f * track_width;
   *left = v - w * half;
   *right = v + w * half;

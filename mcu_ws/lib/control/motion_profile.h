@@ -13,8 +13,10 @@
  * No dynamic allocation, deterministic O(1) update time
  *
  * This provides two 1D point-to-point motion profiles:
- *  - TrapezoidalMotionProfile: accel-limited trapezoid (velocity vs time is trapezoid-ish)
- *  - SCurveMotionProfile: jerk-limited (S-curve-ish, smoother accel transitions)
+ *  - TrapezoidalMotionProfile: accel-limited trapezoid (velocity vs time is
+ * trapezoid-ish)
+ *  - SCurveMotionProfile: jerk-limited (S-curve-ish, smoother accel
+ * transitions)
  *
  * These generate setpoints (pos/vel/acc) you can feed into PID/FF control
  */

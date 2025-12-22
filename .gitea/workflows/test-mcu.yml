@@ -8,9 +8,10 @@ on:
     types:
       - opened
       - synchronize
-  push:
-    branches:
-      - master
+    paths:
+      - 'mcu_ws/**'
+      - '.gitea/workflows/platformio-robot.yml'
+      - 'ros2_ws/src/mcu_msgs/**'
   workflow_dispatch: # Allow to trigger from UI
 
 jobs:

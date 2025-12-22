@@ -11,7 +11,8 @@
  * @file traj_controller.h
  * @author Rafeed Khan
  * @brief Lightweight trajectory (waypoint) follower for MCU drive bases.
- * No dynamic allocation, deterministic O(1) per update (amortized constant along a path).
+ * No dynamic allocation, deterministic O(1) per update (amortized constant
+ * along a path).
  *
  * This is a simple Pure-Pursuit-style “carrot” tracker:
  *  - You give it an array of waypoints (x,y) (optionally final heading /
@@ -20,7 +21,8 @@
  * point.
  *
  * Intended use:
- *  - The higher-level code converts (v,w) to wheel targets, then uses wheel PID.
+ *  - The higher-level code converts (v,w) to wheel targets, then uses wheel
+ * PID.
  */
 
 class TrajectoryController {

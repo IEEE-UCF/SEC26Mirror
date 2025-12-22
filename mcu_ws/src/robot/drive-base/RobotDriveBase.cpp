@@ -103,9 +103,10 @@ Vector2D RobotDriveBase::getCurrentVelocity(float dt) {
 
   // encoder ticks for velocity
   if (dleftTicks != 0 && dRightTicks != 0) {
-    float dleftDist = static_cast<float>(dleftTicks) * setup_.localizationSetup.inches_per_tick;
-    float drightDist =
-        static_cast<float>(dRightTicks) * setup_.localizationSetup.inches_per_tick;
+    float dleftDist = static_cast<float>(dleftTicks) *
+                      setup_.localizationSetup.inches_per_tick;
+    float drightDist = static_cast<float>(dRightTicks) *
+                       setup_.localizationSetup.inches_per_tick;
 
     float leftVel = dleftDist / dt;
     float rightVel = drightDist / dt;
@@ -235,8 +236,7 @@ void RobotDriveBase::setPointControl(float dt) {
   v_cmd *= std::max(0.0f, std::cos(angleError));
 
   // clamp to set limits
-  v_cmd =
-      std::clamp(v_cmd, -setup_.maxVelocity, setup_.maxVelocity);
+  v_cmd = std::clamp(v_cmd, -setup_.maxVelocity, setup_.maxVelocity);
   omega_cmd = std::clamp(omega_cmd, -setup_.maxAngularVelocity,
                          setup_.maxAngularVelocity);
 

@@ -100,7 +100,8 @@ void DriveSubsystem::drive_callback(const void* msvin, void* context) {
 
   switch (msg->drive_mode) {
     case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
-      Vector2D vel(msg->goal_velocity.linear.x, 0, msg->goal_velocity.angular.z);
+      Vector2D vel(msg->goal_velocity.linear.x, 0,
+                   msg->goal_velocity.angular.z);
       instance->driveBase_.driveVelocity(vel);
       break;
     }

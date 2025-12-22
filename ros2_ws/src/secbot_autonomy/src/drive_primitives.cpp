@@ -17,7 +17,7 @@ static inline int16_t clampi16(int32_t x, int16_t lo, int16_t hi) {
 
 static inline float wrapAngle(float a) {
   while (a <= -kPi) a += 2.0f * kPi;
-  while (a >   kPi) a -= 2.0f * kPi;
+  while (a > kPi) a -= 2.0f * kPi;
   return a;
 }
 
@@ -38,9 +38,7 @@ int16_t PwmShape::applyDeadband(int16_t v) const {
   return v;
 }
 
-int16_t PwmShape::shape(int32_t v) const {
-  return applyDeadband(clamp(v));
-}
+int16_t PwmShape::shape(int32_t v) const { return applyDeadband(clamp(v)); }
 
 // -------------------- AngleUnwrap --------------------
 
@@ -74,9 +72,7 @@ void DriveStraight::start(const Pose2D& pose) {
   status_ = PrimitiveStatus::kRunning;
 }
 
-void DriveStraight::cancel() {
-  status_ = PrimitiveStatus::kFailed;
-}
+void DriveStraight::cancel() { status_ = PrimitiveStatus::kFailed; }
 
 TankPwmCmd DriveStraight::update(const Pose2D& pose, float dt) {
   TankPwmCmd out{};
@@ -89,7 +85,8 @@ TankPwmCmd DriveStraight::update(const Pose2D& pose, float dt) {
   }
 
   // if already done, keep returning stop
-  if (status_ == PrimitiveStatus::kSucceeded || status_ == PrimitiveStatus::kFailed) {
+  if (status_ == PrimitiveStatus::kSucceeded ||
+      status_ == PrimitiveStatus::kFailed) {
     out.finished = true;
     out.success = (status_ == PrimitiveStatus::kSucceeded);
     out.left_pwm = 0;
@@ -141,9 +138,9 @@ TankPwmCmd DriveStraight::update(const Pose2D& pose, float dt) {
     // heading settle (no forward motion)
     int32_t corr = static_cast<int32_t>(cfg_.k_heading_pwm * h_err);
     corr = clampi16(corr, static_cast<int16_t>(-cfg_.max_correction_pwm),
-                    static_cast<int16_t>( cfg_.max_correction_pwm));
+                    static_cast<int16_t>(cfg_.max_correction_pwm));
 
-    out.left_pwm  = cfg_.pwm.shape(-corr);
+    out.left_pwm = cfg_.pwm.shape(-corr);
     out.right_pwm = cfg_.pwm.shape(+corr);
     out.finished = false;
     out.success = false;
@@ -167,10 +164,10 @@ TankPwmCmd DriveStraight::update(const Pose2D& pose, float dt) {
   const float h_err = wrapAngle(start_.theta - pose.theta);
   int32_t corr = static_cast<int32_t>(cfg_.k_heading_pwm * h_err);
   corr = clampi16(corr, static_cast<int16_t>(-cfg_.max_correction_pwm),
-                  static_cast<int16_t>( cfg_.max_correction_pwm));
+                  static_cast<int16_t>(cfg_.max_correction_pwm));
 
   // left = base - corr, right = base + corr
-  out.left_pwm  = cfg_.pwm.shape(static_cast<int32_t>(base_pwm) - corr);
+  out.left_pwm = cfg_.pwm.shape(static_cast<int32_t>(base_pwm) - corr);
   out.right_pwm = cfg_.pwm.shape(static_cast<int32_t>(base_pwm) + corr);
 
   out.finished = false;
@@ -193,9 +190,7 @@ void TurnInPlace::start(const Pose2D& pose) {
   status_ = PrimitiveStatus::kRunning;
 }
 
-void TurnInPlace::cancel() {
-  status_ = PrimitiveStatus::kFailed;
-}
+void TurnInPlace::cancel() { status_ = PrimitiveStatus::kFailed; }
 
 TankPwmCmd TurnInPlace::update(const Pose2D& pose, float dt) {
   TankPwmCmd out{};
@@ -206,7 +201,8 @@ TankPwmCmd TurnInPlace::update(const Pose2D& pose, float dt) {
     return out;
   }
 
-  if (status_ == PrimitiveStatus::kSucceeded || status_ == PrimitiveStatus::kFailed) {
+  if (status_ == PrimitiveStatus::kSucceeded ||
+      status_ == PrimitiveStatus::kFailed) {
     out.finished = true;
     out.success = (status_ == PrimitiveStatus::kSucceeded);
     return out;
@@ -253,7 +249,7 @@ TankPwmCmd TurnInPlace::update(const Pose2D& pose, float dt) {
   }
 
   // Tank turn-in-place: left=-turn, right=+turn
-  out.left_pwm  = cfg_.pwm.shape(-turn_pwm);
+  out.left_pwm = cfg_.pwm.shape(-turn_pwm);
   out.right_pwm = cfg_.pwm.shape(+turn_pwm);
 
   out.finished = false;
@@ -276,9 +272,7 @@ void DriveArc::start(const Pose2D& pose) {
   status_ = PrimitiveStatus::kRunning;
 }
 
-void DriveArc::cancel() {
-  status_ = PrimitiveStatus::kFailed;
-}
+void DriveArc::cancel() { status_ = PrimitiveStatus::kFailed; }
 
 TankPwmCmd DriveArc::update(const Pose2D& pose, float dt) {
   TankPwmCmd out{};
@@ -289,7 +283,8 @@ TankPwmCmd DriveArc::update(const Pose2D& pose, float dt) {
     return out;
   }
 
-  if (status_ == PrimitiveStatus::kSucceeded || status_ == PrimitiveStatus::kFailed) {
+  if (status_ == PrimitiveStatus::kSucceeded ||
+      status_ == PrimitiveStatus::kFailed) {
     out.finished = true;
     out.success = (status_ == PrimitiveStatus::kSucceeded);
     return out;
@@ -330,7 +325,8 @@ TankPwmCmd DriveArc::update(const Pose2D& pose, float dt) {
   // We'll apply the SAME ratio to PWM (good enough for a primitive).
   const float R = (cfg_.radius_m > 1e-3f) ? cfg_.radius_m : 1e-3f;
   const float half_track = 0.5f * cfg_.track_width_m;
-  const float k = clampf(half_track / R, 0.0f, 0.95f); // avoid negative/insane inner wheel
+  const float k =
+      clampf(half_track / R, 0.0f, 0.95f);  // avoid negative/insane inner wheel
 
   float scale_l = 1.0f - k;
   float scale_r = 1.0f + k;
@@ -352,7 +348,7 @@ TankPwmCmd DriveArc::update(const Pose2D& pose, float dt) {
   const int32_t l = static_cast<int32_t>(base * scale_l);
   const int32_t r = static_cast<int32_t>(base * scale_r);
 
-  out.left_pwm  = cfg_.pwm.shape(l);
+  out.left_pwm = cfg_.pwm.shape(l);
   out.right_pwm = cfg_.pwm.shape(r);
 
   out.finished = false;

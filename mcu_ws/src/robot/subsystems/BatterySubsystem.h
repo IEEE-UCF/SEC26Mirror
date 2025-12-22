@@ -9,23 +9,25 @@
 #define BATTERYSUBSYSTEM_H
 
 #include <BaseSubsystem.h>
+#include <I2CPowerDriver.h>
 #include <mcu_msgs/msg/battery_health.h>
 #include <microros_manager_robot.h>
+
 #include "TimedSubsystem.h"
-#include <I2CPowerDriver.h>
 
 namespace Subsystem {
 class BatterySubsystemSetup : public Classes::BaseSetup {
  public:
-  BatterySubsystemSetup(const char* _id, Drivers::I2CPowerDriver* driver) : Classes::BaseSetup(_id), driver_(driver) {}
+  BatterySubsystemSetup(const char* _id, Drivers::I2CPowerDriver* driver)
+      : Classes::BaseSetup(_id), driver_(driver) {}
   Drivers::I2CPowerDriver* driver_ = nullptr;
 };
 
 class BatterySubsystem : public IMicroRosParticipant,
                          public Subsystem::TimedSubsystem {
  public:
-      explicit BatterySubsystem(const BatterySubsystemSetup& setup)
-        : Subsystem::TimedSubsystem(setup), setup_(setup) {}
+  explicit BatterySubsystem(const BatterySubsystemSetup& setup)
+      : Subsystem::TimedSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}

@@ -2,7 +2,8 @@
 
 using namespace Robot;
 
-PCA9685Manager::PCA9685Manager(const PCA9685ManagerSetup& setup) : Classes::BaseDriver(setup) {}
+PCA9685Manager::PCA9685Manager(const PCA9685ManagerSetup& setup)
+    : Classes::BaseDriver(setup) {}
 
 PCA9685Manager::~PCA9685Manager() {
   for (auto d : drivers_) delete d;

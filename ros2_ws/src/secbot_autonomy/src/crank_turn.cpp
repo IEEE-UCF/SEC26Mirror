@@ -57,9 +57,7 @@ void CrankTurnTask::commandMotor(int16_t speed) {
   arm_pub_->publish(msg);
 }
 
-void CrankTurnTask::stopMotor() {
-  commandMotor(0);
-}
+void CrankTurnTask::stopMotor() { commandMotor(0); }
 
 // Constructor
 
@@ -80,7 +78,8 @@ CrankTurnTask::CrankTurnTask(rclcpp::Node::SharedPtr node,
 
 // Callbacks
 
-void CrankTurnTask::onEncoderAngle(const std_msgs::msg::Float32::SharedPtr msg) {
+void CrankTurnTask::onEncoderAngle(
+    const std_msgs::msg::Float32::SharedPtr msg) {
   current_encoder_deg_ = msg->data;
   encoder_valid_ = true;
 }
@@ -96,7 +95,8 @@ void CrankTurnTask::start() {
   if (cfg_.open_loop_spin_s > 0.0f) {
     spin_goal_s_ = cfg_.open_loop_spin_s;
   } else {
-    const float rate = (cfg_.est_deg_per_s > 1e-3f) ? cfg_.est_deg_per_s : 1e-3f;
+    const float rate =
+        (cfg_.est_deg_per_s > 1e-3f) ? cfg_.est_deg_per_s : 1e-3f;
     spin_goal_s_ = cfg_.target_deg / rate;
   }
 
@@ -147,7 +147,8 @@ void CrankTurnTask::step() {
     status_ = TaskStatus::kSucceeded;
     progress_ = 1.0f;
     enterState(State::kDone);
-    RCLCPP_INFO(node_->get_logger(), "CrankTurn: Completed via external signal");
+    RCLCPP_INFO(node_->get_logger(),
+                "CrankTurn: Completed via external signal");
     return;
   }
 

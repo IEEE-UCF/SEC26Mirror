@@ -20,8 +20,8 @@ KeypadEnterTask::KeypadEnterTask(rclcpp::Node::SharedPtr node,
   arm_pub_ = node_->create_publisher<mcu_msgs::msg::ArmCommand>(
       cfg_.arm_command_topic, 10);
 
-  key_target_pub_ = node_->create_publisher<std_msgs::msg::Char>(
-      cfg_.key_target_topic, 10);
+  key_target_pub_ =
+      node_->create_publisher<std_msgs::msg::Char>(cfg_.key_target_topic, 10);
 
   at_key_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
       cfg_.at_key_topic, 10,
@@ -110,7 +110,8 @@ void KeypadEnterTask::step() {
         commandKeyTarget(cur_key_);
         at_key_ = false;  // Reset for new target
         enterState(State::kMoveToKey);
-        RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Moving to key '%c'", cur_key_);
+        RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Moving to key '%c'",
+                     cur_key_);
       }
       break;
 
@@ -123,7 +124,8 @@ void KeypadEnterTask::step() {
       if ((at_key_valid_ && at_key_) || t_state >= cfg_.move_timeout_s) {
         commandPusher(cfg_.press_position);
         enterState(State::kPressHold);
-        RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Pressing key '%c'", cur_key_);
+        RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Pressing key '%c'",
+                     cur_key_);
       }
       break;
 
@@ -156,7 +158,8 @@ void KeypadEnterTask::step() {
           commandKeyTarget(cur_key_);
           at_key_ = false;
           enterState(State::kMoveToKey);
-          RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Moving to key '%c'", cur_key_);
+          RCLCPP_DEBUG(node_->get_logger(), "KeypadEnter: Moving to key '%c'",
+                       cur_key_);
         }
       }
       break;

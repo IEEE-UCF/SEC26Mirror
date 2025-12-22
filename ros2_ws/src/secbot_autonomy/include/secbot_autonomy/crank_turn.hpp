@@ -14,13 +14,12 @@
  *   IDLE -> SETTLE -> SPIN -> HOLD -> DONE
  */
 
-#include "secbot_autonomy/task_base.hpp"
-
-#include <mcu_msgs/msg/arm_command.hpp>
-#include <std_msgs/msg/float32.hpp>
-#include <std_msgs/msg/bool.hpp>
-
 #include <cstdint>
+#include <mcu_msgs/msg/arm_command.hpp>
+#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/float32.hpp>
+
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 
@@ -60,8 +59,10 @@ struct CrankTurnConfig {
 
   /// Topic names
   std::string arm_command_topic = "arm_command";
-  std::string crank_encoder_topic = "crank_angle";      ///< Optional encoder feedback
-  std::string task_complete_topic = "task_complete";    ///< Optional completion signal
+  std::string crank_encoder_topic =
+      "crank_angle";  ///< Optional encoder feedback
+  std::string task_complete_topic =
+      "task_complete";  ///< Optional completion signal
 };
 
 /**
@@ -90,13 +91,7 @@ class CrankTurnTask : public TaskBase {
   float targetDegrees() const { return cfg_.target_deg; }
 
  private:
-  enum class State : uint8_t {
-    kIdle = 0,
-    kSettle,
-    kSpin,
-    kHold,
-    kDone
-  };
+  enum class State : uint8_t { kIdle = 0, kSettle, kSpin, kHold, kDone };
 
   /// Degree unwrapping for continuous rotation tracking
   struct DegUnwrap {

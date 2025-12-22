@@ -39,7 +39,7 @@ namespace RawDrivers{
   //@brief base implementation for ir-sender
   class IRNecSender:public Classes::BaseDriver{
     public:
-    ~IRNecSender() override = default;
+    ~IRNecSender() override;
     IRNecSender(const IRNecSetup &setup):Classes::BaseDriver(setup), _setup(setup){}
     //@brief capabilities to send an ir-signal
     void sendMessage(uint16_t address, uint16_t command);
@@ -62,7 +62,7 @@ namespace RawDrivers{
   //@brief base implementation for ir-receiver
   class IRNecReceiver:public Classes::BaseDriver{
     public:
-      ~IRNecReceiver() override =default;
+      ~IRNecReceiver() override;
       IRNecReceiver(const IRNecSetup &setup):Classes::BaseDriver(setup), _setup(setup){}
       //@breif intialize the receving channel and allow a background task queue for receiving
       bool init() override;

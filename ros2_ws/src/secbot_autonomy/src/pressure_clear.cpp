@@ -1,182 +1,66 @@
 /**
  * @file pressure_clear.cpp
  * @author Rafeed Khan
- * @brief Implements clearing the duck at Antenna #3 (pressure plate task).
+ * @brief Implementation of pressure clear task for Antenna #3
  */
 
-#include "pressure_clear.h"
-#include <cmath>
+#include "secbot_autonomy/pressure_clear.hpp"
 
 namespace secbot {
 
-static inline float clamp01_(float x) {
+namespace {
+float clamp01(float x) {
   if (x < 0.0f) return 0.0f;
   if (x > 1.0f) return 1.0f;
   return x;
 }
+}  // namespace
 
-PressureClearTask::PressureClearTask(const PressureClearIO& io, const PressureClearConfig& cfg)
-: io_(io), cfg_(cfg) {
-  // If caller forgot the one required hook, the task can never function
-  if (io_.set_sweeper_norm == nullptr) {
-    state_ = State::kFailed;
-    finished_ = true;
-    success_ = false;
-  }
-}
+PressureClearTask::PressureClearTask(rclcpp::Node::SharedPtr node,
+                                     const PressureClearConfig& cfg)
+    : TaskBase(node), cfg_(cfg) {
+  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+      cfg_.arm_command_topic, 10);
 
-void PressureClearTask::start() {
-  if (io_.set_sweeper_norm == nullptr) return;
-
-  canceled_ = false;
-  finished_ = false;
-  success_  = false;
-
-  total_time_s_ = 0.0f;
-  sweeps_done_  = 0;
-
-  enter_(State::kSettle);
-}
-
-void PressureClearTask::cancel() {
-  canceled_ = true;
-  finished_ = true;
-  success_  = false;
-  enter_(State::kFailed);
-}
-
-float PressureClearTask::progress() const {
-  // Making this a simple “time-based” estimate so dashboards don’t look dead
-  // Not gospel!! The real “done” is when we reach Done/Failed
-  const uint8_t sweeps = (cfg_.sweeps == 0) ? 1 : cfg_.sweeps;
-
-  const float per_sweep =
-      cfg_.push_out_s + cfg_.push_hold_s + cfg_.retract_s;
-
-  const float est_total =
-      cfg_.settle_s +
-      (sweeps * per_sweep) +
-      ((sweeps > 1) ? ((sweeps - 1) * cfg_.between_sweeps_s) : 0.0f);
-
-  if (est_total <= 0.001f) return finished_ ? 1.0f : 0.0f;
-  return clamp01_(total_time_s_ / est_total);
-}
-
-TankPwmCmd PressureClearTask::update(float dt) {
-  TankPwmCmd out{};
-  out.left_pwm  = 0;
-  out.right_pwm = 0;
-  out.finished  = finished_;
-  out.success   = success_;
-
-  // If we already failed in constructor, just keep returning “done”
-  if (finished_) {
-    applyOutputs_(); // keep hardware safe
-    return out;
+  if (cfg_.intake_speed != 0) {
+    intake_pub_ = node_->create_publisher<std_msgs::msg::Int16>(
+        cfg_.intake_topic, 10);
   }
 
-  // If not started, keep outputs safe and do nothing
-  if (state_ == State::kIdle) {
-    applyOutputs_();
-    return out;
-  }
-
-  // Defensive dt handling (Teensy loop hiccups shouldn't explode timing)
-  if (dt < 0.0f) dt = 0.0f;
-  if (dt > 0.10f) dt = 0.10f;
-
-  total_time_s_ += dt;
-  state_time_s_ += dt;
-
-  // Hard safety timeout
-  if (total_time_s_ >= cfg_.overall_timeout_s) {
-    finished_ = true;
-    success_  = false;
-    enter_(State::kFailed);
-    out.finished = finished_;
-    out.success  = success_;
-    applyOutputs_();
-    return out;
-  }
-
-  switch (state_) {
-    case State::kSettle: {
-      // GOAL: make sure the manipulator starts from a known safe pose
-      if (state_time_s_ >= cfg_.settle_s) {
-        enter_(State::kPushOut);
-      }
-    } break;
-
-    case State::kPushOut: {
-      // GOAL: push the duck off the pressure sensor (this is the “clear” action)
-      if (state_time_s_ >= cfg_.push_out_s) {
-        enter_(State::kHold);
-      }
-    } break;
-
-    case State::kHold: {
-      // GOAL: hold a moment so the duck fully clears the pressure plate
-      // Optional thing: if we have a duck_captured sensor, let it “win early”.
-      if (io_.duck_captured && io_.duck_captured()) {
-        // We likely grabbed it. Don’t waste time.
-        if (state_time_s_ >= cfg_.capture_wait_s) {
-          enter_(State::kRetract);
-        }
-      } else {
-        if (state_time_s_ >= cfg_.push_hold_s) {
-          enter_(State::kRetract);
-        }
-      }
-    } break;
-
-    case State::kRetract: {
-      // GOAL: retract so we don't snag the antenna while backing away
-      if (state_time_s_ >= cfg_.retract_s) {
-        sweeps_done_++;
-
-        // Little simple success condition:
-        // - We attempted the configured number of sweeps without timing out/cancel
-        // (The verification for this is visual real life yknowww, antenna turns on + green “complete” LED)
-        if (sweeps_done_ >= cfg_.sweeps) {
-          finished_ = true;
-          success_  = !canceled_;
-          enter_(State::kDone);
-        } else {
-          enter_(State::kBetween);
-        }
-      }
-    } break;
-
-    case State::kBetween: {
-      // GOAL: tiny pause between attempts (reduces “bounce”/re-contact)
-      if (state_time_s_ >= cfg_.between_sweeps_s) {
-        enter_(State::kPushOut);
-      }
-    } break;
-
-    case State::kDone:
-    case State::kFailed:
-    case State::kIdle:
-    default:
-      break;
-  }
-
-  applyOutputs_();
-
-  out.finished = finished_;
-  out.success  = success_;
-  return out;
+  captured_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
+      cfg_.duck_captured_topic, 10,
+      std::bind(&PressureClearTask::onDuckCaptured, this, std::placeholders::_1));
 }
 
-void PressureClearTask::enter_(State s) {
+void PressureClearTask::onDuckCaptured(const std_msgs::msg::Bool::SharedPtr msg) {
+  duck_captured_ = msg->data;
+  sensor_valid_ = true;
+}
+
+void PressureClearTask::enterState(State s) {
   state_ = s;
-  state_time_s_ = 0.0f;
+  state_entry_time_ = node_->now();
 }
 
-void PressureClearTask::applyOutputs_() {
-  // Always keep sweeper controlled (prevents “last command” drift)
-  float sweeper = cfg_.sweeper_safe_norm;
-  int16_t intake = 0;
+void PressureClearTask::commandSweeper(int16_t position) {
+  secbot_msgs::msg::ArmCommand msg;
+  msg.joint_id = cfg_.sweeper_joint_id;
+  msg.position = position;
+  msg.speed = cfg_.actuator_speed;
+  arm_pub_->publish(msg);
+}
+
+void PressureClearTask::commandIntake(int16_t speed) {
+  if (intake_pub_) {
+    std_msgs::msg::Int16 msg;
+    msg.data = speed;
+    intake_pub_->publish(msg);
+  }
+}
+
+void PressureClearTask::applyOutputs() {
+  int16_t sweeper_pos = cfg_.sweeper_safe_pos;
+  int16_t intake_spd = 0;
 
   switch (state_) {
     case State::kIdle:
@@ -184,27 +68,135 @@ void PressureClearTask::applyOutputs_() {
     case State::kBetween:
     case State::kRetract:
     case State::kDone:
-    case State::kFailed:
-      sweeper = cfg_.sweeper_safe_norm;
-      intake  = 0;
+      sweeper_pos = cfg_.sweeper_safe_pos;
+      intake_spd = 0;
       break;
 
     case State::kPushOut:
     case State::kHold:
-      sweeper = cfg_.sweeper_push_norm;
-      intake  = cfg_.intake_pwm; // 0 means “disabled”
+      sweeper_pos = cfg_.sweeper_push_pos;
+      intake_spd = cfg_.intake_speed;
       break;
   }
 
-  // APPLY: sweeper
-  if (io_.set_sweeper_norm) {
-    io_.set_sweeper_norm(clamp01_(sweeper));
+  commandSweeper(sweeper_pos);
+  commandIntake(intake_spd);
+}
+
+void PressureClearTask::start() {
+  status_ = TaskStatus::kRunning;
+  progress_ = 0.0f;
+  sweeps_done_ = 0;
+  duck_captured_ = false;
+  start_time_ = node_->now();
+
+  enterState(State::kSettle);
+
+  RCLCPP_INFO(node_->get_logger(), "PressureClear: Starting (%d sweeps)",
+              cfg_.sweeps);
+}
+
+void PressureClearTask::step() {
+  if (status_ != TaskStatus::kRunning) {
+    return;
   }
 
-  // APPLY: intake (optional once again)
-  if (io_.set_intake_pwm) {
-    io_.set_intake_pwm(intake);
+  float t_total = (node_->now() - start_time_).seconds();
+  float t_state = (node_->now() - state_entry_time_).seconds();
+
+  // Timeout check
+  if (cfg_.timeout_s > 0.0f && t_total >= cfg_.timeout_s) {
+    RCLCPP_WARN(node_->get_logger(), "PressureClear: Timeout");
+    commandSweeper(cfg_.sweeper_safe_pos);
+    commandIntake(0);
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    return;
+  }
+
+  // Progress estimate
+  const uint8_t sweeps = (cfg_.sweeps == 0) ? 1 : cfg_.sweeps;
+  const float per_sweep = cfg_.push_out_s + cfg_.push_hold_s + cfg_.retract_s;
+  const float est_total = cfg_.settle_s + (sweeps * per_sweep) +
+                          ((sweeps > 1) ? ((sweeps - 1) * cfg_.between_sweeps_s) : 0.0f);
+  if (est_total > 0.001f) {
+    progress_ = clamp01(t_total / est_total);
+  }
+
+  // State machine
+  switch (state_) {
+    case State::kSettle:
+      if (t_state >= cfg_.settle_s) {
+        enterState(State::kPushOut);
+      }
+      break;
+
+    case State::kPushOut:
+      if (t_state >= cfg_.push_out_s) {
+        enterState(State::kHold);
+      }
+      break;
+
+    case State::kHold:
+      // Check for duck captured sensor
+      if (sensor_valid_ && duck_captured_) {
+        if (t_state >= cfg_.capture_wait_s) {
+          enterState(State::kRetract);
+        }
+      } else {
+        if (t_state >= cfg_.push_hold_s) {
+          enterState(State::kRetract);
+        }
+      }
+      break;
+
+    case State::kRetract:
+      if (t_state >= cfg_.retract_s) {
+        sweeps_done_++;
+
+        if (sweeps_done_ >= cfg_.sweeps) {
+          status_ = TaskStatus::kSucceeded;
+          progress_ = 1.0f;
+          state_ = State::kDone;
+          RCLCPP_INFO(node_->get_logger(), "PressureClear: Complete!");
+        } else {
+          enterState(State::kBetween);
+        }
+      }
+      break;
+
+    case State::kBetween:
+      if (t_state >= cfg_.between_sweeps_s) {
+        enterState(State::kPushOut);
+      }
+      break;
+
+    case State::kDone:
+    case State::kIdle:
+    default:
+      break;
+  }
+
+  applyOutputs();
+}
+
+void PressureClearTask::cancel() {
+  if (status_ == TaskStatus::kRunning) {
+    commandSweeper(cfg_.sweeper_safe_pos);
+    commandIntake(0);
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    RCLCPP_INFO(node_->get_logger(), "PressureClear: Cancelled");
   }
 }
 
-} // namespace secbot
+void PressureClearTask::reset() {
+  TaskBase::reset();
+  commandSweeper(cfg_.sweeper_safe_pos);
+  commandIntake(0);
+  state_ = State::kIdle;
+  sweeps_done_ = 0;
+  duck_captured_ = false;
+}
+
+}  // namespace secbot

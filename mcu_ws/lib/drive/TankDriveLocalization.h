@@ -1,26 +1,29 @@
 /**
- * @file Localization.h
+ * @file TankDriveLocalization.h
  * @author Trevor Cannon
- * @brief Track robot's position using gyro and encoder readings
+ * @brief Track robot's position using gyro and encoder readings for tank drive
  * @date 12/14/2025
  * @refactored 12/21/2025 - Aldem Pido - Added setup object pattern
+ * @refactored 12/22/2025 - Renamed to TankDriveLocalization
  */
 
-#ifndef LOCALIZATION_H
-#define LOCALIZATION_H
+#ifndef TANKDRIVELOCALIZATION_H
+#define TANKDRIVELOCALIZATION_H
 
+#define _USE_MATH_DEFINES
 #include <Arduino.h>
 #include <Pose2D.h>
+#include <cmath>
 
 namespace Drive {
 
 /**
- * @brief Configuration setup for Localization
+ * @brief Configuration setup for TankDriveLocalization
  * Contains robot-specific constants needed for odometry calculations
  */
-class LocalizationSetup {
+class TankDriveLocalizationSetup {
  public:
-  LocalizationSetup(const char* _id, float _track_width, float _wheel_diameter,
+  TankDriveLocalizationSetup(const char* _id, float _track_width, float _wheel_diameter,
                     int _raw_ticks_per_rev, int _gear_ratio,
                     float _start_x = 0.0f, float _start_y = 0.0f,
                     float _start_theta = 0.0f)
@@ -34,7 +37,7 @@ class LocalizationSetup {
         start_theta(_start_theta) {
     // Calculate derived constants
     wheel_radius = wheel_diameter * 0.5f;
-    wheel_circumference = PI * wheel_diameter;
+    wheel_circumference = M_PI * wheel_diameter;
     ticks_per_revolution = raw_ticks_per_rev * gear_ratio;
     inches_per_tick = wheel_circumference / ticks_per_revolution;
   }
@@ -60,12 +63,12 @@ class LocalizationSetup {
 };
 
 /**
- * @brief Localization class for tracking robot pose via odometry
+ * @brief TankDriveLocalization class for tracking robot pose via odometry
  */
-class Localization {
+class TankDriveLocalization {
  public:
-  ~Localization() = default;
-  explicit Localization(const LocalizationSetup& setup)
+  ~TankDriveLocalization() = default;
+  explicit TankDriveLocalization(const TankDriveLocalizationSetup& setup)
       : setup_(setup),
         currentPose(setup.start_x, setup.start_y, setup.start_theta) {}
 
@@ -75,7 +78,7 @@ class Localization {
   void reset();
 
  private:
-  const LocalizationSetup& setup_;
+  const TankDriveLocalizationSetup& setup_;
   Pose2D currentPose;
   long prevLeftTicks = 0;
   long prevRightTicks = 0;

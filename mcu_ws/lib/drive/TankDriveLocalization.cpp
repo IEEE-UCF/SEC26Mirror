@@ -1,15 +1,16 @@
 /**
- * @file Localization.cpp
+ * @file TankDriveLocalization.cpp
  * @author Trevor Cannon
  * @date 12/14/2025
  * @refactored 12/21/2025 - Aldem Pido - Added setup object pattern
+ * @refactored 12/22/2025 - Renamed to TankDriveLocalization
  */
 
-#include "Localization.h"
+#include "TankDriveLocalization.h"
 
 namespace Drive {
 
-void Localization::update(long leftTicks, long rightTicks, float yaw) {
+void TankDriveLocalization::update(long leftTicks, long rightTicks, float yaw) {
   const long deltaLeftTicks = leftTicks - prevLeftTicks;
   const long deltaRightTicks = rightTicks - prevRightTicks;
 
@@ -30,7 +31,7 @@ void Localization::update(long leftTicks, long rightTicks, float yaw) {
   currentPose.y += deltaY;
 }
 
-void Localization::printInfo() const {
+void TankDriveLocalization::printInfo() const {
   Serial.print("X: ");
   Serial.print(currentPose.x);
   Serial.print(" Y: ");
@@ -39,7 +40,7 @@ void Localization::printInfo() const {
   Serial.println(currentPose.theta);
 }
 
-void Localization::reset() {
+void TankDriveLocalization::reset() {
   currentPose.x = setup_.start_x;
   currentPose.y = setup_.start_y;
   currentPose.theta = setup_.start_theta;

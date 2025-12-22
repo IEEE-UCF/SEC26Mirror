@@ -109,6 +109,16 @@ pio run -e <environment> --target upload
 pio run -e <environment> --target clean
 ```
 
+**Clean micro-ROS** (when micro-ROS messages are outdated):
+```bash
+# Clean ESP32 micro-ROS (for robotcomms, beacons)
+pio run -e robotcomms -t clean_microros
+
+# Clean Teensy micro-ROS (for robot)
+pio run -e robot -t clean_microros
+```
+Note: After cleaning micro-ROS, the next build will automatically regenerate the micro-ROS libraries with updated message definitions from `extra_packages/mcu_msgs`.
+
 **Monitor serial output**:
 ```bash
 pio device monitor -e <environment>

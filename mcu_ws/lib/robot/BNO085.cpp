@@ -1,8 +1,8 @@
-#include "IMU.h"
+#include "BNO085.h"
 
 namespace Drivers {
 
-bool IMUDriver::init() {
+bool BNO085Driver::init() {
   initSuccess_ = true;
 
   if (!imu_.begin_I2C()) {
@@ -17,7 +17,7 @@ bool IMUDriver::init() {
   return initSuccess_;
 }
 
-void IMUDriver::update() {
+void BNO085Driver::update() {
   while (imu_.getSensorEvent(&sensorValue_)) {
     switch (sensorValue_.sensorId) {
       case SH2_ACCELEROMETER:
@@ -48,14 +48,14 @@ void IMUDriver::update() {
 }
 
 // yaw in radians
-float IMUDriver::calculateYaw(float qx, float qy, float qz, float qw) {
+float BNO085Driver::calculateYaw(float qx, float qy, float qz, float qw) {
   float t3 = 2.0f * (qw * qz + qx * qy);
   float t4 = 1.0f - 2.0f * (qy * qy + qz * qz);
   return atan2(t3, t4);
 }
 
-const char* IMUDriver::getInfo() {
-  snprintf(infoBuffer_, sizeof(infoBuffer_), "IMU: %s", setup_.getId());
+const char* BNO085Driver::getInfo() {
+  snprintf(infoBuffer_, sizeof(infoBuffer_), "BNO085: %s", setup_.getId());
   return infoBuffer_;
 }
 

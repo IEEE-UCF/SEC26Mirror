@@ -50,7 +50,9 @@ jobs:
             mcu_ws/libs_external/teensy/micro_ros_platformio/build
             mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
             ~/.cache/pip
-          key: platformio-lite-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
+          key: platformio-lite-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**') }}
+          restore-keys: |
+            platformio-lite-${{ runner.os }}-
 
       - name: Show PlatformIO cache status
         run: |
@@ -59,6 +61,14 @@ jobs:
           else
             echo "::notice::PlatformIO cache miss"
           fi
+
+      - name: Clean microros if cache restored from fallback
+        if: steps.pio-cache.outputs.cache-hit != 'true'
+        working-directory: mcu_ws/
+        run: |
+          echo "::notice::Cache restored from fallback key, cleaning microros"
+          pio run -e robot -t clean_microros || true
+          pio run -e robotcomms -t clean_microros || true
 
       - name: Install CMake
         run: |

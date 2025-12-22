@@ -14,7 +14,6 @@ bool EspNow::init() {
   peerInfo.encrypt = false;
   return (esp_now_add_peer(&peerInfo) == ESP_OK);
 }
-<<<<<<< HEAD
 // void EspNow::onDataRecv(const esp_now_recv_info_t *sender_info,
 //                         const uint8_t *incomingData, int len) {
 //   if (s_instance != nullptr) {
@@ -29,10 +28,6 @@ bool EspNow::init() {
 //   }
 // }
 void EspNow::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
-=======
-void EspNow::onDataRecv(const uint8_t *mac_addr,
-                        const uint8_t *incomingData, int len) {
->>>>>>> 5730874294bfdee94623e9c745fe01cc3b4e3758
   if (s_instance != nullptr) {
     if (len != sizeof(s_instance->recievedmessage)) {
       Serial.println("Err: Size mismatch");

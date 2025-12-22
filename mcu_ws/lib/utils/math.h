@@ -5,7 +5,9 @@
  * @brief Small math helpers for control + navigation, math is hard yknow?
  */
 
-#include <cstdint>
+#if defined(__cplusplus) && !defined(UNITY_INCLUDE_EXEC_TIME)
+
+#include <stdint.h>
 #include <cmath>
 
 namespace secbot::utils {
@@ -123,3 +125,5 @@ constexpr float deg2rad(float deg) { return deg * (kPi / 180.0f); }
 constexpr float rad2deg(float rad) { return rad * (180.0f / kPi); }
 
 } // namespace secbot::utils
+
+#endif // __cplusplus

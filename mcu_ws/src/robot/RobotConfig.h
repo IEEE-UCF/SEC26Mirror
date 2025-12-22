@@ -3,10 +3,16 @@
  * @author Trevor Cannon
  * @brief Robot constants for calculations
  * @date 12/11/2025
+ * @note This file contains default robot configuration constants.
+ *       For use with Localization, pass these values via LocalizationSetup.
  */
 
 #ifndef ROBOTCONFIG_H
 #define ROBOTCONFIG_H
+
+#ifndef PI
+#define PI 3.1415926535897932384626433832795
+#endif
 
 namespace RobotConfig {
 
@@ -14,7 +20,7 @@ namespace RobotConfig {
 
 constexpr float TRACK_WIDTH = 10.0f;
 
-constexpr float WHEEL_DIAMETER = 3.25;
+constexpr float WHEEL_DIAMETER = 3.25f;
 constexpr float WHEEL_RADIUS = WHEEL_DIAMETER * 0.5f;
 constexpr float WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
 

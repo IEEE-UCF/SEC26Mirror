@@ -52,6 +52,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MiniRobotState.msg"
   "msg/RC.msg"
   "msg/RobotInputs.msg"
+  "msg/UWBAnchorInfo.msg"
+  "msg/UWBRange.msg"
+  "msg/UWBRanging.msg"
   "srv/ArmControl.srv"
   DEPENDENCIES std_msgs geometry_msgs
 )

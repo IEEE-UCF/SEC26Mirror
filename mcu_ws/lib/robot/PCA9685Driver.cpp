@@ -13,7 +13,7 @@ PCA9685Driver::PCA9685Driver(const PCA9685DriverSetup& setup)
 
 bool PCA9685Driver::init() {
   pwm_.begin();
-  pwm_.setPWMFreq(50); // default 50Hz for servos
+  pwm_.setPWMFreq(50);  // default 50Hz for servos
   initSuccess_ = true;
   return true;
 }
@@ -21,9 +21,9 @@ bool PCA9685Driver::init() {
 void PCA9685Driver::writeDigital(uint8_t channel, bool on) {
   if (channel > 15) return;
   if (on) {
-    pwm_.setPWM(channel, 4096, 0); // full on
+    pwm_.setPWM(channel, 4096, 0);  // full on
   } else {
-    pwm_.setPWM(channel, 0, 4096); // full off
+    pwm_.setPWM(channel, 0, 4096);  // full off
   }
 }
 

@@ -9,9 +9,7 @@
 
 namespace Subsystem {
 
-bool RCSubsystem::init() {
-  return true;
-}
+bool RCSubsystem::init() { return true; }
 
 void RCSubsystem::begin() {
   // Initialize IBUS communication on the specified serial port
@@ -34,9 +32,7 @@ void RCSubsystem::pause() {
   // No special pause behavior needed
 }
 
-void RCSubsystem::reset() {
-  pause();
-}
+void RCSubsystem::reset() { pause(); }
 
 bool RCSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   (void)executor;
@@ -72,17 +68,18 @@ void RCSubsystem::updateRCData() {
     int32_t newChannels[10];
     for (int i = 0; i < 10; i++) {
       // Read raw channel data (1000-2000), constrain, then map to -255 to 255
-      newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000, 0, 1000, -255, 255);
+      newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000,
+                           0, 1000, -255, 255);
     }
 
     // Failsafe/mode check: if channel 9 is at its minimum (-255 after mapping),
     // zero out specific control channels (kill switch behavior)
     if (newChannels[9] == -255) {
-      data_.channels[0] = 0;  // e.g., Roll/Aileron
-      data_.channels[1] = 0;  // e.g., Pitch/Elevator
-      data_.channels[2] = 0;  // e.g., Throttle
-      data_.channels[3] = 0;  // e.g., Yaw/Rudder
-      data_.channels[5] = 0;  // e.g., Auxiliary channel
+      data_.channels[0] = 0;     // e.g., Roll/Aileron
+      data_.channels[1] = 0;     // e.g., Pitch/Elevator
+      data_.channels[2] = 0;     // e.g., Throttle
+      data_.channels[3] = 0;     // e.g., Yaw/Rudder
+      data_.channels[5] = 0;     // e.g., Auxiliary channel
       data_.channels[9] = -255;  // Keep failsafe switch state
     } else {
       // If not in failsafe, update all channels with new readings
@@ -115,10 +112,10 @@ void RCSubsystem::updateRCMessage() {
 
   // Extract switch states (channels 6-9) by thresholding
   // Switches are typically at -255 (off) or 255 (on)
-  msg_.swa = (data_.channels[6] > 0);   // switch A
-  msg_.swb = (data_.channels[7] > 0);   // switch B
-  msg_.swc = (data_.channels[8] > 0);   // switch C
-  msg_.swd = (data_.channels[9] > 0);   // switch D
+  msg_.swa = (data_.channels[6] > 0);  // switch A
+  msg_.swb = (data_.channels[7] > 0);  // switch B
+  msg_.swc = (data_.channels[8] > 0);  // switch C
+  msg_.swd = (data_.channels[9] > 0);  // switch D
 }
 
 void RCSubsystem::publishRC() {

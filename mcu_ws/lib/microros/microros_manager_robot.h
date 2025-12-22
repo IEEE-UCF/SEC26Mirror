@@ -9,15 +9,22 @@
 #define MICROROS_MANAGER_H
 #include <BaseSubsystem.h>
 // microros includes
-#include <stdio.h>
-#include <rcl/rcl.h>
 #include <rcl/error_handling.h>
-#include <rclc/rclc.h>
+#include <rcl/rcl.h>
 #include <rclc/executor.h>
+#include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
+#include <stdio.h>
+
 #include "microros_setup.h"
 
-#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){return false;}}
+#define RCCHECK(fn)                \
+  {                                \
+    rcl_ret_t temp_rc = fn;        \
+    if ((temp_rc != RCL_RET_OK)) { \
+      return false;                \
+    }                              \
+  }
 #define EXECUTE_EVERY_N_MS(MS, X)      \
   do {                                 \
     static volatile int64_t init = -1; \
@@ -36,22 +43,24 @@ namespace Subsystem {
 class IMicroRosParticipant {
  public:
   virtual ~IMicroRosParticipant() {}
-  // Called when manager creates entities; participant should create its pubs/subs here
+  // Called when manager creates entities; participant should create its
+  // pubs/subs here
   virtual bool onCreate(rcl_node_t* node, rclc_executor_t* executor) = 0;
-  // Called when manager tears down entities; participant should clean up any resources
+  // Called when manager tears down entities; participant should clean up any
+  // resources
   virtual void onDestroy() = 0;
 };
 
 class MicrorosManagerSetup : public Classes::BaseSetup {
  public:
-  MicrorosManagerSetup(const char* _id) : Classes::BaseSetup(_id) {};
+  MicrorosManagerSetup(const char* _id) : Classes::BaseSetup(_id){};
 };
 class MicrorosManager : public Classes::BaseSubsystem {
  public:
   ~MicrorosManager() override = default;
   MicrorosManager(const MicrorosManagerSetup& setup)
-      : BaseSubsystem(setup), setup_(setup) {};
-  
+      : BaseSubsystem(setup), setup_(setup){};
+
   bool init() override;
   void update() override;
   void begin() override;
@@ -60,7 +69,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
   const char* getInfo() override;
   // Register a participant; it will be created/destroyed with the manager
   void registerParticipant(IMicroRosParticipant* participant);
- 
+
  private:
   const MicrorosManagerSetup setup_;
   rclc_support_t support_;
@@ -83,10 +92,11 @@ class MicrorosManager : public Classes::BaseSubsystem {
   static MicrorosManager* s_instance_;
   bool create_entities();
   void destroy_entities();
+
  public:
   // External setters for pose and state
-  void setPose(float, float, float, float, float, float) {} // no-op
-  void setState(const char*) {} // no-op
+  void setPose(float, float, float, float, float, float) {}  // no-op
+  void setState(const char*) {}                              // no-op
 };
 
 }  // namespace Subsystem

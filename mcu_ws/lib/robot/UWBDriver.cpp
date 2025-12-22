@@ -127,8 +127,8 @@ void UWBDriver::reset() {
 const char* UWBDriver::getInfo() {
   static char info[64];
   const char* mode_str = (data_.mode == UWBMode::TAG) ? "TAG" : "ANCHOR";
-  snprintf(info, sizeof(info), "UWB %s ID=%d Init=%d", mode_str, data_.device_id,
-           data_.initialized);
+  snprintf(info, sizeof(info), "UWB %s ID=%d Init=%d", mode_str,
+           data_.device_id, data_.initialized);
   return info;
 }
 
@@ -156,9 +156,7 @@ bool UWBDriver::startRanging() {
   return false;  // Already in progress
 }
 
-void UWBDriver::updateTagMode() {
-  processTagStage();
-}
+void UWBDriver::updateTagMode() { processTagStage(); }
 
 void UWBDriver::processTagStage() {
   int rx_status;
@@ -236,9 +234,9 @@ void UWBDriver::processTagStage() {
 
     case 5: {
       // Calculate distance
-      int ranging_time = DW3000.ds_processRTInfo(
-          t_roundA_, t_replyA_, DW3000.read(0x12, 0x04), DW3000.read(0x12, 0x08),
-          clock_offset_);
+      int ranging_time =
+          DW3000.ds_processRTInfo(t_roundA_, t_replyA_, DW3000.read(0x12, 0x04),
+                                  DW3000.read(0x12, 0x08), clock_offset_);
       float distance = DW3000.convertToCM(ranging_time);
 
       // Store result
@@ -270,9 +268,7 @@ void UWBDriver::processTagStage() {
   }
 }
 
-void UWBDriver::updateAnchorMode() {
-  processAnchorStage();
-}
+void UWBDriver::updateAnchorMode() { processAnchorStage(); }
 
 void UWBDriver::processAnchorStage() {
   int rx_status;
@@ -361,8 +357,6 @@ void UWBDriver::handleError(const char* msg) {
   DW3000.clearSystemStatus();
 }
 
-float UWBDriver::getTemperature() {
-  return DW3000.getTempInC();
-}
+float UWBDriver::getTemperature() { return DW3000.getTempInC(); }
 
 }  // namespace Drivers

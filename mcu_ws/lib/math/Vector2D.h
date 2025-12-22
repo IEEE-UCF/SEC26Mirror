@@ -19,7 +19,7 @@ class Vector2D {
 
   ~Vector2D() = default;
   Vector2D(float _x = 0.0f, float _y = 0.0f, float _theta = 0.0f)
-      : x(_x), y(_y), theta(_theta) {};
+      : x(_x), y(_y), theta(_theta){};
 
   float getX() const { return x; };
   float getY() const { return y; };

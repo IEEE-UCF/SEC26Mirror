@@ -2,14 +2,15 @@
 functions...time to actually implement them!
 */
 #include "ESP32-mac.h"
+
+#include <stdio.h>
+#include <string.h>
+
 #include "esp_event.h"
 #include "esp_mac.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
-#include <stdio.h>
-#include <string.h>
-
 
 esp_err_t esp32_mac_ip_init(void) {
   esp_err_t ret = nvs_flash_init();
@@ -40,8 +41,8 @@ esp_err_t esp32_mac_ip_get_mac(esp_mac_type_t mac_type, mac_info_t *mac_info) {
   // information
   //  Format MAC address as string
   snprintf(mac_info->mac_string,
-           sizeof(mac_info->mac_string), // not exactly sure but it kinda looks
-                                         // we're pointing
+           sizeof(mac_info->mac_string),  // not exactly sure but it kinda looks
+                                          // we're pointing
            // to the array and the string inside the structure, making use of
            // the string and its size....
            "%02X:%02X:%02X:%02X:%02X:%02X", mac_info->mac[0], mac_info->mac[1],
@@ -61,6 +62,4 @@ void esp32_ip_print_mac(const mac_info_t *mac_info) {
   printf("=============================\n");
 }
 
-esp_err_t esp32_mac_ip_deinit(void){
-    return ESP_OK;
-}
+esp_err_t esp32_mac_ip_deinit(void) { return ESP_OK; }

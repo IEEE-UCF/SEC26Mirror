@@ -11,9 +11,14 @@
  *   - Publishes task status for debugging/monitoring
  */
 
+#include <memory>
 #include <rclcpp/rclcpp.hpp>
+#include <secbot_msgs/msg/task_status.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/u_int8.hpp>
+#include <string>
+#include <unordered_map>
 
-#include "secbot_autonomy/task_base.hpp"
 #include "secbot_autonomy/antenna_align.hpp"
 #include "secbot_autonomy/button_press.hpp"
 #include "secbot_autonomy/crank_turn.hpp"
@@ -21,14 +26,7 @@
 #include "secbot_autonomy/flag_plant.hpp"
 #include "secbot_autonomy/keypad_enter.hpp"
 #include "secbot_autonomy/pressure_clear.hpp"
-
-#include <secbot_msgs/msg/task_status.hpp>
-#include <std_msgs/msg/u_int8.hpp>
-#include <std_msgs/msg/string.hpp>
-
-#include <memory>
-#include <string>
-#include <unordered_map>
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 

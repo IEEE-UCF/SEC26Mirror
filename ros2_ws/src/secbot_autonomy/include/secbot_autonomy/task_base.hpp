@@ -20,10 +20,10 @@ namespace secbot {
 
 /** @brief Status of a task state machine */
 enum class TaskStatus : uint8_t {
-  kIdle = 0,    ///< Not started or reset
-  kRunning,     ///< Currently executing
-  kSucceeded,   ///< Completed successfully
-  kFailed       ///< Failed or timed out
+  kIdle = 0,   ///< Not started or reset
+  kRunning,    ///< Currently executing
+  kSucceeded,  ///< Completed successfully
+  kFailed      ///< Failed or timed out
 };
 
 /**
@@ -54,9 +54,7 @@ class TaskBase {
   virtual void cancel() = 0;
 
   /** @brief Reset to idle state (for reuse) */
-  virtual void reset() {
-    status_ = TaskStatus::kIdle;
-  }
+  virtual void reset() { status_ = TaskStatus::kIdle; }
 
   /** @brief Get current task status */
   TaskStatus status() const { return status_; }

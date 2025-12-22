@@ -23,16 +23,18 @@ PressureClearTask::PressureClearTask(rclcpp::Node::SharedPtr node,
       cfg_.arm_command_topic, 10);
 
   if (cfg_.intake_speed != 0) {
-    intake_pub_ = node_->create_publisher<std_msgs::msg::Int16>(
-        cfg_.intake_topic, 10);
+    intake_pub_ =
+        node_->create_publisher<std_msgs::msg::Int16>(cfg_.intake_topic, 10);
   }
 
   captured_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
       cfg_.duck_captured_topic, 10,
-      std::bind(&PressureClearTask::onDuckCaptured, this, std::placeholders::_1));
+      std::bind(&PressureClearTask::onDuckCaptured, this,
+                std::placeholders::_1));
 }
 
-void PressureClearTask::onDuckCaptured(const std_msgs::msg::Bool::SharedPtr msg) {
+void PressureClearTask::onDuckCaptured(
+    const std_msgs::msg::Bool::SharedPtr msg) {
   duck_captured_ = msg->data;
   sensor_valid_ = true;
 }
@@ -117,8 +119,9 @@ void PressureClearTask::step() {
   // Progress estimate
   const uint8_t sweeps = (cfg_.sweeps == 0) ? 1 : cfg_.sweeps;
   const float per_sweep = cfg_.push_out_s + cfg_.push_hold_s + cfg_.retract_s;
-  const float est_total = cfg_.settle_s + (sweeps * per_sweep) +
-                          ((sweeps > 1) ? ((sweeps - 1) * cfg_.between_sweeps_s) : 0.0f);
+  const float est_total =
+      cfg_.settle_s + (sweeps * per_sweep) +
+      ((sweeps > 1) ? ((sweeps - 1) * cfg_.between_sweeps_s) : 0.0f);
   if (est_total > 0.001f) {
     progress_ = clamp01(t_total / est_total);
   }

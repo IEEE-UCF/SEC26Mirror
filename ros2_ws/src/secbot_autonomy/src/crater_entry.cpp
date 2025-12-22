@@ -52,9 +52,7 @@ void CraterEntryTask::publishVelocity(float linear, float angular) {
   cmd_vel_pub_->publish(msg);
 }
 
-void CraterEntryTask::stopMotion() {
-  publishVelocity(0.0f, 0.0f);
-}
+void CraterEntryTask::stopMotion() { publishVelocity(0.0f, 0.0f); }
 
 float CraterEntryTask::distanceFromPhaseStart() const {
   float dx = current_x_ - phase_start_x_;
@@ -64,7 +62,8 @@ float CraterEntryTask::distanceFromPhaseStart() const {
 
 void CraterEntryTask::start() {
   if (!pose_valid_) {
-    RCLCPP_WARN(node_->get_logger(), "CraterEntry: No pose data yet, starting anyway");
+    RCLCPP_WARN(node_->get_logger(),
+                "CraterEntry: No pose data yet, starting anyway");
   }
 
   status_ = TaskStatus::kRunning;
@@ -108,7 +107,8 @@ void CraterEntryTask::step() {
       if (dist >= cfg_.approach_distance_m - cfg_.distance_tolerance_m) {
         stopMotion();
         enterState(State::kDescendToLine);
-        RCLCPP_DEBUG(node_->get_logger(), "CraterEntry: Reached rim, descending");
+        RCLCPP_DEBUG(node_->get_logger(),
+                     "CraterEntry: Reached rim, descending");
       } else {
         publishVelocity(cfg_.approach_speed, 0.0f);
       }
@@ -121,7 +121,8 @@ void CraterEntryTask::step() {
       if (dist >= cfg_.descend_distance_m - cfg_.distance_tolerance_m) {
         stopMotion();
         enterState(State::kDwellOnLine);
-        RCLCPP_DEBUG(node_->get_logger(), "CraterEntry: Touched line, dwelling");
+        RCLCPP_DEBUG(node_->get_logger(),
+                     "CraterEntry: Touched line, dwelling");
       } else {
         publishVelocity(cfg_.descend_speed, 0.0f);
       }
@@ -134,7 +135,8 @@ void CraterEntryTask::step() {
 
       if (t_state >= cfg_.dwell_time_s) {
         enterState(State::kExitCrater);
-        RCLCPP_DEBUG(node_->get_logger(), "CraterEntry: Dwell complete, exiting");
+        RCLCPP_DEBUG(node_->get_logger(),
+                     "CraterEntry: Dwell complete, exiting");
       }
     } break;
 

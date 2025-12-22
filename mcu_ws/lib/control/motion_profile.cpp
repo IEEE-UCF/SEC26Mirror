@@ -9,7 +9,9 @@
 
 #include "motion_profile.h"
 
-TrapezoidalMotionProfile::TrapezoidalMotionProfile(const Config& cfg) { configure(cfg); }
+TrapezoidalMotionProfile::TrapezoidalMotionProfile(const Config& cfg) {
+  configure(cfg);
+}
 
 void TrapezoidalMotionProfile::configure(const Config& cfg) {
   cfg_ = cfg;
@@ -127,7 +129,8 @@ MotionState TrapezoidalMotionProfile::update(float dt) {
   }
 
   // integrate (using average velocity for position update)
-  const float v_next = clamp(v + a_des * dt, -cfg_.limits.v_max, cfg_.limits.v_max);
+  const float v_next =
+      clamp(v + a_des * dt, -cfg_.limits.v_max, cfg_.limits.v_max);
   const float v_avg = 0.5f * (v + v_next);
 
   MotionState next = st_;
@@ -147,8 +150,7 @@ MotionState TrapezoidalMotionProfile::update(float dt) {
   }
 
   // if we're within tolerance and velocity is close, also finish
-  if (!finished_ &&
-      std::fabs(goal_.pos - next.pos) <= cfg_.pos_tol &&
+  if (!finished_ && std::fabs(goal_.pos - next.pos) <= cfg_.pos_tol &&
       std::fabs(goal_.vel - next.vel) <= cfg_.vel_tol) {
     next.pos = goal_.pos;
     next.vel = goal_.vel;
@@ -293,7 +295,8 @@ MotionState SCurveMotionProfile::update(float dt) {
   }
 
   // integrate (avg velocity for position)
-  const float v_next = clamp(v + a_next * dt, -cfg_.limits.v_max, cfg_.limits.v_max);
+  const float v_next =
+      clamp(v + a_next * dt, -cfg_.limits.v_max, cfg_.limits.v_max);
   const float v_avg = 0.5f * (v + v_next);
 
   MotionState next = st_;
@@ -310,8 +313,7 @@ MotionState SCurveMotionProfile::update(float dt) {
     finished_ = true;
   }
 
-  if (!finished_ &&
-      std::fabs(goal_.pos - next.pos) <= cfg_.pos_tol &&
+  if (!finished_ && std::fabs(goal_.pos - next.pos) <= cfg_.pos_tol &&
       std::fabs(goal_.vel - next.vel) <= cfg_.vel_tol) {
     next.pos = goal_.pos;
     next.vel = goal_.vel;
@@ -323,7 +325,8 @@ MotionState SCurveMotionProfile::update(float dt) {
   return st_;
 }
 
-float SCurveMotionProfile::approachWithJerk(float a_now, float a_target, float j_max, float dt) {
+float SCurveMotionProfile::approachWithJerk(float a_now, float a_target,
+                                            float j_max, float dt) {
   // a_next = a_now + clamp(a_target - a_now, -j_max*dt, +j_max*dt)
   const float da = a_target - a_now;
   const float max_step = j_max * dt;

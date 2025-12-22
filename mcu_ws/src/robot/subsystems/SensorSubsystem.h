@@ -9,16 +9,19 @@
 #define SENSORSUBSYSTEM_H
 
 #include <BaseSubsystem.h>
-#include <microros_manager_robot.h>
-#include "TimedSubsystem.h"
 #include <TOF.h>
+#include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
+
 #include <vector>
+
+#include "TimedSubsystem.h"
 
 namespace Subsystem {
 class SensorSubsystemSetup : public Classes::BaseSetup {
  public:
-  SensorSubsystemSetup(const char* _id, std::vector<Drivers::TOFDriver*> drivers) 
+  SensorSubsystemSetup(const char* _id,
+                       std::vector<Drivers::TOFDriver*> drivers)
       : Classes::BaseSetup(_id), drivers_(drivers) {}
   std::vector<Drivers::TOFDriver*> drivers_;
 };

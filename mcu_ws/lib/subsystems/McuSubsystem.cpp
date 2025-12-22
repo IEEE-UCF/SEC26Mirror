@@ -2,35 +2,35 @@
 
 namespace Subsystem {
 bool MCUSubsystem::init() {
-    // Invoke init callback if provided and map result to state
-    // change state from pre_init to init
-    data_.mcu_state_ = McuState::INIT; 
-    publishStatus(); // send pre_init
-    bool success = true;
-    if (cb_.mcu_init_) {
-      success = cb_.mcu_init_();
-    }
-    // set state
-    data_.mcu_state_ = success ? McuState::INIT_SUCCESS : McuState::INIT_FAIL;
-    publishStatus();
-    return success;
+  // Invoke init callback if provided and map result to state
+  // change state from pre_init to init
+  data_.mcu_state_ = McuState::INIT;
+  publishStatus();  // send pre_init
+  bool success = true;
+  if (cb_.mcu_init_) {
+    success = cb_.mcu_init_();
+  }
+  // set state
+  data_.mcu_state_ = success ? McuState::INIT_SUCCESS : McuState::INIT_FAIL;
+  publishStatus();
+  return success;
 }
 
 void MCUSubsystem::arm() {
-    bool completion = false;
-    if (cb_.mcu_arm_) {
-        completion = cb_.mcu_arm_();
-    }
-    data_.mcu_state_ = completion ? McuState::ARMED : data_.mcu_state_;
+  bool completion = false;
+  if (cb_.mcu_arm_) {
+    completion = cb_.mcu_arm_();
+  }
+  data_.mcu_state_ = completion ? McuState::ARMED : data_.mcu_state_;
 }
 
 void MCUSubsystem::begin() {
-    bool completion = false;
-    if (cb_.mcu_begin_) {
-      completion = cb_.mcu_begin_();
-    }
-    data_.mcu_state_ = completion ? McuState::RUNNING : data_.mcu_state_;
-    publishStatus();
+  bool completion = false;
+  if (cb_.mcu_begin_) {
+    completion = cb_.mcu_begin_();
+  }
+  data_.mcu_state_ = completion ? McuState::RUNNING : data_.mcu_state_;
+  publishStatus();
 }
 
 void MCUSubsystem::update() {
@@ -41,11 +41,11 @@ void MCUSubsystem::update() {
 }
 
 void MCUSubsystem::stop() {
-    if(cb_.mcu_stop_) {
-        cb_.mcu_stop_();
-    }
-    data_.mcu_state_ = McuState::STOPPED;
-    publishStatus();
+  if (cb_.mcu_stop_) {
+    cb_.mcu_stop_();
+  }
+  data_.mcu_state_ = McuState::STOPPED;
+  publishStatus();
 }
 
 void MCUSubsystem::reset() {
@@ -63,11 +63,11 @@ bool MCUSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   (void)executor;
   node_ = node;
   // Initialize publisher for mcu state message
-    rcl_ret_t rc = rclc_publisher_init_best_effort(
+  rcl_ret_t rc = rclc_publisher_init_best_effort(
       &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, McuState),
       "/mcu_robot/mcu_state");
   // Default to PRE_INIT
-  msg_.state = 0; // PRE_INIT per McuState.msg
+  msg_.state = 0;  // PRE_INIT per McuState.msg
   return rc == RCL_RET_OK;
 }
 

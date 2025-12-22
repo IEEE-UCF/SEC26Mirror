@@ -47,7 +47,10 @@ class RobotObject {
   RobotObject() = delete;
   // Generic base (init-only)
   RobotObject(const Classes::BaseClass& base, TimerConfig timer_config)
-      : base_(base), timer_config_(timer_config), update_fn_(nullptr), reset_fn_(nullptr) {}
+      : base_(base),
+        timer_config_(timer_config),
+        update_fn_(nullptr),
+        reset_fn_(nullptr) {}
 
   // Driver (has update)
   RobotObject(Classes::BaseDriver& driver, TimerConfig timer_config)
@@ -116,7 +119,10 @@ class RobotManager : public Classes::BaseSubsystem {
   void update() override;
   void pause() override {}
   void reset() override;
-  const char* getInfo() override { static const char info[] = "RobotManager"; return info; }
+  const char* getInfo() override {
+    static const char info[] = "RobotManager";
+    return info;
+  }
 
  private:
   const RobotManagerSetup& setup_;

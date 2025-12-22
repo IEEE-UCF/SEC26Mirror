@@ -13,11 +13,10 @@
  *   IDLE -> SETTLE -> PRESS_HOLD <-> RELEASE_HOLD -> DONE
  */
 
-#include "secbot_autonomy/task_base.hpp"
-
+#include <cstdint>
 #include <mcu_msgs/msg/arm_command.hpp>
 
-#include <cstdint>
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 
@@ -84,9 +83,9 @@ class ButtonPressTask : public TaskBase {
  private:
   enum class State : uint8_t {
     kIdle = 0,
-    kSettle,      ///< Brief pause before starting
-    kPressHold,   ///< Pusher extended, holding
-    kReleaseHold, ///< Pusher retracted, waiting before next press
+    kSettle,       ///< Brief pause before starting
+    kPressHold,    ///< Pusher extended, holding
+    kReleaseHold,  ///< Pusher retracted, waiting before next press
     kDone
   };
 
@@ -97,7 +96,7 @@ class ButtonPressTask : public TaskBase {
   State state_ = State::kIdle;
 
   uint8_t presses_done_ = 0;
-  float t_state_ = 0.0f;    ///< Time in current state
+  float t_state_ = 0.0f;  ///< Time in current state
   rclcpp::Time start_time_;
   rclcpp::Time state_entry_time_;
 

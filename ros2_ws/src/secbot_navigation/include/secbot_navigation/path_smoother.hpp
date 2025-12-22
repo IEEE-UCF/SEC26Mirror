@@ -1,6 +1,6 @@
 // Makes the route easier to drive.
-# Pathing Algorithms
-# Plans a safe route and smooth path.
+#Pathing Algorithms
+#Plans a safe route and smooth path.
 #
-# Files in this directory:
-# - path_smoother.hpp: Makes the route easier to drive.
+#Files in this directory:
+#- path_smoother.hpp : Makes the route easier to drive.

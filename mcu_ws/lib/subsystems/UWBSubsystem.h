@@ -6,15 +6,16 @@
  */
 #pragma once
 
+#include <Arduino.h>
 #include <BaseSubsystem.h>
-#include "TimedSubsystem.h"
+#include <mcu_msgs/msg/uwb_range.h>
+#include <mcu_msgs/msg/uwb_ranging.h>
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
-#include <mcu_msgs/msg/uwb_ranging.h>
-#include <mcu_msgs/msg/uwb_range.h>
+
+#include "TimedSubsystem.h"
 #include "UWBDriver.h"
-#include <Arduino.h>
 
 namespace Subsystem {
 
@@ -36,7 +37,8 @@ class UWBSubsystemSetup : public Classes::BaseSetup {
  * - TAG mode: Initiates ranging to anchors and publishes range data
  * - ANCHOR mode: Responds to ranging requests (no publishing)
  */
-class UWBSubsystem : public IMicroRosParticipant, public Subsystem::TimedSubsystem {
+class UWBSubsystem : public IMicroRosParticipant,
+                     public Subsystem::TimedSubsystem {
  public:
   explicit UWBSubsystem(const UWBSubsystemSetup& setup)
       : Subsystem::TimedSubsystem(setup), setup_(setup) {}

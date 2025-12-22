@@ -1,8 +1,10 @@
 #pragma once
 
 #include <Arduino.h>
-#include <vector>
 #include <BaseDriver.h>
+
+#include <vector>
+
 #include "PCA9685Driver.h"
 
 namespace Robot {
@@ -18,13 +20,18 @@ class PCA9685Manager : public Classes::BaseDriver {
   ~PCA9685Manager() override;
 
   bool init() override;
-  void update() override; // apply buffered updates
-  const char* getInfo() override { static const char info[] = "PCA9685Manager"; return info; }
+  void update() override;  // apply buffered updates
+  const char* getInfo() override {
+    static const char info[] = "PCA9685Manager";
+    return info;
+  }
 
   // Manager API
   PCA9685Driver* createDriver(const PCA9685DriverSetup& setup);
   size_t count() const { return drivers_.size(); }
-  PCA9685Driver* get(size_t i) { return i < drivers_.size() ? drivers_[i] : nullptr; }
+  PCA9685Driver* get(size_t i) {
+    return i < drivers_.size() ? drivers_[i] : nullptr;
+  }
 
  private:
   std::vector<PCA9685Driver*> drivers_;

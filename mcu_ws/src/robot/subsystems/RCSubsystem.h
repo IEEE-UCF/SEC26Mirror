@@ -6,15 +6,16 @@
  */
 #pragma once
 
+#include <Arduino.h>
 #include <BaseSubsystem.h>
-#include "TimedSubsystem.h"
+#include <IBusBM.h>
+#include <elapsedMillis.h>
+#include <mcu_msgs/msg/rc.h>
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
-#include <mcu_msgs/msg/rc.h>
-#include <IBusBM.h>
-#include <elapsedMillis.h>
-#include <Arduino.h>
+
+#include "TimedSubsystem.h"
 
 namespace Subsystem {
 
@@ -49,9 +50,11 @@ class RCSubsystemSetup : public Classes::BaseSetup {
  *
  * This subsystem manages communication with a FlySky RC receiver using the
  * IBUS protocol. It periodically reads channel values and publishes them
- * to the "mcu_robot/rc" topic. No input commands from Raspberry Pi are required.
+ * to the "mcu_robot/rc" topic. No input commands from Raspberry Pi are
+ * required.
  */
-class RCSubsystem : public IMicroRosParticipant, public Subsystem::TimedSubsystem {
+class RCSubsystem : public IMicroRosParticipant,
+                    public Subsystem::TimedSubsystem {
  public:
   explicit RCSubsystem(const RCSubsystemSetup& setup)
       : Subsystem::TimedSubsystem(setup), setup_(setup), updateTimer_(0) {}

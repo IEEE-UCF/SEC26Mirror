@@ -26,7 +26,9 @@ class AnalogMuxDriverSetup : public Classes::BaseSetup {
 
   AnalogMuxDriverSetup(const char* _id, std::array<uint8_t, 4> sPins,
                        uint8_t sigPin)
-      : Classes::BaseSetup(_id), _sPins(sPins), _sigPin(sigPin) {
+      : Classes::BaseSetup(_id),
+        _sPins(sPins),
+        _sigPin(sigPin){
 
         };
 

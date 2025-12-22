@@ -23,7 +23,7 @@ class KeypadSetup : public Classes::BaseSetup {
   ~KeypadSetup() = default;
   KeypadSetup() = delete;
 
-  KeypadSetup(const char* _id) : BaseSetup(_id) {};
+  KeypadSetup(const char* _id) : BaseSetup(_id){};
 };
 
 class KeypadDriver : public Classes::BaseDriver {

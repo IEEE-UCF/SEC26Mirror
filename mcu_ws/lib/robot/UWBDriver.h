@@ -17,19 +17,19 @@ namespace Drivers {
 
 // UWB operating modes
 enum class UWBMode : uint8_t {
-  TAG = 0,     // Initiator - requests ranging from anchors
-  ANCHOR = 1   // Responder - responds to ranging requests
+  TAG = 0,    // Initiator - requests ranging from anchors
+  ANCHOR = 1  // Responder - responds to ranging requests
 };
 
 // Range measurement structure
 struct UWBRangeMeasurement {
-  uint8_t peer_id = 0;         // ID of the peer device
-  float distance_cm = 0.0f;    // Distance in centimeters
-  int32_t clock_offset = 0;    // Raw clock offset
-  uint64_t tx_timestamp = 0;   // TX timestamp
-  uint64_t rx_timestamp = 0;   // RX timestamp
-  bool valid = false;          // True if measurement is valid
-  uint8_t error_code = 0;      // Error code (0 = no error)
+  uint8_t peer_id = 0;        // ID of the peer device
+  float distance_cm = 0.0f;   // Distance in centimeters
+  int32_t clock_offset = 0;   // Raw clock offset
+  uint64_t tx_timestamp = 0;  // TX timestamp
+  uint64_t rx_timestamp = 0;  // RX timestamp
+  bool valid = false;         // True if measurement is valid
+  uint8_t error_code = 0;     // Error code (0 = no error)
 };
 
 // UWB driver data
@@ -66,17 +66,16 @@ class UWBDriverSetup : public Classes::BaseSetup {
         cs_pin(cs_pin),
         rst_pin(rst_pin) {}
 
-  const UWBMode mode;        // Operating mode (tag or anchor)
-  const uint8_t device_id;   // Unique device ID (0-255)
-  const uint8_t cs_pin;      // SPI chip select pin
-  const uint8_t rst_pin;     // Reset pin (255 = not used)
+  const UWBMode mode;       // Operating mode (tag or anchor)
+  const uint8_t device_id;  // Unique device ID (0-255)
+  const uint8_t cs_pin;     // SPI chip select pin
+  const uint8_t rst_pin;    // Reset pin (255 = not used)
 };
 
 // UWB driver class
 class UWBDriver : public Classes::BaseDriver {
  public:
-  UWBDriver(const UWBDriverSetup& setup)
-      : BaseDriver(setup), setup_(setup) {}
+  UWBDriver(const UWBDriverSetup& setup) : BaseDriver(setup), setup_(setup) {}
 
   bool init();
   void begin();

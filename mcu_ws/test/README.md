@@ -6,17 +6,6 @@ This directory contains unit tests for the MCU firmware components.
 
 The test suite validates core mathematical and control components used throughout the robot firmware. All tests run **natively on your computer** without requiring physical hardware.
 
-## Test Organization
-
-```
-test/
-├── test_math_pose2d/     # Pose2D class tests (19 tests)
-├── test_math_vector2d/   # Vector2D class tests (33 tests)
-└── test_math_pose3d/     # Pose3D class tests (18 tests)
-```
-
-**Total: 70 unit tests**
-
 ## Prerequisites
 
 All commands must be run **inside the Docker container**:
@@ -38,7 +27,7 @@ cd /home/ubuntu/mcu_workspaces/sec26mcu
 
 ```bash
 # Run all three test suites
-pio test -e test-math-pose2d -e test-math-vector2d -e test-math-pose3d
+pio test -e test-math-pose2d -e test-math-vector2d -e test-math-pose3d -e test-control-pid -e test-control-arm-kinematics
 ```
 
 ### Run Individual Test Suites
@@ -52,6 +41,12 @@ pio test -e test-math-vector2d
 
 # Pose3D tests (18 tests)
 pio test -e test-math-pose3d
+
+# Control PID tests
+pio test -e test-control-pid
+
+# Arm kinematic tests
+pio test -e test-control-arm-kinematics
 ```
 
 ### Run Tests with Verbose Output

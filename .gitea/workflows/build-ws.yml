@@ -9,6 +9,8 @@ on:
     types:
       - opened
       - synchronize
+    paths:
+      - "ros2_ws/**"
   push:
     branches:
       - master

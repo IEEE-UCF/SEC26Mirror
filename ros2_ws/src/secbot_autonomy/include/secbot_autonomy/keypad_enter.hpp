@@ -13,14 +13,13 @@
  *   SETTLE -> MOVE_TO_KEY -> PRESS_HOLD -> RELEASE_HOLD -> (next key or DONE)
  */
 
-#include "secbot_autonomy/task_base.hpp"
-
-#include <mcu_msgs/msg/arm_command.hpp>
-#include <std_msgs/msg/char.hpp>
-#include <std_msgs/msg/bool.hpp>
-
 #include <cstdint>
+#include <mcu_msgs/msg/arm_command.hpp>
+#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/char.hpp>
 #include <string>
+
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 
@@ -50,8 +49,8 @@ struct KeypadEnterConfig {
 
   /// Topic names
   std::string arm_command_topic = "arm_command";
-  std::string key_target_topic = "keypad_target";   ///< Char msg for which key
-  std::string at_key_topic = "keypad_at_target";    ///< Bool feedback (optional)
+  std::string key_target_topic = "keypad_target";  ///< Char msg for which key
+  std::string at_key_topic = "keypad_at_target";   ///< Bool feedback (optional)
 };
 
 /**
@@ -80,7 +79,9 @@ class KeypadEnterTask : public TaskBase {
   // Feedback
   uint8_t currentIndex() const { return idx_; }
   char currentKey() const { return cur_key_; }
-  uint8_t codeLength() const { return static_cast<uint8_t>(cfg_.code.length()); }
+  uint8_t codeLength() const {
+    return static_cast<uint8_t>(cfg_.code.length());
+  }
 
  private:
   enum class State : uint8_t {

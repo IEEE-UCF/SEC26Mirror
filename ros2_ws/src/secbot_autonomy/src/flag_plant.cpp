@@ -82,7 +82,8 @@ void FlagPlantTask::step() {
   bool sensor_ok = cfg_.use_flag_sensor && sensor_valid_;
   if (sensor_ok) {
     if (flag_present_ == last_present_) {
-      present_stable_t_ += (node_->now() - state_entry_time_).seconds() - t_state;
+      present_stable_t_ +=
+          (node_->now() - state_entry_time_).seconds() - t_state;
       // Approximate delta - will be refined each step
       present_stable_t_ = t_state;  // Use state time as proxy
     } else {
@@ -118,7 +119,8 @@ void FlagPlantTask::step() {
       commandLatch(cfg_.latch_open_pos);
 
       // Early transition if sensor confirms flag is gone
-      if (sensor_ok && !flag_present_ && present_stable_t_ >= cfg_.sensor_debounce_s) {
+      if (sensor_ok && !flag_present_ &&
+          present_stable_t_ >= cfg_.sensor_debounce_s) {
         enterState(State::kPostDrop);
         RCLCPP_DEBUG(node_->get_logger(), "FlagPlant: Flag released (sensor)");
         break;
@@ -136,18 +138,21 @@ void FlagPlantTask::step() {
       if (t_state >= cfg_.post_drop_s) {
         // Determine success
         if (sensor_ok) {
-          release_confirmed_ = !flag_present_ && present_stable_t_ >= cfg_.sensor_debounce_s;
+          release_confirmed_ =
+              !flag_present_ && present_stable_t_ >= cfg_.sensor_debounce_s;
         } else {
           // No sensor - assume success after timing
           release_confirmed_ = true;
         }
 
-        status_ = release_confirmed_ ? TaskStatus::kSucceeded : TaskStatus::kFailed;
+        status_ =
+            release_confirmed_ ? TaskStatus::kSucceeded : TaskStatus::kFailed;
         progress_ = 1.0f;
         state_ = State::kDone;
 
-        RCLCPP_INFO(node_->get_logger(), "FlagPlant: %s",
-                    release_confirmed_ ? "Complete!" : "Failed (flag still present)");
+        RCLCPP_INFO(
+            node_->get_logger(), "FlagPlant: %s",
+            release_confirmed_ ? "Complete!" : "Failed (flag still present)");
       }
       break;
 

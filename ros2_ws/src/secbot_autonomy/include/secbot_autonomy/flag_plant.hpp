@@ -13,12 +13,11 @@
  *   IDLE -> SETTLE -> UNLATCH_HOLD -> POST_DROP -> DONE
  */
 
-#include "secbot_autonomy/task_base.hpp"
-
+#include <cstdint>
 #include <mcu_msgs/msg/arm_command.hpp>
 #include <std_msgs/msg/bool.hpp>
 
-#include <cstdint>
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 
@@ -27,8 +26,8 @@ namespace secbot {
  */
 struct FlagPlantConfig {
   /// Actuator positions (degrees or ticks)
-  int16_t latch_closed_pos = 0;    ///< Holding the flag (latched)
-  int16_t latch_open_pos = 90;     ///< Releasing the flag (unlatched)
+  int16_t latch_closed_pos = 0;  ///< Holding the flag (latched)
+  int16_t latch_open_pos = 90;   ///< Releasing the flag (unlatched)
 
   /// Actuator speed (0-255)
   uint8_t actuator_speed = 200;
@@ -37,9 +36,9 @@ struct FlagPlantConfig {
   uint8_t latch_joint_id = 2;
 
   /// Timing (seconds)
-  float settle_s = 0.20f;      ///< Brief settle before unlatching
-  float unlatch_s = 0.80f;     ///< Hold open for flag to fall
-  float post_drop_s = 0.40f;   ///< Keep open to avoid re-catching
+  float settle_s = 0.20f;     ///< Brief settle before unlatching
+  float unlatch_s = 0.80f;    ///< Hold open for flag to fall
+  float post_drop_s = 0.40f;  ///< Keep open to avoid re-catching
 
   /// Optional sensor settings
   bool use_flag_sensor = false;

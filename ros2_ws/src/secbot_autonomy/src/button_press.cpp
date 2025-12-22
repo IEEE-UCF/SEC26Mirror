@@ -70,9 +70,8 @@ void ButtonPressTask::step() {
   }
 
   // Progress calculation
-  const float total = (cfg_.presses_total == 0)
-                          ? 1.0f
-                          : static_cast<float>(cfg_.presses_total);
+  const float total =
+      (cfg_.presses_total == 0) ? 1.0f : static_cast<float>(cfg_.presses_total);
   float phase_frac = 0.0f;
 
   if (state_ == State::kSettle && cfg_.settle_s > 0.0f) {
@@ -80,7 +79,8 @@ void ButtonPressTask::step() {
   } else if (state_ == State::kPressHold && cfg_.press_hold_s > 0.0f) {
     phase_frac = clamp01(t_state_ / cfg_.press_hold_s) * (1.0f / total) * 0.50f;
   } else if (state_ == State::kReleaseHold && cfg_.release_hold_s > 0.0f) {
-    phase_frac = clamp01(t_state_ / cfg_.release_hold_s) * (1.0f / total) * 0.40f;
+    phase_frac =
+        clamp01(t_state_ / cfg_.release_hold_s) * (1.0f / total) * 0.40f;
   }
   progress_ = clamp01((static_cast<float>(presses_done_) / total) + phase_frac);
 
@@ -128,7 +128,7 @@ void ButtonPressTask::step() {
 
     case State::kIdle:
     default:
-      //This SHOULDNT happen while running
+      // This SHOULDNT happen while running
       status_ = TaskStatus::kFailed;
       break;
   }

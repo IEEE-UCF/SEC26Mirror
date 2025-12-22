@@ -1,6 +1,7 @@
 #include <Arduino.h>
-#include "microros_manager_robot.h"
+
 #include "ExampleMicrorosSubsystem.h"
+#include "microros_manager_robot.h"
 
 Subsystem::MicrorosManagerSetup managerSetup("microros_manager_test");
 Subsystem::ExampleSubsystemSetup exampleSetup("example_subsystem_test");

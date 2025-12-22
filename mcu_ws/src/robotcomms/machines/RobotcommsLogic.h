@@ -9,11 +9,11 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-
-#include "robotcomms/machines/UWBSubsystem.h"
-#include "robot/machines/HeartbeatSubsystem.h"
 #include <microros_manager_robot.h>
+
 #include "UWBDriver.h"
+#include "robot/machines/HeartbeatSubsystem.h"
+#include "robotcomms/machines/UWBSubsystem.h"
 
 using namespace Subsystem;
 
@@ -25,7 +25,8 @@ using namespace Subsystem;
 
 // Device IDs - must be unique across all UWB devices
 #define ROBOTCOMMS_TAG_ID 1  // Main robot tag ID
-static const uint8_t ANCHOR_IDS[] = {10, 11, 12, 13};  // IDs of stationary beacons
+static const uint8_t ANCHOR_IDS[] = {10, 11, 12,
+                                     13};  // IDs of stationary beacons
 static const uint8_t NUM_ANCHORS = 4;
 
 // --- micro-ROS manager ---
@@ -40,9 +41,7 @@ static HeartbeatSubsystem g_hb(g_hb_setup);
 static Drivers::UWBDriverSetup g_uwb_driver_setup(
     "uwb_driver",
     Drivers::UWBMode::TAG,  // Robotcomms is a TAG (initiator)
-    ROBOTCOMMS_TAG_ID,
-    UWB_CS_PIN,
-    UWB_RST_PIN);
+    ROBOTCOMMS_TAG_ID, UWB_CS_PIN, UWB_RST_PIN);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver);
@@ -65,7 +64,9 @@ void setup() {
 
   if (!ok) {
     Serial.println("ERROR: Failed to initialize subsystems!");
-    while (1) { delay(1000); }
+    while (1) {
+      delay(1000);
+    }
   }
 
   // Configure UWB tag to range to anchors

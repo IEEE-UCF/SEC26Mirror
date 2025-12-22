@@ -16,12 +16,11 @@
  * Motion is commanded via cmd_vel, distance tracked via odometry
  */
 
-#include "secbot_autonomy/task_base.hpp"
-
-#include <geometry_msgs/msg/twist.hpp>
-#include <geometry_msgs/msg/pose2_d.hpp>
-
 #include <cstdint>
+#include <geometry_msgs/msg/pose2_d.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 
@@ -83,10 +82,10 @@ class CraterEntryTask : public TaskBase {
  private:
   enum class State : uint8_t {
     kIdle = 0,
-    kApproachRim,     ///< Drive forward to rim
-    kDescendToLine,   ///< Drive forward into crater
-    kDwellOnLine,     ///< Pause for contact
-    kExitCrater,      ///< Reverse out
+    kApproachRim,    ///< Drive forward to rim
+    kDescendToLine,  ///< Drive forward into crater
+    kDwellOnLine,    ///< Pause for contact
+    kExitCrater,     ///< Reverse out
     kDone
   };
 

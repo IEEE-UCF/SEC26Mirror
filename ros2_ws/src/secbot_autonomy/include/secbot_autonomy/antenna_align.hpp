@@ -4,7 +4,7 @@
  * @author Rafeed Khan
  * @brief Antenna alignment task: approach and dock to an antenna face
  *
- * This task uses the ApproachTarget action to navigate to an antenna 
+ * This task uses the ApproachTarget action to navigate to an antenna
  * and align with the correct face for interaction
  *
  * State machine:
@@ -14,32 +14,25 @@
  * This task only sequences the high-level behavior
  */
 
-#include "secbot_autonomy/task_base.hpp"
-
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <geometry_msgs/msg/pose2_d.hpp>
-#include <secbot_msgs/action/approach_target.hpp>
-
 #include <cstdint>
 #include <functional>
+#include <geometry_msgs/msg/pose2_d.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 #include <memory>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <secbot_msgs/action/approach_target.hpp>
+
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 
 /** @brief Cardinal direction of the antenna task face */
-enum class AntennaFace : uint8_t {
-  kNorth = 0,
-  kEast,
-  kSouth,
-  kWest,
-  kUnknown
-};
+enum class AntennaFace : uint8_t { kNorth = 0, kEast, kSouth, kWest, kUnknown };
 
 /** @brief Configuration for antenna alignment task */
 struct AntennaAlignConfig {
   // Tolerances for final alignment
-  float yaw_tolerance_rad = 0.10f;   ///< around 5.7 degrees
+  float yaw_tolerance_rad = 0.10f;  ///< around 5.7 degrees
   float position_tolerance_m = 0.03f;
 
   // Timeout for entire task
@@ -86,8 +79,8 @@ class AntennaAlignTask : public TaskBase {
  private:
   enum class State : uint8_t {
     kIdle = 0,
-    kApproaching,   ///< Navigating to antenna standoff point
-    kAligning,      ///< Fine-tuning heading to face antenna
+    kApproaching,  ///< Navigating to antenna standoff point
+    kAligning,     ///< Fine-tuning heading to face antenna
     kDone
   };
 

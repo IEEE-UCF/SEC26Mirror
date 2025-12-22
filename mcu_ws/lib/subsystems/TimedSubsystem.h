@@ -1,6 +1,7 @@
 /**
  * @file TimedSubsystem.h
- * @brief A thin wrapper over BaseSubsystem that provides simple periodic timers.
+ * @brief A thin wrapper over BaseSubsystem that provides simple periodic
+ * timers.
  */
 #pragma once
 

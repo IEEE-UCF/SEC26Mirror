@@ -24,7 +24,7 @@ class BNO085DriverSetup : public Classes::BaseSetup {
   BNO085DriverSetup() = delete;
 
   BNO085DriverSetup(const char* _id, int8_t _pin = -1)
-      : Classes::BaseSetup(_id), reset_pin(_pin) {};
+      : Classes::BaseSetup(_id), reset_pin(_pin){};
 
  private:
 };
@@ -51,7 +51,7 @@ class BNO085Driver : public Classes::BaseDriver {
   ~BNO085Driver() override = default;
 
   BNO085Driver(const BNO085DriverSetup& setup)
-      : BaseDriver(setup), setup_(setup), imu_(setup.reset_pin) {};
+      : BaseDriver(setup), setup_(setup), imu_(setup.reset_pin){};
 
   bool init() override;
   void update() override;

@@ -31,7 +31,8 @@ class PIDController {
 
   enum class DerivativeMode : uint8_t {
     OnError,       // d(error)/dt (can kick when setpoint steps)
-    OnMeasurement  // -d(measurement)/dt (this is more stable for setpoint steps)
+    OnMeasurement  // -d(measurement)/dt (this is more stable for setpoint
+                   // steps)
   };
 
   struct Config {
@@ -43,12 +44,14 @@ class PIDController {
     // would help unsaturate
     bool conditional_integration = true;
 
-    // Optional low-pass filter for derivative term (0.0-0.9, higher = more smoothing)
+    // Optional low-pass filter for derivative term (0.0-0.9, higher = more
+    // smoothing)
     float d_filter_alpha = 0.0f;
 
     // Set to true if we want to treat dt that is too small as invalid
     float min_dt = 1e-6f;
-    float max_dt = 1.0f;  // sanity guard for stalls, i can set it larger later if we want to run slowly
+    float max_dt = 1.0f;  // sanity guard for stalls, i can set it larger later
+                          // if we want to run slowly
   };
 
   PIDController() = default;
@@ -156,7 +159,8 @@ class PIDController {
     // Optional derivative low-pass filter
     if (cfg_.d_filter_alpha > 0.0f) {
       // d_term_ = alpha * d_term_ + (1-alpha) * d_unfiltered
-      d_term_ = cfg_.d_filter_alpha * d_term_ + (1.0f - cfg_.d_filter_alpha) * d_unfiltered;
+      d_term_ = cfg_.d_filter_alpha * d_term_ +
+                (1.0f - cfg_.d_filter_alpha) * d_unfiltered;
     } else {
       d_term_ = d_unfiltered;
     }

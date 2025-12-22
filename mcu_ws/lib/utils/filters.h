@@ -7,14 +7,16 @@
  * Includes:
  *  - median3: Spike rejection for sensors with occasional outliers (ToF, IR)
  *  - MovingAverage<N>: O(1) circular buffer average, good for steady smoothing
- *  - LowPass1P: Single-pole IIR filter, configurable by alpha, tau, or cutoff freq
+ *  - LowPass1P: Single-pole IIR filter, configurable by alpha, tau, or cutoff
+ * freq
  *
- * All filters are statically allocated and suitable for real-time MCU use!!! so please use em!!
+ * All filters are statically allocated and suitable for real-time MCU use!!! so
+ * please use em!!
  */
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cmath>
 
 #include "math_utils.h"  // clamp(), kPi, etc
 
@@ -26,9 +28,21 @@ namespace secbot::utils {
 // ------------------------------------------------------------
 inline float median3(float a, float b, float c) {
   // returns middle value without sorting arrays
-  if (a > b) { float t=a; a=b; b=t; }
-  if (b > c) { float t=b; b=c; c=t; }
-  if (a > b) { float t=a; a=b; b=t; }
+  if (a > b) {
+    float t = a;
+    a = b;
+    b = t;
+  }
+  if (b > c) {
+    float t = b;
+    b = c;
+    c = t;
+  }
+  if (a > b) {
+    float t = a;
+    a = b;
+    b = t;
+  }
   return b;
 }
 
@@ -40,7 +54,7 @@ template <std::size_t N>
 class MovingAverage {
   static_assert(N > 0, "MovingAverage<N>: N must be > 0");
 
-public:
+ public:
   MovingAverage() { reset(0.0f); }
 
   // Fill buffer with a known value so the initial output is stable
@@ -85,7 +99,7 @@ public:
   inline bool filled() const { return count_ >= N; }
   inline std::size_t count() const { return count_; }
 
-private:
+ private:
   float buf_[N];
   float sum_;
   std::size_t idx_;
@@ -102,7 +116,7 @@ private:
 //  2) "Exact" time-constant mapping: alpha = 1 - exp(-dt/tau)
 // ------------------------------------------------------------
 class LowPass1P {
-public:
+ public:
   LowPass1P() : y_(0.0f), alpha_(1.0f), initialized_(false) {}
 
   inline void reset(float y0 = 0.0f, bool initialized = true) {
@@ -113,19 +127,26 @@ public:
   // Set alpha directly (0..1]. alpha=1 means no filtering
   inline void setAlpha(float alpha) {
     alpha_ = clamp(alpha, 0.0f, 1.0f);
-    if (alpha_ == 0.0f) alpha_ = 1.0f; // avoid "stuck" filter
+    if (alpha_ == 0.0f) alpha_ = 1.0f;  // avoid "stuck" filter
   }
 
   // Configure via time constant tau (seconds) and dt (seconds), FAST (no expf)
   inline void configureTauDtFast(float tau_s, float dt_s) {
-    if (tau_s <= 0.0f || dt_s <= 0.0f) { setAlpha(1.0f); return; }
+    if (tau_s <= 0.0f || dt_s <= 0.0f) {
+      setAlpha(1.0f);
+      return;
+    }
     const float a = dt_s / (tau_s + dt_s);
     setAlpha(a);
   }
 
-  // Configure via time constant tau (seconds) and dt (seconds), EXACT (uses expf)
+  // Configure via time constant tau (seconds) and dt (seconds), EXACT (uses
+  // expf)
   inline void configureTauDtExact(float tau_s, float dt_s) {
-    if (tau_s <= 0.0f || dt_s <= 0.0f) { setAlpha(1.0f); return; }
+    if (tau_s <= 0.0f || dt_s <= 0.0f) {
+      setAlpha(1.0f);
+      return;
+    }
     const float a = 1.0f - std::exp(-dt_s / tau_s);
     setAlpha(a);
   }
@@ -133,19 +154,26 @@ public:
   // Configure via cutoff frequency (Hz) and dt (seconds)
   // tau = 1 / (2*pi*fc)
   inline void configureCutoffHzFast(float cutoff_hz, float dt_s) {
-    if (cutoff_hz <= 0.0f) { setAlpha(1.0f); return; }
+    if (cutoff_hz <= 0.0f) {
+      setAlpha(1.0f);
+      return;
+    }
     const float tau = 1.0f / (2.0f * kPi * cutoff_hz);
     configureTauDtFast(tau, dt_s);
   }
 
   inline void configureCutoffHzExact(float cutoff_hz, float dt_s) {
-    if (cutoff_hz <= 0.0f) { setAlpha(1.0f); return; }
+    if (cutoff_hz <= 0.0f) {
+      setAlpha(1.0f);
+      return;
+    }
     const float tau = 1.0f / (2.0f * kPi * cutoff_hz);
     configureTauDtExact(tau, dt_s);
   }
 
   // Update filter with one sample
-  // If uninitialized, snaps output to first sample (prevents startup ramp weirdness)
+  // If uninitialized, snaps output to first sample (prevents startup ramp
+  // weirdness)
   inline float update(float x) {
     if (!initialized_) {
       y_ = x;
@@ -160,10 +188,10 @@ public:
   inline float alpha() const { return alpha_; }
   inline bool initialized() const { return initialized_; }
 
-private:
+ private:
   float y_;
   float alpha_;
-  bool  initialized_;
+  bool initialized_;
 };
 
-} // namespace secbot::utils
+}  // namespace secbot::utils

@@ -7,13 +7,14 @@
 #pragma once
 
 #include <BaseSubsystem.h>
-#include "TimedSubsystem.h"
+#include <micro_ros_utilities/string_utilities.h>
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 #include <std_msgs/msg/string.h>
-#include <micro_ros_utilities/string_utilities.h>
 #include <uxr/client/util/time.h>
+
+#include "TimedSubsystem.h"
 
 namespace Subsystem {
 
@@ -22,10 +23,11 @@ class HeartbeatSubsystemSetup : public Classes::BaseSetup {
   HeartbeatSubsystemSetup(const char* _id) : Classes::BaseSetup(_id) {}
 };
 
-class HeartbeatSubsystem : public IMicroRosParticipant, public Subsystem::TimedSubsystem {
+class HeartbeatSubsystem : public IMicroRosParticipant,
+                           public Subsystem::TimedSubsystem {
  public:
   explicit HeartbeatSubsystem(const HeartbeatSubsystemSetup& setup)
-  : Subsystem::TimedSubsystem(setup), setup_(setup) {}
+      : Subsystem::TimedSubsystem(setup), setup_(setup) {}
 
   bool init() override { return true; }
   void begin() override {}
@@ -37,14 +39,17 @@ class HeartbeatSubsystem : public IMicroRosParticipant, public Subsystem::TimedS
   }
   void pause() override {}
   void reset() override { pause(); }
-  const char* getInfo() override { static const char info[] = "HeartbeatSubsystem"; return info; }
+  const char* getInfo() override {
+    static const char info[] = "HeartbeatSubsystem";
+    return info;
+  }
 
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     (void)executor;
     node_ = node;
-        if (rclc_publisher_init_best_effort(
-          &pub_, node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
-          "/mcu_robot/heartbeat") != RCL_RET_OK) {
+    if (rclc_publisher_init_best_effort(
+            &pub_, node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+            "/mcu_robot/heartbeat") != RCL_RET_OK) {
       return false;
     }
     msg_.data = micro_ros_string_utilities_set(msg_.data, "HEARTBEAT");

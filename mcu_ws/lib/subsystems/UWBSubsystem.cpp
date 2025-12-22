@@ -155,7 +155,8 @@ void UWBSubsystem::updateRangingMessage() {
 
       // Set measurement data
       msg_range.distance = range.distance_cm;
-      msg_range.signal_strength = 0.0f;  // Not available from DW3000 in this mode
+      msg_range.signal_strength =
+          0.0f;  // Not available from DW3000 in this mode
       msg_range.clock_offset = range.clock_offset;
       msg_range.tx_timestamp = range.tx_timestamp;
       msg_range.rx_timestamp = range.rx_timestamp;

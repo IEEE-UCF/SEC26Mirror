@@ -8,14 +8,14 @@
 #pragma once
 
 #include <BaseSubsystem.h>
+#include <Pose2D.h>
+#include <Vector2D.h>
 #include <mcu_msgs/msg/drive_base.h>
 #include <micro_ros_utilities/type_utilities.h>
 #include <microros_manager_robot.h>
 
 #include "TimedSubsystem.h"
 #include "robot/drive-base/RobotDriveBase.h"
-#include <Vector2D.h>
-#include <Pose2D.h>
 
 // #include messages
 

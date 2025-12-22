@@ -16,7 +16,7 @@ class Pose3D {
   ~Pose3D() = default;
   Pose3D(float _x = 0.0f, float _y = 0.0f, float _z = 0.0f, float _qx = 0.0f,
          float _qy = 0.0f, float _qz = 0.0f, float _qw = 0.0f)
-      : x(_x), y(_y), z(_z), qx(_qx), qy(_qy), qz(_qz), qw(_qw) {};
+      : x(_x), y(_y), z(_z), qx(_qx), qy(_qy), qz(_qz), qw(_qw){};
 
   float getX() { return x; }
   float getY() { return y; }

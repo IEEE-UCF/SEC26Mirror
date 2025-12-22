@@ -4,8 +4,7 @@ EspNow *EspNow::s_instance = nullptr;
 bool EspNow::init() {
   s_instance = this;
   WiFi.mode(WIFI_STA);
-  if (esp_now_init() != ESP_OK)
-    return false;
+  if (esp_now_init() != ESP_OK) return false;
   esp_now_register_recv_cb(EspNow::onDataRecv);
   esp_now_register_send_cb(EspNow::onDataSent);
   esp_now_peer_info_t peerInfo = {};
@@ -27,7 +26,8 @@ bool EspNow::init() {
 //     s_instance->esp_state = RECEIVED;
 //   }
 // }
-void EspNow::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+void EspNow::onDataRecv(const uint8_t *mac, const uint8_t *incomingData,
+                        int len) {
   if (s_instance != nullptr) {
     if (len != sizeof(s_instance->recievedmessage)) {
       Serial.println("Err: Size mismatch");
@@ -91,4 +91,4 @@ void EspNow::update() {
   }
 }
 uint8_t EspNow::getScore() { return s_instance->received_score; }
-} // namespace RawDrivers
+}  // namespace RawDrivers

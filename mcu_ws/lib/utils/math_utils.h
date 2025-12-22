@@ -8,6 +8,7 @@
 #ifdef __cplusplus
 
 #include <stdint.h>
+
 #include <cmath>
 
 namespace secbot::utils {
@@ -43,28 +44,26 @@ constexpr T signT(T v) {
 // - neither clamps by default
 // ----------------------------
 
-// This is like an Arduino-style integer map, but safer (int64 intermediate to reduce overflow risk!!!!)
-constexpr int32_t map_i32(int32_t x,
-                          int32_t in_min, int32_t in_max,
+// This is like an Arduino-style integer map, but safer (int64 intermediate to
+// reduce overflow risk!!!!)
+constexpr int32_t map_i32(int32_t x, int32_t in_min, int32_t in_max,
                           int32_t out_min, int32_t out_max) {
-  if (in_max == in_min) return out_min; // avoid div-by-zero
+  if (in_max == in_min) return out_min;  // avoid div-by-zero
   const int64_t num = int64_t(x - in_min) * int64_t(out_max - out_min);
   const int64_t den = int64_t(in_max - in_min);
   return int32_t(num / den + out_min);
 }
 
 // Float map (recommended for joystick -> velocity scaling)
-constexpr float map_f(float x,
-                      float in_min, float in_max,
-                      float out_min, float out_max) {
+constexpr float map_f(float x, float in_min, float in_max, float out_min,
+                      float out_max) {
   const float den = (in_max - in_min);
-  if (den == 0.0f) return out_min; // avoid div-by-zero
+  if (den == 0.0f) return out_min;  // avoid div-by-zero
   return (x - in_min) * (out_max - out_min) / den + out_min;
 }
 
 // Convenience: mapped + clamped to output bounds (handles inverted ranges)
-constexpr float map_f_clamped(float x,
-                              float in_min, float in_max,
+constexpr float map_f_clamped(float x, float in_min, float in_max,
                               float out_min, float out_max) {
   const float y = map_f(x, in_min, in_max, out_min, out_max);
   const float lo = (out_min < out_max) ? out_min : out_max;
@@ -82,7 +81,8 @@ constexpr float map_f_clamped(float x,
 // input 0.1   -> 0.0 (edge of deadband)
 // input 0.55  -> 0.5 (halfway through remaining range)
 // input 1.0   -> 1.0 (full scale)
-inline float applyDeadband(float value, float deadband, float maxMagnitude = 1.0f) {
+inline float applyDeadband(float value, float deadband,
+                           float maxMagnitude = 1.0f) {
   deadband = std::fabs(deadband);
   if (maxMagnitude <= 0.0f) return 0.0f;
 
@@ -108,7 +108,7 @@ inline float applyDeadband(float value, float deadband, float maxMagnitude = 1.0
 inline float normalizeAngleRad(float angle) {
   angle = std::fmod(angle, 2.0f * kPi);
   if (angle <= -kPi) angle += 2.0f * kPi;
-  if (angle >  kPi)  angle -= 2.0f * kPi;
+  if (angle > kPi) angle -= 2.0f * kPi;
   return angle;
 }
 
@@ -124,6 +124,6 @@ inline float shortestAngularDistanceRad(float from, float to) {
 constexpr float deg2rad(float deg) { return deg * (kPi / 180.0f); }
 constexpr float rad2deg(float rad) { return rad * (180.0f / kPi); }
 
-} // namespace secbot::utils
+}  // namespace secbot::utils
 
-#endif // __cplusplus
+#endif  // __cplusplus

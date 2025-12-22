@@ -13,13 +13,12 @@
  *   IDLE -> SETTLE -> PUSH_OUT -> HOLD -> RETRACT -> (repeat or DONE)
  */
 
-#include "secbot_autonomy/task_base.hpp"
-
+#include <cstdint>
 #include <mcu_msgs/msg/arm_command.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/int16.hpp>
 
-#include <cstdint>
+#include "secbot_autonomy/task_base.hpp"
 
 namespace secbot {
 
@@ -28,8 +27,8 @@ namespace secbot {
  */
 struct PressureClearConfig {
   /// Sweeper positions (degrees or ticks)
-  int16_t sweeper_safe_pos = 0;    ///< Retracted / travel-safe
-  int16_t sweeper_push_pos = 90;   ///< Extended / pushes duck off
+  int16_t sweeper_safe_pos = 0;   ///< Retracted / travel-safe
+  int16_t sweeper_push_pos = 90;  ///< Extended / pushes duck off
 
   /// Actuator settings
   uint8_t sweeper_joint_id = 4;
@@ -85,11 +84,11 @@ class PressureClearTask : public TaskBase {
  private:
   enum class State : uint8_t {
     kIdle = 0,
-    kSettle,    ///< Initial pause
-    kPushOut,   ///< Extending sweeper
-    kHold,      ///< Holding at push position
-    kRetract,   ///< Retracting sweeper
-    kBetween,   ///< Pause between sweeps
+    kSettle,   ///< Initial pause
+    kPushOut,  ///< Extending sweeper
+    kHold,     ///< Holding at push position
+    kRetract,  ///< Retracting sweeper
+    kBetween,  ///< Pause between sweeps
     kDone
   };
 

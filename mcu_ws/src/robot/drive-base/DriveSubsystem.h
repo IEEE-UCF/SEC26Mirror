@@ -14,8 +14,8 @@
 
 #include "TimedSubsystem.h"
 #include "robot/drive-base/RobotDriveBase.h"
-#include "robot/drive-base/Vector2D.h"
-#include "robot/drive-base/localization-subsystem/Pose2D.h"
+#include <Vector2D.h>
+#include <Pose2D.h>
 
 // #include messages
 

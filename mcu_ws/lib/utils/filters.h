@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <cmath>
 
-#include "math.h"  // clamp(), kPi, etc
+#include "math_utils.h"  // clamp(), kPi, etc
 
 namespace secbot::utils {
 

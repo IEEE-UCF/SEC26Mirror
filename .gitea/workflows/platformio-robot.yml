@@ -51,7 +51,7 @@ jobs:
             mcu_ws/libs_external/teensy/micro_ros_platformio/build
             mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
             ~/.cache/pip
-          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**','mcu_ws/platformio.ini') }}
+          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**') }}
           restore-keys: |
             platformio-${{ runner.os }}-
 
@@ -83,12 +83,27 @@ jobs:
         working-directory: mcu_ws/
         shell: bash
         run: |
-          # Install dependencies for all environments (PlatformIO will resolve per env)
+          # 1. Install dependencies
           pio pkg install || true
           
-          # Build all environments defined in platformio.ini
-          # `pio run` without -e builds every env
-          pio run
+          # 2. Extract environments directly from platformio.ini (No Python)
+          # Finds [env:name], strips brackets, filters out anything starting with 'test'
+          envs=$(grep -E "^\[env:" platformio.ini | sed 's/\[env://;s/\]//' | grep -v "^test")
+          
+          # Collapse newlines into spaces so the loop works correctly
+          envs=$(echo $envs | tr '\n' ' ')
+
+          if [ -z "$envs" ]; then
+            echo "::error::No non-test environments found to build."
+            exit 1
+          fi
+
+          # 3. Build the filtered list
+          for env in $envs; do
+            echo "::group::Building environment: $env"
+            pio run -e "$env"
+            echo "::endgroup::"
+          done
 
       - name: Preview MCU artifacts (count + list)
         shell: bash

@@ -8,8 +8,7 @@
 #ifndef POSE2D_H
 #define POSE2D_H
 
-#define PI 3.1415926535897932384626433832795
-
+#define _USE_MATH_DEFINES
 #include <cmath>
 
 class Pose2D {

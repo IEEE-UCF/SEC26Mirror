@@ -13,9 +13,9 @@
 
 #include "EncoderDriver.h"
 #include "MotorDriver.h"
-#include "Vector2D.h"
-#include "localization-subsystem/Localization.h"
-#include "localization-subsystem/RobotConfig.h"
+#include <Vector2D.h>
+#include <Pose2D.h>
+#include <TankDriveLocalization.h>
 #include "pid_controller.h"
 
 enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE };
@@ -26,6 +26,14 @@ struct DriveBaseSetup {
 
   PIDController::Config leftWheelPIDSetup;
   PIDController::Config rightWheelPIDSetup;
+
+  Drive::TankDriveLocalizationSetup localizationSetup;
+
+  // Robot constants for control
+  float maxVelocity;
+  float maxAcceleration;
+  float maxAngularVelocity;
+  float maxAngularAcceleration;
 };
 
 class RobotDriveBase {
@@ -57,7 +65,7 @@ class RobotDriveBase {
   PIDController rightWheelPID_;
 
   DriveBaseSetup setup_;
-  Localization localization_;
+  Drive::TankDriveLocalization localization_;
 
   std::vector<std::unique_ptr<Drivers::MotorDriver>> leftMotors_;
   std::vector<std::unique_ptr<Drivers::MotorDriver>> rightMotors_;

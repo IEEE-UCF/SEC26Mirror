@@ -62,3 +62,6 @@ ros2_ws/.vscode/*
 # platformio
 .pio/*
 mcu_ws/.vscode/*
+
+# ai agents
+.claude/*

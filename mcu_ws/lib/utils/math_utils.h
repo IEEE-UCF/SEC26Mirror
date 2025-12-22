@@ -1,11 +1,11 @@
 #pragma once
 /**
- * @file math.h
+ * @file math_utils.h
  * @author Rafeed Khan
  * @brief Small math helpers for control + navigation, math is hard yknow?
  */
 
-#if defined(__cplusplus) && !defined(UNITY_INCLUDE_EXEC_TIME)
+#ifdef __cplusplus
 
 #include <stdint.h>
 #include <cmath>

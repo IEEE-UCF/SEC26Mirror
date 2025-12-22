@@ -36,6 +36,21 @@ enum class AntennaFace : uint8_t {
   kUnknown
 };
 
+/** @brief Configuration for antenna alignment task */
+struct AntennaAlignConfig {
+  // Tolerances for final alignment
+  float yaw_tolerance_rad = 0.10f;   ///< around 5.7 degrees
+  float position_tolerance_m = 0.03f;
+
+  // Timeout for entire task
+  float timeout_s = 15.0f;
+
+  // Topic names
+  std::string cmd_vel_topic = "cmd_vel";
+  std::string pose_topic = "odom_pose";
+  std::string approach_action = "approach_target";
+};
+
 /**
  * @brief Antenna alignment task
  *
@@ -46,20 +61,7 @@ class AntennaAlignTask : public TaskBase {
  public:
   using ApproachTarget = secbot_msgs::action::ApproachTarget;
   using GoalHandle = rclcpp_action::ClientGoalHandle<ApproachTarget>;
-
-  struct Config {
-    // Tolerances for final alignment
-    float yaw_tolerance_rad = 0.10f;   ///< around 5.7 degrees
-    float position_tolerance_m = 0.03f;
-
-    // Timeout for entire task
-    float timeout_s = 15.0f;
-
-    // Topic names
-    std::string cmd_vel_topic = "cmd_vel";
-    std::string pose_topic = "odom_pose";
-    std::string approach_action = "approach_target";
-  };
+  using Config = AntennaAlignConfig;
 
   AntennaAlignTask(rclcpp::Node::SharedPtr node, const Config& cfg = Config{});
 

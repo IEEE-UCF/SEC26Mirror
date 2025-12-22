@@ -11,11 +11,29 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
+find_package(action_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  # Messages
+  "msg/AntennaMarker.msg"
+  "msg/ArmCommand.msg"
+  "msg/DriveCommand.msg"
   "msg/DuckDetection.msg"
   "msg/DuckDetections.msg"
-  DEPENDENCIES std_msgs vision_msgs
+  "msg/IRCommand.msg"
+  "msg/ImuLite.msg"
+  "msg/LedColor.msg"
+  "msg/Odom2D.msg"
+  "msg/Pose2D.msg"
+  "msg/RangeArray.msg"
+  "msg/TaskStatus.msg"
+  # Actions
+  "action/ApproachTarget.action"
+  "action/NavigatePath.action"
+  # Services
+  "srv/SetTask.srv"
+  "srv/StartStop.srv"
+  DEPENDENCIES std_msgs vision_msgs action_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)

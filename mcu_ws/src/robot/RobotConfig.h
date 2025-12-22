@@ -10,9 +10,8 @@
 #ifndef ROBOTCONFIG_H
 #define ROBOTCONFIG_H
 
-#ifndef PI
-#define PI 3.1415926535897932384626433832795
-#endif
+#define _USE_MATH_DEFINES
+#include <cmath>
 
 namespace RobotConfig {
 
@@ -22,7 +21,7 @@ constexpr float TRACK_WIDTH = 10.0f;
 
 constexpr float WHEEL_DIAMETER = 3.25f;
 constexpr float WHEEL_RADIUS = WHEEL_DIAMETER * 0.5f;
-constexpr float WHEEL_CIRCUMFERENCE = PI * WHEEL_DIAMETER;
+constexpr float WHEEL_CIRCUMFERENCE = M_PI * WHEEL_DIAMETER;
 
 constexpr int RAW_TICKS_PER_REVOLUTION = 3;
 constexpr int GEAR_RATIO = 34;

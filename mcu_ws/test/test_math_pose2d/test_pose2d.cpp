@@ -4,6 +4,7 @@
  * @date 12/21/2025
  */
 
+#define _USE_MATH_DEFINES
 #include <unity.h>
 #include <Pose2D.h>
 #include <cmath>
@@ -31,53 +32,53 @@ void test_pose2d_default_constructor() {
 
 // Test: Parameterized constructor
 void test_pose2d_parameterized_constructor() {
-  Pose2D pose(1.5f, 2.5f, PI / 4.0f);
+  Pose2D pose(1.5f, 2.5f, M_PI / 4.0f);
   TEST_ASSERT_EQUAL_FLOAT(1.5f, pose.x);
   TEST_ASSERT_EQUAL_FLOAT(2.5f, pose.y);
-  TEST_ASSERT_EQUAL_FLOAT(PI / 4.0f, pose.theta);
+  TEST_ASSERT_EQUAL_FLOAT(M_PI / 4.0f, pose.theta);
 }
 
 // Test: Getters
 void test_pose2d_getters() {
-  Pose2D pose(3.0f, 4.0f, PI / 2.0f);
+  Pose2D pose(3.0f, 4.0f, M_PI / 2.0f);
   TEST_ASSERT_EQUAL_FLOAT(3.0f, pose.getX());
   TEST_ASSERT_EQUAL_FLOAT(4.0f, pose.getY());
-  TEST_ASSERT_EQUAL_FLOAT(PI / 2.0f, pose.getTheta());
+  TEST_ASSERT_EQUAL_FLOAT(M_PI / 2.0f, pose.getTheta());
 }
 
 // Test: normalizeTheta basic
 void test_pose2d_normalize_theta_basic() {
-  Pose2D pose(0.0f, 0.0f, 3.0f * PI);
+  Pose2D pose(0.0f, 0.0f, 3.0f * M_PI);
   pose.normalizeTheta();
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, -PI));
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, -M_PI));
 }
 
 // Test: normalizeTheta with positive overflow
 void test_pose2d_normalize_theta_positive_overflow() {
-  Pose2D pose(0.0f, 0.0f, 2.5f * PI);
+  Pose2D pose(0.0f, 0.0f, 2.5f * M_PI);
   pose.normalizeTheta();
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, 0.5f * PI));
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, 0.5f * M_PI));
 }
 
 // Test: normalizeTheta with negative overflow
 void test_pose2d_normalize_theta_negative_overflow() {
-  Pose2D pose(0.0f, 0.0f, -2.5f * PI);
+  Pose2D pose(0.0f, 0.0f, -2.5f * M_PI);
   pose.normalizeTheta();
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, -0.5f * PI));
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, -0.5f * M_PI));
 }
 
-// Test: normalizeTheta at exactly PI
+// Test: normalizeTheta at exactly M_PI
 void test_pose2d_normalize_theta_at_pi() {
-  Pose2D pose(0.0f, 0.0f, PI);
+  Pose2D pose(0.0f, 0.0f, M_PI);
   pose.normalizeTheta();
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, -PI) || floatEqual(pose.theta, PI));
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, -M_PI) || floatEqual(pose.theta, M_PI));
 }
 
-// Test: normalizeTheta at exactly -PI
+// Test: normalizeTheta at exactly -M_PI
 void test_pose2d_normalize_theta_at_negative_pi() {
-  Pose2D pose(0.0f, 0.0f, -PI);
+  Pose2D pose(0.0f, 0.0f, -M_PI);
   pose.normalizeTheta();
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, -PI) || floatEqual(pose.theta, PI));
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, -M_PI) || floatEqual(pose.theta, M_PI));
 }
 
 // Test: normalizeTheta with zero
@@ -120,35 +121,35 @@ void test_pose2d_add_zeros() {
 // Test: rotate method basic
 void test_pose2d_rotate_basic() {
   Pose2D pose(0.0f, 0.0f, 0.0f);
-  pose.rotate(PI / 2.0f);
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, PI / 2.0f));
+  pose.rotate(M_PI / 2.0f);
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, M_PI / 2.0f));
 }
 
 // Test: rotate method with existing angle
 void test_pose2d_rotate_with_existing_angle() {
-  Pose2D pose(0.0f, 0.0f, PI / 4.0f);
-  pose.rotate(PI / 4.0f);
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, PI / 2.0f));
+  Pose2D pose(0.0f, 0.0f, M_PI / 4.0f);
+  pose.rotate(M_PI / 4.0f);
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, M_PI / 2.0f));
 }
 
 // Test: rotate method full circle
 void test_pose2d_rotate_full_circle() {
   Pose2D pose(0.0f, 0.0f, 0.0f);
-  pose.rotate(2.0f * PI);
+  pose.rotate(2.0f * M_PI);
   pose.normalizeTheta();
   TEST_ASSERT_TRUE(floatEqual(pose.theta, 0.0f, 0.001f));
 }
 
 // Test: rotate method negative angle
 void test_pose2d_rotate_negative() {
-  Pose2D pose(0.0f, 0.0f, PI / 2.0f);
-  pose.rotate(-PI / 4.0f);
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, PI / 4.0f));
+  Pose2D pose(0.0f, 0.0f, M_PI / 2.0f);
+  pose.rotate(-M_PI / 4.0f);
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, M_PI / 4.0f));
 }
 
 // Test: Large angle normalization (multiple rotations)
 void test_pose2d_large_angle_normalization() {
-  Pose2D pose(0.0f, 0.0f, 10.0f * PI);
+  Pose2D pose(0.0f, 0.0f, 10.0f * M_PI);
   pose.normalizeTheta();
   TEST_ASSERT_TRUE(floatEqual(pose.theta, 0.0f, 0.001f));
 }
@@ -163,15 +164,15 @@ void test_pose2d_small_angles() {
 // Test: Combined operations
 void test_pose2d_combined_operations() {
   Pose2D pose(1.0f, 2.0f, 0.0f);
-  Pose2D delta(0.5f, 0.5f, PI / 6.0f);
+  Pose2D delta(0.5f, 0.5f, M_PI / 6.0f);
 
   pose.add(delta);
-  pose.rotate(PI / 6.0f);
+  pose.rotate(M_PI / 6.0f);
   pose.normalizeTheta();
 
   TEST_ASSERT_EQUAL_FLOAT(1.5f, pose.x);
   TEST_ASSERT_EQUAL_FLOAT(2.5f, pose.y);
-  TEST_ASSERT_TRUE(floatEqual(pose.theta, PI / 3.0f));
+  TEST_ASSERT_TRUE(floatEqual(pose.theta, M_PI / 3.0f));
 }
 
 int main(int argc, char **argv) {

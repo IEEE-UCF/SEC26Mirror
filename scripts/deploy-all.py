@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Container paths (match docker-compose mounts)
@@ -69,6 +70,17 @@ def run(cmd, env=None, cwd=None, shell=False):
         sys.exit(e.returncode or 1)
 
 
+def try_run(cmd, env=None, cwd=None, shell=False) -> bool:
+    """Run a command and return True/False instead of exiting on error."""
+    print(f"$ {' '.join(cmd) if not shell else cmd}")
+    try:
+        subprocess.run(cmd, check=True, env=env, cwd=cwd, shell=shell)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️ Command failed (will handle): {e}")
+        return False
+
+
 def ensure_in_container():
     # Best-effort check to ensure paths exist in the container
     missing = []
@@ -82,6 +94,71 @@ def ensure_in_container():
         print("This script is intended to run inside the devcontainer.")
         print("Start the container and run it there (docker exec or VS Code).")
         sys.exit(1)
+
+
+def get_ros_distro() -> str:
+    dist = os.environ.get("ROS_DISTRO")
+    if not dist and Path("/opt/ros").exists():
+        # Pick the latest alphabetically (rough but effective)
+        dists = [p.name for p in Path("/opt/ros").iterdir() if p.is_dir()]
+        if dists:
+            dist = sorted(dists)[-1]
+    return dist or "jazzy"
+
+
+def rosdep_update_and_install():
+    """Ensure rosdep is available, updated, and install workspace deps.
+
+    - Updates apt-get package lists
+    - Installs rosdep if missing
+    - Initializes rosdep if needed
+    - Retries `rosdep update` up to 3 times
+    - Installs dependencies for ROS workspace src with ament_python skipped
+    """
+    distro = get_ros_distro()
+    src_path = ROS_WS / "src"
+
+    # Update apt-get package lists first
+    print("🔄 Updating apt-get package lists...")
+    if not try_run(["bash", "-lc", "sudo apt-get update"]):
+        print("⚠️ apt-get update had some issues, continuing...")
+
+    # Ensure rosdep exists
+    if not try_run(["bash", "-lc", "command -v rosdep >/dev/null 2>&1"]):
+        print("ℹ️ rosdep not found; installing via apt")
+        if not try_run(["bash", "-lc", "sudo apt-get update && sudo apt-get install -y python3-rosdep"]):
+            print("❌ Failed to install rosdep (python3-rosdep)")
+            sys.exit(1)
+
+    # Ensure rosdep is initialized
+    default_list = Path("/etc/ros/rosdep/sources.list.d/20-default.list")
+    if not default_list.exists():
+        print("ℹ️ rosdep not initialized; running 'sudo rosdep init'")
+        if not try_run(["bash", "-lc", "sudo rosdep init"]):
+            print("❌ Failed to initialize rosdep")
+            sys.exit(1)
+
+    # rosdep update with retries (handles network flakiness)
+    updated = False
+    for attempt in range(1, 4):
+        print(f"🔄 rosdep update attempt {attempt}/3")
+        if try_run(["bash", "-lc", "rosdep update || true"]):
+            updated = True
+            break
+        time.sleep(2)
+
+    if not updated:
+        print("⚠️ rosdep update had issues, continuing anyway...")
+
+    # Install workspace dependencies with ament_python skipped
+    install_cmd = (
+        f"sudo -n rosdep install --rosdistro {distro} --from-paths {src_path} -y --ignore-src --skip-keys ament_python "
+        f"|| rosdep install --rosdistro {distro} --from-paths {src_path} -y --ignore-src --skip-keys ament_python"
+    )
+    if not try_run(["bash", "-lc", install_cmd], shell=False):
+        print("❌ rosdep install failed for workspace dependencies")
+        sys.exit(1)
+    print("✅ rosdep dependencies installed")
 
 
 def flash_mcu():
@@ -101,6 +178,8 @@ def build_ros():
     if not script.exists():
         print(f"❌ Missing script: {script}")
         sys.exit(1)
+    print("🛠️ Resolving dependencies with rosdep...")
+    rosdep_update_and_install()
     print("🛠️ Building ROS 2 workspace with colcon...")
     run(["bash", str(script)])
     print("✅ ROS 2 build completed")

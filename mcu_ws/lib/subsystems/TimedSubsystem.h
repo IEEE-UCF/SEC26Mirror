@@ -6,6 +6,7 @@
 
 #include <Arduino.h>
 #include <BaseSubsystem.h>
+#include <elapsedMillis.h>
 
 namespace Subsystem {
 

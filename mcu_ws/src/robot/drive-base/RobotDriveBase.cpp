@@ -7,7 +7,11 @@
  * @brief Constructor for RobotDriveBase object
  * @param DriveBaseSetup setup object
  */
-RobotDriveBase::RobotDriveBase(const DriveBaseSetup& setup) : setup_(setup) {
+RobotDriveBase::RobotDriveBase(const DriveBaseSetup& setup)
+    : setup_(setup),
+      localization_(setup.localizationSetup),
+      leftWheelPID_(setup.leftWheelPIDSetup),
+      rightWheelPID_(setup.rightWheelPIDSetup) {
   // this is kinda dumb, also assumes one encoder per side
 
   for (const auto& motorSetup : setup.motorSetups) {
@@ -47,8 +51,8 @@ void RobotDriveBase::driveVelocity(Vector2D& targetVelocity) {
   targetVelocity_ = targetVelocity;
 
   // Reset PIDs
-  // leftPID.reset()
-  // rightPID.reset()
+  leftWheelPID_.reset();
+  rightWheelPID_.reset();
 }
 
 /**
@@ -60,8 +64,8 @@ void RobotDriveBase::driveSetPoint(Pose2D& targetPose) {
   targetPose_ = targetPose;
 
   // Reset PIDs
-  // leftPID.reset()
-  // rightPID.reset()
+  leftWheelPID_.reset();
+  rightWheelPID_.reset();
 }
 
 /**
@@ -99,15 +103,15 @@ Vector2D RobotDriveBase::getCurrentVelocity(float dt) {
 
   // encoder ticks for velocity
   if (dleftTicks != 0 && dRightTicks != 0) {
-    float dleftDist = static_cast<float>(dleftTicks) * RobotConfig::IN_PER_TICK;
+    float dleftDist = static_cast<float>(dleftTicks) * setup_.localizationSetup.inches_per_tick;
     float drightDist =
-        static_cast<float>(dRightTicks) * RobotConfig::IN_PER_TICK;
+        static_cast<float>(dRightTicks) * setup_.localizationSetup.inches_per_tick;
 
     float leftVel = dleftDist / dt;
     float rightVel = drightDist / dt;
 
     float vx = 0.5f * (leftVel + rightVel);
-    float omega = (rightVel - leftVel) / RobotConfig::TRACK_WIDTH;
+    float omega = (rightVel - leftVel) / setup_.localizationSetup.track_width;
 
     return Vector2D(vx, 0.0f, omega);
   }
@@ -144,7 +148,7 @@ void RobotDriveBase::stop() { manualMotorSpeeds(0, 0); }
  * @param newPose Pose2D object
  */
 void RobotDriveBase::resetPose(Pose2D& newPose) {
-  localization_ = Localization(newPose.x, newPose.y, newPose.theta);
+  localization_.reset();
   prevPose_ = newPose;
 }
 
@@ -156,11 +160,11 @@ void RobotDriveBase::velocityControl(float dt) {
   if (dt < 0.001f) return;
 
   // ramp up linear + angular velocity to prevent sudden changes
-  float linearAccelLimit = RobotConfig::MAX_ACCELERATION * dt;
+  float linearAccelLimit = setup_.maxAcceleration * dt;
   float deltaV = std::clamp(targetVelocity_.getX() - currentVelocity_.getX(),
                             -linearAccelLimit, linearAccelLimit);
 
-  float angularAccelLimit = RobotConfig::MAX_ANGULAR_ACCELERATION * dt;
+  float angularAccelLimit = setup_.maxAngularAcceleration * dt;
   float deltaOmega =
       std::clamp(targetVelocity_.getTheta() - currentVelocity_.getTheta(),
                  -angularAccelLimit, angularAccelLimit);
@@ -171,24 +175,26 @@ void RobotDriveBase::velocityControl(float dt) {
 
   // inverse kinematics
   float targetLeftWheelVel =
-      rampedV - (rampedOmega * RobotConfig::TRACK_WIDTH) * 0.5f;
+      rampedV - (rampedOmega * setup_.localizationSetup.track_width) * 0.5f;
   float targetRightWheelVel =
-      rampedV + (rampedOmega * RobotConfig::TRACK_WIDTH) * 0.5f;
+      rampedV + (rampedOmega * setup_.localizationSetup.track_width) * 0.5f;
 
   float actualLeftVel =
       (static_cast<float>(leftTicks_.position - prevLeftTicks_) *
-       RobotConfig::IN_PER_TICK) /
+       setup_.localizationSetup.inches_per_tick) /
       dt;
   float actualRightVel =
       (static_cast<float>(rightTicks_.position - prevRightTicks_) *
-       RobotConfig::IN_PER_TICK) /
+       setup_.localizationSetup.inches_per_tick) /
       dt;
 
-  // int leftOutput = leftPID.calculate(actualLeftVel, targetLeftWheelVel, dt);
-  // int rightOutput = rightPID.calculate(actualRightVel, targetRightWheelVel,
-  // dt);
+  float leftWheelOutput =
+      leftWheelPID_.update(targetLeftWheelVel, actualLeftVel, dt);
+  float rightWheelOutput =
+      rightWheelPID_.update(targetRightWheelVel, actualRightVel, dt);
 
-  // applyMotorSpeeds(leftOutput, rightOutput);
+  writeMotorSpeeds(static_cast<int>(leftWheelOutput),
+                   static_cast<int>(rightWheelOutput));
 }
 
 /**
@@ -230,9 +236,9 @@ void RobotDriveBase::setPointControl(float dt) {
 
   // clamp to set limits
   v_cmd =
-      std::clamp(v_cmd, -RobotConfig::MAX_VELOCITY, RobotConfig::MAX_VELOCITY);
-  omega_cmd = std::clamp(omega_cmd, -RobotConfig::MAX_ANGULAR_VELOCITY,
-                         RobotConfig::MAX_ANGULAR_VELOCITY);
+      std::clamp(v_cmd, -setup_.maxVelocity, setup_.maxVelocity);
+  omega_cmd = std::clamp(omega_cmd, -setup_.maxAngularVelocity,
+                         setup_.maxAngularVelocity);
 
   targetVelocity_ = Vector2D(v_cmd, 0.0f, omega_cmd);
 

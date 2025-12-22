@@ -9,7 +9,7 @@
  */
 
 #include <cstdint>
-#include "math.h"   // kPi, deg2rad(), rad2deg()
+#include "math_utils.h"   // kPi, deg2rad(), rad2deg()
 
 namespace secbot::utils::units {
 

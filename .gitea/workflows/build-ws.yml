@@ -331,14 +331,12 @@ jobs:
           done
 
       - name: Save primary colcon cache (if miss)
-        if: steps.colcon-cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: .colcon-cache
           key: colcon-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
 
       - name: Save shared fallback cache (if miss)
-        if: steps.colcon-cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: .colcon-cache

@@ -1,24 +1,20 @@
 /**
  * @file crank_turn.cpp
  * @author Rafeed Khan
- * @brief Implementation for CrankTurnTask (Antenna #2 crank task).
+ * @brief Implementation of crank turn task for Antenna #2
  */
 
-#include "crank_turn.h"
+#include "secbot_autonomy/crank_turn.hpp"
+
 #include <cmath>
 
 namespace secbot {
 
-static inline int16_t clampi16(int32_t x, int16_t lo, int16_t hi) {
-  return (x < lo) ? lo : (x > hi) ? hi : static_cast<int16_t>(x);
-}
+// DegUnwrap implementation
 
-// -------------------- DegUnwrap --------------------
-
-float CrankTurnTask::wrapDeltaDeg_(float d) {
-  // Wrap delta into (-180, 180]
+float CrankTurnTask::wrapDeltaDeg(float d) {
   while (d <= -180.0f) d += 360.0f;
-  while (d >  180.0f)  d -= 360.0f;
+  while (d > 180.0f) d -= 360.0f;
   return d;
 }
 
@@ -33,42 +29,70 @@ float CrankTurnTask::DegUnwrap::update(float deg) {
     reset(deg);
     return acc;
   }
-  const float d = CrankTurnTask::wrapDeltaDeg_(deg - last);
+  const float d = CrankTurnTask::wrapDeltaDeg(deg - last);
   acc += d;
   last = deg;
   return acc;
 }
 
-// -------------------- helpers --------------------
+// Helpers
 
-float CrankTurnTask::clamp01_(float x) {
+float CrankTurnTask::clamp01(float x) {
   if (x < 0.0f) return 0.0f;
   if (x > 1.0f) return 1.0f;
   return x;
 }
 
-void CrankTurnTask::enterState_(State s) {
+void CrankTurnTask::enterState(State s) {
   state_ = s;
+  state_entry_time_ = node_->now();
   t_state_ = 0.0f;
 }
 
-// -------------------- CrankTurnTask --------------------
-
-CrankTurnTask::CrankTurnTask(const Config& cfg, const IO& io) : cfg_(cfg), io_(io) {
-  reset();
+void CrankTurnTask::commandMotor(int16_t speed) {
+  secbot_msgs::msg::ArmCommand msg;
+  msg.joint_id = cfg_.crank_joint_id;
+  msg.position = speed;  // Using position field for speed command
+  msg.speed = cfg_.spin_speed;
+  arm_pub_->publish(msg);
 }
 
-void CrankTurnTask::start() {
-  // If we cannot command the crank motor, FAIL FAST!!!!!
-  if (io_.set_crank_pwm == nullptr) {
-    status_ = PrimitiveStatus::kFailed;
-    state_ = State::kFailed;
-    progress_ = 0.0f;
-    turned_deg_ = 0.0f;
-    return;
-  }
+void CrankTurnTask::stopMotor() {
+  commandMotor(0);
+}
 
-  // Compute open-loop spin time (only used if no encoder)
+// Constructor
+
+CrankTurnTask::CrankTurnTask(rclcpp::Node::SharedPtr node,
+                             const CrankTurnConfig& cfg)
+    : TaskBase(node), cfg_(cfg) {
+  arm_pub_ = node_->create_publisher<secbot_msgs::msg::ArmCommand>(
+      cfg_.arm_command_topic, 10);
+
+  encoder_sub_ = node_->create_subscription<std_msgs::msg::Float32>(
+      cfg_.crank_encoder_topic, 10,
+      std::bind(&CrankTurnTask::onEncoderAngle, this, std::placeholders::_1));
+
+  complete_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
+      cfg_.task_complete_topic, 10,
+      std::bind(&CrankTurnTask::onTaskComplete, this, std::placeholders::_1));
+}
+
+// Callbacks
+
+void CrankTurnTask::onEncoderAngle(const std_msgs::msg::Float32::SharedPtr msg) {
+  current_encoder_deg_ = msg->data;
+  encoder_valid_ = true;
+}
+
+void CrankTurnTask::onTaskComplete(const std_msgs::msg::Bool::SharedPtr msg) {
+  task_complete_signal_ = msg->data;
+}
+
+// TaskBase interface
+
+void CrankTurnTask::start() {
+  // Compute open-loop spin time
   if (cfg_.open_loop_spin_s > 0.0f) {
     spin_goal_s_ = cfg_.open_loop_spin_s;
   } else {
@@ -76,181 +100,143 @@ void CrankTurnTask::start() {
     spin_goal_s_ = cfg_.target_deg / rate;
   }
 
-  // Reset timers/feedback
-  t_state_ = 0.0f;
-  t_total_ = 0.0f;
+  // Reset state
   progress_ = 0.0f;
   turned_deg_ = 0.0f;
-
-  // Stop motor initially
-  io_.set_crank_pwm(0);
+  task_complete_signal_ = false;
+  start_time_ = node_->now();
 
   // Prime encoder tracking if available
-  if (io_.read_crank_deg) {
-    const float a0 = io_.read_crank_deg();
-    unwrap_.reset(a0);
+  if (encoder_valid_) {
+    unwrap_.reset(current_encoder_deg_);
     start_unwrapped_deg_ = unwrap_.acc;
   } else {
     unwrap_.inited = false;
     start_unwrapped_deg_ = 0.0f;
   }
 
-  status_ = PrimitiveStatus::kRunning;
-  enterState_(State::kSettle);
+  stopMotor();
+  status_ = TaskStatus::kRunning;
+  enterState(State::kSettle);
+
+  RCLCPP_INFO(node_->get_logger(), "CrankTurn: Starting (target %.0f deg)",
+              cfg_.target_deg);
+}
+
+void CrankTurnTask::step() {
+  if (status_ != TaskStatus::kRunning) {
+    return;
+  }
+
+  // Update timing
+  t_state_ = (node_->now() - state_entry_time_).seconds();
+  float t_total = (node_->now() - start_time_).seconds();
+
+  // Timeout check
+  if (cfg_.timeout_s > 0.0f && t_total >= cfg_.timeout_s) {
+    RCLCPP_WARN(node_->get_logger(), "CrankTurn: Timeout");
+    stopMotor();
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    return;
+  }
+
+  // External completion signal wins immediately
+  if (task_complete_signal_) {
+    stopMotor();
+    status_ = TaskStatus::kSucceeded;
+    progress_ = 1.0f;
+    enterState(State::kDone);
+    RCLCPP_INFO(node_->get_logger(), "CrankTurn: Completed via external signal");
+    return;
+  }
+
+  // Update turned degrees
+  if (encoder_valid_) {
+    const float uw = unwrap_.update(current_encoder_deg_);
+    turned_deg_ = std::fabs(uw - start_unwrapped_deg_);
+  } else if (state_ == State::kSpin && spin_goal_s_ > 1e-3f) {
+    // Open-loop estimate
+    turned_deg_ = cfg_.target_deg * clamp01(t_state_ / spin_goal_s_);
+  }
+
+  // Progress
+  if (cfg_.target_deg > 1e-3f) {
+    progress_ = clamp01(turned_deg_ / cfg_.target_deg);
+  } else {
+    progress_ = 1.0f;
+  }
+
+  // State machine
+  switch (state_) {
+    case State::kSettle:
+      stopMotor();
+      if (t_state_ >= cfg_.settle_s) {
+        enterState(State::kSpin);
+      }
+      break;
+
+    case State::kSpin: {
+      // Command motor in configured direction
+      int16_t cmd = static_cast<int16_t>(cfg_.spin_speed);
+      if (cfg_.direction < 0) cmd = -cmd;
+      commandMotor(cmd);
+
+      bool done = false;
+      if (encoder_valid_) {
+        // Closed-loop: stop when turned enough
+        if (turned_deg_ >= (cfg_.target_deg - cfg_.deg_tolerance)) {
+          done = true;
+        }
+      } else {
+        // Open-loop: stop when time elapsed
+        if (t_state_ >= spin_goal_s_) {
+          done = true;
+        }
+      }
+
+      if (done) {
+        stopMotor();
+        enterState(State::kHold);
+      }
+    } break;
+
+    case State::kHold:
+      stopMotor();
+      if (t_state_ >= cfg_.hold_s) {
+        status_ = TaskStatus::kSucceeded;
+        progress_ = 1.0f;
+        enterState(State::kDone);
+        RCLCPP_INFO(node_->get_logger(), "CrankTurn: Completed (%.0f deg)",
+                    turned_deg_);
+      }
+      break;
+
+    case State::kDone:
+    case State::kIdle:
+    default:
+      break;
+  }
 }
 
 void CrankTurnTask::cancel() {
-  if (io_.set_crank_pwm) {
-    io_.set_crank_pwm(0);
+  if (status_ == TaskStatus::kRunning) {
+    stopMotor();
+    status_ = TaskStatus::kFailed;
+    state_ = State::kDone;
+    RCLCPP_INFO(node_->get_logger(), "CrankTurn: Cancelled");
   }
-  status_ = PrimitiveStatus::kFailed;
-  enterState_(State::kFailed);
 }
 
 void CrankTurnTask::reset() {
-  if (io_.set_crank_pwm) {
-    io_.set_crank_pwm(0);
-  }
-  status_ = PrimitiveStatus::kIdle;
+  TaskBase::reset();
+  stopMotor();
   state_ = State::kIdle;
-  t_state_ = 0.0f;
-  t_total_ = 0.0f;
-  progress_ = 0.0f;
   turned_deg_ = 0.0f;
   spin_goal_s_ = 0.0f;
   unwrap_.inited = false;
   start_unwrapped_deg_ = 0.0f;
-}
-
-TankPwmCmd CrankTurnTask::update(float dt) {
-  TankPwmCmd out{};
-  out.left_pwm = 0;
-  out.right_pwm = 0;
-  out.finished = false;
-  out.success = false;
-
-  // Idle: nothing running
-  if (status_ == PrimitiveStatus::kIdle) {
-    out.finished = true;
-    out.success = false;
-    return out;
-  }
-
-  // Done states: keep returning stop
-  if (status_ == PrimitiveStatus::kSucceeded || status_ == PrimitiveStatus::kFailed) {
-    out.finished = true;
-    out.success = (status_ == PrimitiveStatus::kSucceeded);
-    return out;
-  }
-
-  if (dt < 0.0f) dt = 0.0f;
-  t_state_ += dt;
-  t_total_ += dt;
-
-  // Global timeout
-  if (cfg_.timeout_s > 0.0f && t_total_ >= cfg_.timeout_s) {
-    cancel();
-    out.finished = true;
-    out.success = false;
-    return out;
-  }
-
-  // Optional “task complete” signal wins immediately (LED/vision/etc)
-  if (io_.read_task_complete && io_.read_task_complete()) {
-    io_.set_crank_pwm(0);
-    status_ = PrimitiveStatus::kSucceeded;
-    enterState_(State::kDone);
-    progress_ = 1.0f;
-
-    out.finished = true;
-    out.success = true;
-    return out;
-  }
-
-  // Update turned degrees if encoder exists (once again someone please make the encoder)
-  if (io_.read_crank_deg) {
-    const float a = io_.read_crank_deg();
-    const float uw = unwrap_.update(a);
-    turned_deg_ = std::fabs(uw - start_unwrapped_deg_);
-  } else {
-    // Open-loop approximation: progress based on time in SPIN
-    // (turned_deg_ becomes "estimated", not real)
-    if (state_ == State::kSpin && spin_goal_s_ > 1e-3f) {
-      turned_deg_ = cfg_.target_deg * clamp01_(t_state_ / spin_goal_s_);
-    }
-  }
-
-  // Progress is always a simple fraction toward target
-  if (cfg_.target_deg > 1e-3f) {
-    progress_ = clamp01_(turned_deg_ / cfg_.target_deg);
-  } else {
-    progress_ = 1.0f;
-  }
-
-  // --------------------------
-  // S.M.T (STATE MACHINE TIME!!!)
-  // --------------------------
-  switch (state_) {
-    case State::kSettle: {
-      // keep motor stopped while settling
-      io_.set_crank_pwm(0);
-
-      if (t_state_ >= cfg_.settle_s) {
-        enterState_(State::kSpin);
-      }
-    } break;
-
-    case State::kSpin: {
-      // SPIN IT!!!
-      const int16_t dir = (cfg_.direction >= 0) ? 1 : -1;
-      const int16_t cmd = clampi16(static_cast<int32_t>(dir) * cfg_.spin_pwm, -255, 255);
-      io_.set_crank_pwm(cmd);
-
-      bool done = false;
-
-      // If we have encoder: stop when turned >= target - tol
-      if (io_.read_crank_deg) {
-        if (turned_deg_ >= (cfg_.target_deg - cfg_.deg_tol)) done = true;
-      } else {
-        // No encoder: stop when time exceeded
-        if (t_state_ >= spin_goal_s_) done = true;
-      }
-
-      if (done) {
-        io_.set_crank_pwm(0);
-        enterState_(State::kHold);
-      }
-    } break;
-
-    case State::kHold: {
-      // stop and let everything settle so you don't overshoot / bounce back
-      io_.set_crank_pwm(0);
-
-      if (t_state_ >= cfg_.hold_s) {
-        status_ = PrimitiveStatus::kSucceeded;
-        enterState_(State::kDone);
-        progress_ = 1.0f;
-
-        out.finished = true;
-        out.success = true;
-        return out;
-      }
-    } break;
-
-    case State::kDone:
-    case State::kFailed:
-    case State::kIdle:
-    default:
-      // ADDING MORE FAILSAFES AHHH SHOULDNT BE HERE WHILE RUNNING
-      cancel();
-      out.finished = true;
-      out.success = false;
-      return out;
-  }
-
-  out.finished = false;
-  out.success = false;
-  return out;
+  task_complete_signal_ = false;
 }
 
 }  // namespace secbot

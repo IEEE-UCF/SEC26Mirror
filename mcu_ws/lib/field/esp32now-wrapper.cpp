@@ -14,6 +14,7 @@ bool EspNow::init() {
   peerInfo.encrypt = false;
   return (esp_now_add_peer(&peerInfo) == ESP_OK);
 }
+<<<<<<< HEAD
 // void EspNow::onDataRecv(const esp_now_recv_info_t *sender_info,
 //                         const uint8_t *incomingData, int len) {
 //   if (s_instance != nullptr) {
@@ -28,6 +29,10 @@ bool EspNow::init() {
 //   }
 // }
 void EspNow::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+=======
+void EspNow::onDataRecv(const uint8_t *mac_addr,
+                        const uint8_t *incomingData, int len) {
+>>>>>>> 5730874294bfdee94623e9c745fe01cc3b4e3758
   if (s_instance != nullptr) {
     if (len != sizeof(s_instance->recievedmessage)) {
       Serial.println("Err: Size mismatch");
@@ -39,6 +44,7 @@ void EspNow::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len
     s_instance->esp_state = RECEIVED;
   }
 }
+<<<<<<< HEAD
 // void EspNow::onDataSent(const esp_now_send_info_t *receiver_info,
 //                         esp_now_send_status_t status) {
 //   Serial.print("\r\nLast Packet Send Status:\t");
@@ -47,6 +53,10 @@ void EspNow::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len
 //   s_instance->esp_state = SENDING;
 // }
 void EspNow::onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+=======
+void EspNow::onDataSent(const uint8_t *mac_addr,
+                        esp_now_send_status_t status) {
+>>>>>>> 5730874294bfdee94623e9c745fe01cc3b4e3758
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success"
                                                 : "Delivery Fail");

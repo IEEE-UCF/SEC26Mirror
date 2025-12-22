@@ -11,11 +11,20 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
+find_package(action_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  # Messages
   "msg/DuckDetection.msg"
   "msg/DuckDetections.msg"
-  DEPENDENCIES std_msgs vision_msgs
+  "msg/TaskStatus.msg"
+  # Actions
+  "action/ApproachTarget.action"
+  "action/NavigatePath.action"
+  # Services
+  "srv/SetTask.srv"
+  "srv/StartStop.srv"
+  DEPENDENCIES std_msgs vision_msgs action_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)

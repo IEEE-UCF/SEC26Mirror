@@ -47,8 +47,11 @@ namespace RawDrivers{
     }esp_state;
     const ESPNowSetup &_setup;
     //@brief callback functions!
-    static void onDataSent(const esp_now_send_info_t *receiver_info, esp_now_send_status_t status);
-    static void onDataRecv(const esp_now_recv_info_t *sender_info, const uint8_t *incomingData, int len);    
+    // static void onDataSent(const esp_now_send_info_t *receiver_info, esp_now_send_status_t status);
+    // static void onDataRecv(const esp_now_recv_info_t *sender_info, const uint8_t *incomingData, int len);    
+    // Change these lines:
+    static void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
+    static void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
     static EspNow* s_instance;
     //@breif both sender and receiver will recieve/send this information...
     typedef struct {

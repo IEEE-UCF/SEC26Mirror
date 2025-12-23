@@ -1,10 +1,21 @@
-# MCU Unit Tests
+# MCU Tests
 
-This directory contains unit tests for the MCU firmware components.
+This directory contains tests for the MCU firmware components.
 
 ## Overview
 
-The test suite validates core mathematical and control components used throughout the robot firmware. All tests run **natively on your computer** without requiring physical hardware.
+The test suite includes two types of tests:
+
+1. **Native Tests** (this directory): Run on your computer without requiring hardware
+   - Mathematical operations (Pose2D, Pose3D, Vector2D)
+   - Control algorithms (PID, kinematics, motion profiles, trajectory following)
+   - Utility functions (filters, unit conversions)
+
+2. **MCU Hardware Tests** (`../src/test/`): Run on physical Teensy/ESP32 boards
+   - Subsystem integration tests
+   - Sensor/driver functionality tests
+   - micro-ROS communication tests
+   - See [MCU_TESTS_SUMMARY.md](MCU_TESTS_SUMMARY.md) for details
 
 ## Prerequisites
 

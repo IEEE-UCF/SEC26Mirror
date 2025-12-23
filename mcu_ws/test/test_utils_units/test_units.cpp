@@ -14,7 +14,7 @@ using namespace secbot::utils;
 
 // Helper function to compare floats with tolerance
 bool floatEqual(float a, float b, float epsilon = 0.001f) {
-  return fabs(a - b) < epsilon;
+  return fabs(a - b) <= epsilon;
 }
 
 void setUp(void) {}

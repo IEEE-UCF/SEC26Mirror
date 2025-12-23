@@ -299,7 +299,7 @@ void test_trapezoid_negative_goal() {
   profile.update(0.1f);
   MotionState st = profile.state();
 
-  TEST_ASSERT_LESS_THAN(0.0f, st.vel);  // Negative velocity
+  TEST_ASSERT_TRUE(st.vel < 0.0f);  // Negative velocity
   TEST_ASSERT_FALSE(profile.isFinished());
 }
 
@@ -458,7 +458,7 @@ void test_trapezoid_pass_through_max_vel() {
   MotionState final_state = profile.state();
 
   // Should be near max velocity or goal velocity
-  TEST_ASSERT_GREATER_THAN(1.5f, final_state.vel);
+  TEST_ASSERT_TRUE(final_state.vel > 1.5f);
 }
 
 // === Mid-Motion Retargeting Tests ===
@@ -487,7 +487,7 @@ void test_trapezoid_retarget_mid_motion() {
 
   MotionState mid_state = profile.state();
   TEST_ASSERT_FALSE(profile.isFinished());
-  TEST_ASSERT_GREATER_THAN(0.0f, mid_state.vel);  // Should be moving
+  TEST_ASSERT_TRUE(mid_state.vel > 0.0f);  // Should be moving
 
   // Change goal mid-motion
   MotionGoal goal2;

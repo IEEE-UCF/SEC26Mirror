@@ -109,7 +109,7 @@ void test_traj_straight_line() {
   // Should command forward velocity
   TEST_ASSERT_GREATER_THAN(0.0f, cmd.v);
   // Angular velocity should be near zero (straight line)
-  TEST_ASSERT_LESS_THAN(0.5f, fabs(cmd.w));
+  TEST_ASSERT_TRUE(fabs(cmd.w) < 0.5f);
 }
 
 void test_traj_curved_path() {

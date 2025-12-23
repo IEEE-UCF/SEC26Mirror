@@ -31,10 +31,10 @@ class EspNow : public Classes::BaseDriver {
   EspNow(const ESPNowSetup &setup)
       : Classes::BaseDriver(setup), _setup(setup) {}
   //@breif intialize and set up esp for receving and sending signals with one
-  //another including adding peers
+  // another including adding peers
   bool init() override;
   //@brief one of the message structs contain the score of which earth will send
-  //this is how it'll do it
+  // this is how it'll do it
   void sendScore(uint8_t score);
   //@breif in case you need to know the MAC address of the current-esp
   void printMAC();

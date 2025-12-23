@@ -100,9 +100,7 @@ void IntakeSubsystem::onDestroy() {
   node_ = nullptr;
 }
 
-// ============================================================================
 // Public Commands
-// ============================================================================
 
 void IntakeSubsystem::startIntake() {
   // Only start if we're in a state that allows it
@@ -119,9 +117,7 @@ void IntakeSubsystem::eject() {
   pending_command_ = IntakeCommand::EJECT;
 }
 
-// ============================================================================
 // State Machine Logic
-// ============================================================================
 
 void IntakeSubsystem::updateStateMachine() {
   uint32_t now = millis();
@@ -219,9 +215,7 @@ void IntakeSubsystem::transitionTo(IntakeState new_state) {
   }
 }
 
-// ============================================================================
 // Motor Control
-// ============================================================================
 
 void IntakeSubsystem::setMotorForward() {
   motor_state_ = MotorState::FORWARD;
@@ -254,9 +248,7 @@ void IntakeSubsystem::applyMotorState() {
   }
 }
 
-// ============================================================================
 // Sensor Reading
-// ============================================================================
 
 void IntakeSubsystem::readSensor() {
   // IR breakbeam: LOW when beam is broken (duck present)
@@ -264,9 +256,7 @@ void IntakeSubsystem::readSensor() {
   duck_detected_ = (digitalRead(setup_.ir_sensor_pin_) == LOW);
 }
 
-// ============================================================================
 // ROS Publishing
-// ============================================================================
 
 void IntakeSubsystem::publishState() {
   // Only publish if ROS is connected

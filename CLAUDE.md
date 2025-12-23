@@ -245,3 +245,43 @@ Micro-ROS libraries are stored in `mcu_ws/libs_external/` (separate for esp32 an
 2. Source: `source install/setup.bash`
 3. Launch simulation: `ros2 launch secbot_sim sim.launch.py`
 4. Launch sim versions of other nodes (e.g., `sim_autonomy.launch.py`)
+
+## Testing
+
+### MCU Test Architecture
+
+The MCU workspace uses PlatformIO's Unity test framework with two test types:
+
+**Native Tests** (`test-*` environments):
+- Run on PC without hardware (no Arduino framework)
+- Test math/control code (PID, motion profiles, trajectory, filters, units, kinematics, pose/vector math)
+- Fast execution, integrated into CI/CD
+- Location: `mcu_ws/test/test_*/`
+
+**MCU Hardware Tests** (`teensy-test-*`, `esp32-test-*` environments):
+- Run on physical hardware with connected sensors/peripherals
+- Test subsystems (Battery, Sensors, micro-ROS)
+- Require hardware setup (some need multiple MCUs)
+- Location: `mcu_ws/src/test/`
+
+**Running tests**:
+```bash
+# Run all native tests
+pio test
+
+# Run specific native test
+pio test -e test-control-pid
+
+# Build MCU hardware test (requires upload to hardware)
+pio run -e teensy-test-battery-subsystem
+pio run -e teensy-test-battery-subsystem --target upload
+
+# Run all tests (automated)
+./mcu_ws/scripts/run_all_mcu_tests.sh
+```
+
+**Naming convention**:
+- Native: `test-<category>-<component>` (e.g., `test-control-pid`)
+- Hardware: `teensy-test-<subsystem>` or `esp32-test-<subsystem>`
+
+See `mcu_ws/test/README.md` for detailed test documentation.

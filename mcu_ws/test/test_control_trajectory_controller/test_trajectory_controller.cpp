@@ -383,6 +383,218 @@ void test_traj_final_heading() {
   TEST_ASSERT_NOT_EQUAL(0.0f, cmd.w);
 }
 
+// === Per-Waypoint Velocity Tests ===
+
+void test_traj_per_waypoint_velocity() {
+  TrajectoryController::Config cfg;
+  cfg.cruise_v = 0.5f;  // Default cruise speed
+  cfg.max_v = 2.0f;
+  cfg.lookahead_dist = 0.2f;
+
+  TrajectoryController traj(cfg);
+
+  // Create trajectory with different speeds per waypoint
+  TrajectoryController::Waypoint waypoints[3];
+
+  // First waypoint: slow speed
+  waypoints[0].x = 1.0f;
+  waypoints[0].y = 0.0f;
+  waypoints[0].v = 0.3f;
+  waypoints[0].has_vel = 1;  // Use custom velocity
+
+  // Second waypoint: fast speed
+  waypoints[1].x = 2.0f;
+  waypoints[1].y = 0.0f;
+  waypoints[1].v = 1.5f;
+  waypoints[1].has_vel = 1;  // Use custom velocity
+
+  // Third waypoint: use default cruise speed
+  waypoints[2].x = 3.0f;
+  waypoints[2].y = 0.0f;
+  waypoints[2].has_vel = 0;  // Use cfg.cruise_v
+
+  traj.setTrajectory(waypoints, 3);
+
+  TrajectoryController::Pose2D pose;
+  pose.x = 0.0f;
+  pose.y = 0.0f;
+  pose.theta = 0.0f;
+
+  // Update near first waypoint
+  TrajectoryController::Command cmd1 = traj.update(pose, 0.1f);
+
+  // Should be using slow speed (0.3 m/s) or close to it
+  TEST_ASSERT_LESS_THAN(0.6f, cmd1.v);  // Not using full cruise_v
+
+  // Advance to second waypoint area
+  pose.x = 1.5f;
+  TrajectoryController::Command cmd2 = traj.update(pose, 0.1f);
+
+  // Should be using faster speed (1.5 m/s) or ramping to it
+  TEST_ASSERT_GREATER_THAN(0.5f, cmd2.v);  // Higher than first waypoint
+
+  // Advance to third waypoint area
+  pose.x = 2.5f;
+  TrajectoryController::Command cmd3 = traj.update(pose, 0.1f);
+
+  // Should be using default cruise_v (0.5 m/s) since has_vel = 0
+  TEST_ASSERT_TRUE(floatEqual(0.5f, cmd3.v, 0.3f));
+}
+
+void test_traj_waypoint_velocity_override() {
+  TrajectoryController::Config cfg;
+  cfg.cruise_v = 1.0f;
+  cfg.max_v = 2.0f;
+
+  TrajectoryController traj(cfg);
+
+  // Waypoint with explicit zero velocity (stop point)
+  TrajectoryController::Waypoint waypoints[2];
+  waypoints[0].x = 1.0f;
+  waypoints[0].y = 0.0f;
+  waypoints[0].v = 0.0f;  // Stop at this point
+  waypoints[0].has_vel = 1;
+
+  waypoints[1].x = 2.0f;
+  waypoints[1].y = 0.0f;
+  waypoints[1].has_vel = 0;  // Resume cruise speed
+
+  traj.setTrajectory(waypoints, 2);
+
+  TrajectoryController::Pose2D pose;
+  pose.x = 0.5f;
+  pose.y = 0.0f;
+  pose.theta = 0.0f;
+
+  TrajectoryController::Command cmd = traj.update(pose, 0.1f);
+
+  // Should be slowing down toward the stop point
+  TEST_ASSERT_LESS_THAN(cfg.cruise_v + 0.1f, cmd.v);
+}
+
+// === Curvature Saturation Tests ===
+
+void test_traj_preserve_curvature_on_w_saturation() {
+  TrajectoryController::Config cfg;
+  cfg.cruise_v = 1.0f;
+  cfg.max_v = 2.0f;
+  cfg.max_w = 1.0f;  // Low max angular velocity
+  cfg.lookahead_dist = 0.3f;
+  cfg.preserve_curvature_on_w_saturation = true;  // Enable curvature preservation
+
+  TrajectoryController traj(cfg);
+
+  // Create sharp turn that would saturate angular velocity
+  TrajectoryController::Waypoint waypoints[3];
+  waypoints[0].x = 1.0f;
+  waypoints[0].y = 0.0f;
+
+  waypoints[1].x = 1.0f;
+  waypoints[1].y = 1.0f;  // 90 degree turn
+
+  waypoints[2].x = 2.0f;
+  waypoints[2].y = 1.0f;
+
+  traj.setTrajectory(waypoints, 3);
+
+  // Start just before the turn
+  TrajectoryController::Pose2D pose;
+  pose.x = 0.9f;
+  pose.y = 0.5f;
+  pose.theta = 1.57f;  // Facing up, need to turn right
+
+  TrajectoryController::Command cmd = traj.update(pose, 0.1f);
+
+  // When w saturates and curvature preservation is enabled, v should scale down
+  if (fabs(cmd.w) >= cfg.max_w - 0.01f) {
+    // Angular velocity is saturated
+    TEST_ASSERT_LESS_THAN(cfg.cruise_v, cmd.v);  // Linear velocity should be reduced
+
+    // The ratio should preserve curvature: v/r = w, or v = w*r
+    // If w is saturated, v must be reduced proportionally
+    TEST_ASSERT_GREATER_THAN(0.0f, cmd.v);  // Still moving forward
+  }
+}
+
+void test_traj_no_curvature_preservation() {
+  TrajectoryController::Config cfg;
+  cfg.cruise_v = 1.0f;
+  cfg.max_v = 2.0f;
+  cfg.max_w = 1.0f;
+  cfg.lookahead_dist = 0.3f;
+  cfg.preserve_curvature_on_w_saturation = false;  // Disable curvature preservation
+
+  TrajectoryController traj(cfg);
+
+  // Sharp turn
+  TrajectoryController::Waypoint waypoints[2];
+  waypoints[0].x = 1.0f;
+  waypoints[0].y = 0.0f;
+
+  waypoints[1].x = 1.0f;
+  waypoints[1].y = 1.0f;
+
+  traj.setTrajectory(waypoints, 2);
+
+  TrajectoryController::Pose2D pose;
+  pose.x = 0.9f;
+  pose.y = 0.5f;
+  pose.theta = 1.57f;
+
+  TrajectoryController::Command cmd = traj.update(pose, 0.1f);
+
+  // Without curvature preservation, v may not be scaled down
+  // even if w saturates (may cause understeer)
+  // Just verify command is generated
+  TEST_ASSERT_GREATER_THAN(0.0f, cmd.v);
+  TEST_ASSERT_NOT_EQUAL(0.0f, cmd.w);
+}
+
+void test_traj_curvature_saturation_scaling() {
+  TrajectoryController::Config cfg;
+  cfg.cruise_v = 2.0f;  // High cruise speed
+  cfg.max_v = 3.0f;
+  cfg.max_w = 2.0f;  // Angular velocity limit
+  cfg.lookahead_dist = 0.5f;
+  cfg.preserve_curvature_on_w_saturation = true;
+
+  TrajectoryController traj(cfg);
+
+  // Very sharp turn requiring high angular velocity
+  TrajectoryController::Waypoint waypoints[3];
+  waypoints[0].x = 0.0f;
+  waypoints[0].y = 0.0f;
+
+  waypoints[1].x = 0.3f;
+  waypoints[1].y = 0.0f;
+
+  waypoints[2].x = 0.3f;
+  waypoints[2].y = 0.3f;  // Sharp right turn
+
+  traj.setTrajectory(waypoints, 3);
+
+  TrajectoryController::Pose2D pose;
+  pose.x = 0.25f;
+  pose.y = 0.0f;
+  pose.theta = 0.0f;  // Facing right, need to turn up
+
+  TrajectoryController::Command cmd = traj.update(pose, 0.1f);
+
+  // If w is at or near saturation, v should be proportionally reduced
+  if (fabs(cmd.w) >= cfg.max_w * 0.95f) {
+    // Check that velocity was scaled
+    // The desired curvature = w_desired / v_desired
+    // After saturation: w_actual = max_w, v_actual = max_w / curvature
+    TEST_ASSERT_LESS_THAN(cfg.cruise_v, cmd.v);
+
+    // Velocity should still be positive
+    TEST_ASSERT_GREATER_THAN(0.0f, cmd.v);
+
+    // Angular velocity should be at limit
+    TEST_ASSERT_TRUE(floatEqual(cfg.max_w, fabs(cmd.w), 0.1f));
+  }
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
 
@@ -421,6 +633,15 @@ int main(int argc, char **argv) {
   RUN_TEST(test_traj_duplicate_waypoints);
   RUN_TEST(test_traj_reset);
   RUN_TEST(test_traj_final_heading);
+
+  // Per-waypoint velocity tests
+  RUN_TEST(test_traj_per_waypoint_velocity);
+  RUN_TEST(test_traj_waypoint_velocity_override);
+
+  // Curvature saturation tests
+  RUN_TEST(test_traj_preserve_curvature_on_w_saturation);
+  RUN_TEST(test_traj_no_curvature_preservation);
+  RUN_TEST(test_traj_curvature_saturation_scaling);
 
   return UNITY_END();
 }

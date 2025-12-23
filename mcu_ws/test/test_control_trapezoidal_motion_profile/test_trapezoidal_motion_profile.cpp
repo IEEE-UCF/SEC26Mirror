@@ -400,6 +400,157 @@ void test_trapezoid_consistent_updates() {
   }
 }
 
+// === Pass-Through Tests (Non-Zero Goal Velocity) ===
+
+void test_trapezoid_pass_through_nonzero_vel() {
+  TrapezoidalMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+  cfg.pos_tol = 0.1f;
+  cfg.vel_tol = 0.2f;
+
+  TrapezoidalMotionProfile profile(cfg);
+
+  // Set goal with non-zero final velocity (pass through at speed)
+  MotionGoal goal;
+  goal.pos = 10.0f;
+  goal.vel = 1.5f;  // Target velocity at goal position
+
+  profile.setGoal(goal);
+
+  // Run until we reach the goal
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState final_state = profile.state();
+
+  // Should reach goal position
+  TEST_ASSERT_TRUE(floatEqual(10.0f, final_state.pos, 0.3f));
+
+  // Should be moving at target velocity (not stopped)
+  TEST_ASSERT_TRUE(floatEqual(1.5f, final_state.vel, 0.3f));
+
+  // Should be marked as finished
+  TEST_ASSERT_TRUE(profile.isFinished());
+}
+
+void test_trapezoid_pass_through_max_vel() {
+  TrapezoidalMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+
+  TrapezoidalMotionProfile profile(cfg);
+
+  // Pass through at max velocity
+  MotionGoal goal;
+  goal.pos = 20.0f;
+  goal.vel = 2.0f;  // Request max velocity
+
+  profile.setGoal(goal);
+
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState final_state = profile.state();
+
+  // Should be near max velocity or goal velocity
+  TEST_ASSERT_GREATER_THAN(1.5f, final_state.vel);
+}
+
+// === Mid-Motion Retargeting Tests ===
+
+void test_trapezoid_retarget_mid_motion() {
+  TrapezoidalMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+  cfg.pos_tol = 0.1f;
+  cfg.vel_tol = 0.1f;
+
+  TrapezoidalMotionProfile profile(cfg);
+
+  // Set initial goal
+  MotionGoal goal1;
+  goal1.pos = 20.0f;
+  goal1.vel = 0.0f;
+
+  profile.setGoal(goal1);
+
+  // Run for a bit to get moving
+  for(int i = 0; i < 20; i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState mid_state = profile.state();
+  TEST_ASSERT_FALSE(profile.isFinished());
+  TEST_ASSERT_GREATER_THAN(0.0f, mid_state.vel);  // Should be moving
+
+  // Change goal mid-motion
+  MotionGoal goal2;
+  goal2.pos = 10.0f;  // Reverse direction
+  goal2.vel = 0.0f;
+
+  profile.setGoal(goal2);
+
+  // Should not be finished after retarget
+  TEST_ASSERT_FALSE(profile.isFinished());
+
+  // Run to new goal
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState final_state = profile.state();
+
+  // Should reach new goal
+  TEST_ASSERT_TRUE(floatEqual(10.0f, final_state.pos, 0.2f));
+  TEST_ASSERT_TRUE(floatEqual(0.0f, final_state.vel, 0.2f));
+  TEST_ASSERT_TRUE(profile.isFinished());
+}
+
+void test_trapezoid_retarget_forward_extension() {
+  TrapezoidalMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+
+  TrapezoidalMotionProfile profile(cfg);
+
+  // Initial goal
+  MotionGoal goal1;
+  goal1.pos = 10.0f;
+  goal1.vel = 0.0f;
+
+  profile.setGoal(goal1);
+
+  // Run partway
+  for(int i = 0; i < 20; i++) {
+    profile.update(0.05f);
+  }
+
+  // Extend goal forward
+  MotionGoal goal2;
+  goal2.pos = 25.0f;
+  goal2.vel = 0.0f;
+
+  profile.setGoal(goal2);
+
+  // Should continue forward smoothly
+  MotionState st = profile.state();
+  TEST_ASSERT_GREATER_OR_EQUAL(0.0f, st.vel);  // Should maintain forward velocity
+
+  // Run to completion
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  TEST_ASSERT_TRUE(floatEqual(25.0f, profile.state().pos, 0.3f));
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
 
@@ -436,6 +587,14 @@ int main(int argc, char **argv) {
 
   // Consistency test
   RUN_TEST(test_trapezoid_consistent_updates);
+
+  // Pass-through tests (non-zero goal velocity)
+  RUN_TEST(test_trapezoid_pass_through_nonzero_vel);
+  RUN_TEST(test_trapezoid_pass_through_max_vel);
+
+  // Mid-motion retargeting tests
+  RUN_TEST(test_trapezoid_retarget_mid_motion);
+  RUN_TEST(test_trapezoid_retarget_forward_extension);
 
   return UNITY_END();
 }

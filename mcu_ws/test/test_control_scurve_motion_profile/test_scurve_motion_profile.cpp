@@ -503,6 +503,204 @@ void test_scurve_not_finished_during_motion() {
   TEST_ASSERT_FALSE(profile.isFinished());
 }
 
+// === Pass-Through Tests (Non-Zero Goal Velocity) ===
+
+void test_scurve_pass_through_nonzero_vel() {
+  SCurveMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+  cfg.limits.j_max = 10.0f;
+  cfg.pos_tol = 0.1f;
+  cfg.vel_tol = 0.2f;
+
+  SCurveMotionProfile profile(cfg);
+
+  // Set goal with non-zero final velocity (pass through at speed)
+  MotionGoal goal;
+  goal.pos = 10.0f;
+  goal.vel = 1.5f;  // Target velocity at goal position
+
+  profile.setGoal(goal);
+
+  // Run until we reach the goal
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState final_state = profile.state();
+
+  // Should reach goal position
+  TEST_ASSERT_TRUE(floatEqual(10.0f, final_state.pos, 0.3f));
+
+  // Should be moving at target velocity (not stopped)
+  TEST_ASSERT_TRUE(floatEqual(1.5f, final_state.vel, 0.3f));
+
+  // Should be marked as finished
+  TEST_ASSERT_TRUE(profile.isFinished());
+}
+
+void test_scurve_pass_through_max_vel() {
+  SCurveMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+  cfg.limits.j_max = 10.0f;
+
+  SCurveMotionProfile profile(cfg);
+
+  // Pass through at max velocity
+  MotionGoal goal;
+  goal.pos = 20.0f;
+  goal.vel = 2.0f;  // Request max velocity
+
+  profile.setGoal(goal);
+
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState final_state = profile.state();
+
+  // Should be near max velocity or goal velocity
+  TEST_ASSERT_GREATER_THAN(1.5f, final_state.vel);
+}
+
+// === Mid-Motion Retargeting Tests ===
+
+void test_scurve_retarget_mid_motion() {
+  SCurveMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+  cfg.limits.j_max = 10.0f;
+  cfg.pos_tol = 0.1f;
+  cfg.vel_tol = 0.1f;
+
+  SCurveMotionProfile profile(cfg);
+
+  // Set initial goal
+  MotionGoal goal1;
+  goal1.pos = 20.0f;
+  goal1.vel = 0.0f;
+
+  profile.setGoal(goal1);
+
+  // Run for a bit to get moving
+  for(int i = 0; i < 20; i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState mid_state = profile.state();
+  TEST_ASSERT_FALSE(profile.isFinished());
+  TEST_ASSERT_GREATER_THAN(0.0f, mid_state.vel);  // Should be moving
+
+  // Change goal mid-motion
+  MotionGoal goal2;
+  goal2.pos = 10.0f;  // Reverse direction
+  goal2.vel = 0.0f;
+
+  profile.setGoal(goal2);
+
+  // Should not be finished after retarget
+  TEST_ASSERT_FALSE(profile.isFinished());
+
+  // Run to new goal
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  MotionState final_state = profile.state();
+
+  // Should reach new goal
+  TEST_ASSERT_TRUE(floatEqual(10.0f, final_state.pos, 0.2f));
+  TEST_ASSERT_TRUE(floatEqual(0.0f, final_state.vel, 0.2f));
+  TEST_ASSERT_TRUE(profile.isFinished());
+}
+
+void test_scurve_retarget_forward_extension() {
+  SCurveMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+  cfg.limits.j_max = 10.0f;
+
+  SCurveMotionProfile profile(cfg);
+
+  // Initial goal
+  MotionGoal goal1;
+  goal1.pos = 10.0f;
+  goal1.vel = 0.0f;
+
+  profile.setGoal(goal1);
+
+  // Run partway
+  for(int i = 0; i < 20; i++) {
+    profile.update(0.05f);
+  }
+
+  // Extend goal forward
+  MotionGoal goal2;
+  goal2.pos = 25.0f;
+  goal2.vel = 0.0f;
+
+  profile.setGoal(goal2);
+
+  // Should continue forward smoothly
+  MotionState st = profile.state();
+  TEST_ASSERT_GREATER_OR_EQUAL(0.0f, st.vel);  // Should maintain forward velocity
+
+  // Run to completion
+  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+    profile.update(0.05f);
+  }
+
+  TEST_ASSERT_TRUE(floatEqual(25.0f, profile.state().pos, 0.3f));
+}
+
+void test_scurve_retarget_smooth_jerk() {
+  SCurveMotionProfile::Config cfg;
+  cfg.limits.v_max = 2.0f;
+  cfg.limits.a_max = 1.0f;
+  cfg.limits.d_max = 1.0f;
+  cfg.limits.j_max = 10.0f;
+
+  SCurveMotionProfile profile(cfg);
+
+  // Initial goal
+  MotionGoal goal1;
+  goal1.pos = 15.0f;
+  goal1.vel = 0.0f;
+
+  profile.setGoal(goal1);
+
+  // Run partway
+  for(int i = 0; i < 15; i++) {
+    profile.update(0.05f);
+  }
+
+  float last_acc = profile.state().acc;
+
+  // Retarget
+  MotionGoal goal2;
+  goal2.pos = 30.0f;
+  goal2.vel = 0.0f;
+
+  profile.setGoal(goal2);
+
+  // Check that jerk remains bounded after retarget
+  float dt = 0.05f;
+  for(int i = 0; i < 20; i++) {
+    MotionState st = profile.update(dt);
+    float jerk = fabs((st.acc - last_acc) / dt);
+
+    // Jerk should remain controlled (allow some tolerance)
+    TEST_ASSERT_LESS_THAN(cfg.limits.j_max + 3.0f, jerk);
+
+    last_acc = st.acc;
+  }
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
 
@@ -544,6 +742,15 @@ int main(int argc, char **argv) {
   RUN_TEST(test_scurve_consistent_updates);
   RUN_TEST(test_scurve_velocity_continuity);
   RUN_TEST(test_scurve_not_finished_during_motion);
+
+  // Pass-through tests (non-zero goal velocity)
+  RUN_TEST(test_scurve_pass_through_nonzero_vel);
+  RUN_TEST(test_scurve_pass_through_max_vel);
+
+  // Mid-motion retargeting tests
+  RUN_TEST(test_scurve_retarget_mid_motion);
+  RUN_TEST(test_scurve_retarget_forward_extension);
+  RUN_TEST(test_scurve_retarget_smooth_jerk);
 
   return UNITY_END();
 }

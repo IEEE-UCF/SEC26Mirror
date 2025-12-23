@@ -58,7 +58,7 @@ jobs:
         working-directory: mcu_ws/
         shell: bash
         run: |
-          # Build all environments defined in platformio.ini
+          # Build all native test environments
           pio test \
             -e test-math-pose2d \
             -e test-math-vector2d \
@@ -67,4 +67,6 @@ jobs:
             -e test-control-arm-kinematics \
             -e test-control-trapezoidal-motion-profile \
             -e test-control-scurve-motion-profile \
-            -e test-control-trajectory-controller
+            -e test-control-trajectory-controller \
+            -e test-utils-filters \
+            -e test-utils-units

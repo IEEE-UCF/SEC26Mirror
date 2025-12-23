@@ -18,7 +18,7 @@
 
 #include <Arduino.h>
 #include <TOF.h>
-#include <SensorSubsystem.h>
+#include <robot/subsystems/SensorSubsystem.h>
 #include <vector>
 
 // Test configuration
@@ -65,9 +65,8 @@ void testSubsystemExists() {
   for (int i = 0; i < numSensors; i++) {
     Drivers::TOFDriverSetup setup(
         ("tof_sensor_" + String(i)).c_str(),  // ID
-        i,                                      // Mux channel
-        nullptr,                               // Mux driver (nullptr for testing)
-        0x29                                   // I2C address
+        500,                                    // Timeout (ms)
+        0                                       // Cooldown (ms)
     );
     Drivers::TOFDriver* driver = new Drivers::TOFDriver(setup);
     tofDrivers.push_back(driver);
@@ -184,7 +183,8 @@ void testSubsystemFunctionality() {
     driver->update();
     delay(50);  // Allow time for measurement
 
-    float distance = driver->getDistance();
+    Drivers::TOFDriverData data = driver->read();
+    float distance = static_cast<float>(data.range);
 
     Serial.print("  Sensor ");
     Serial.print(i);
@@ -312,7 +312,8 @@ void loop() {
           Serial.print("S");
           Serial.print(i);
           Serial.print("=");
-          Serial.print(tofDrivers[i]->getDistance());
+          Drivers::TOFDriverData data = tofDrivers[i]->read();
+          Serial.print(data.range);
           Serial.print("mm");
         }
         Serial.println();

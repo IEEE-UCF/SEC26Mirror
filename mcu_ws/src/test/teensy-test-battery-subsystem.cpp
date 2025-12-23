@@ -18,7 +18,7 @@
 
 #include <Arduino.h>
 #include <I2CPowerDriver.h>
-#include <BatterySubsystem.h>
+#include <robot/subsystems/BatterySubsystem.h>
 
 // Test configuration
 const uint32_t TEST_DURATION_MS = 10000;  // Run test for 10 seconds

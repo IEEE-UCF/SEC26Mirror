@@ -31,13 +31,10 @@ void TankDriveLocalization::update(long leftTicks, long rightTicks, float yaw) {
   currentPose.y += deltaY;
 }
 
-void TankDriveLocalization::printInfo() const {
-  Serial.print("X: ");
-  Serial.print(currentPose.x);
-  Serial.print(" Y: ");
-  Serial.print(currentPose.y);
-  Serial.print(" Theta: ");
-  Serial.println(currentPose.theta);
+const char* TankDriveLocalization::getInfo() {
+  snprintf(infoBuffer_, sizeof(infoBuffer_), "X: %.2f Y: %.2f Theta: %.2f",
+           currentPose.x, currentPose.y, currentPose.theta);
+  return infoBuffer_;
 }
 
 void TankDriveLocalization::reset() {

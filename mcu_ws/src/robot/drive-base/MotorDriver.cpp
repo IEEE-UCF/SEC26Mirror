@@ -5,15 +5,14 @@ namespace Drivers {
 bool MotorDriver::init() {
   initSuccess_ = true;
 
-  if (setup_.pwm_pin >= 0) {
-    analogWriteFrequency(setup_.pwm_pin, 18310.55);
-    pinMode(setup_.pwm_pin, OUTPUT);
+  if (setup_.pwm_pin) {
+    setup_.pwm_pin->pinMode(HAL::PinMode::PIN_OUTPUT);
   } else {
     initSuccess_ = false;
   }
 
-  if (setup_.dir_pin >= 0) {
-    pinMode(setup_.dir_pin, OUTPUT);
+  if (setup_.dir_pin) {
+    setup_.dir_pin->pinMode(HAL::PinMode::PIN_OUTPUT);
   } else {
     initSuccess_ = false;
   }
@@ -28,8 +27,13 @@ void MotorDriver::setPWM(int speed) {
 }
 
 void MotorDriver::update() {
-  digitalWrite(setup_.dir_pin, motorDirection);
-  analogWrite(setup_.pwm_pin, pwmOut);
+  if (setup_.dir_pin) {
+    setup_.dir_pin->digitalWrite(motorDirection ? HAL::DigitalState::STATE_HIGH
+                                                 : HAL::DigitalState::STATE_LOW);
+  }
+  if (setup_.pwm_pin) {
+    setup_.pwm_pin->analogWrite(pwmOut);
+  }
 }
 
 const char* MotorDriver::getInfo() {

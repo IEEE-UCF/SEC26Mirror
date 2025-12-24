@@ -31,7 +31,8 @@ uint32_t lastUpdateTime = 0;
 uint32_t updateCount = 0;
 
 // Driver and subsystem
-Drivers::I2CPowerDriverSetup driverSetup("battery_power_sensor", 0x40, 10.0f, 0.015f);
+Drivers::I2CPowerDriverSetup driverSetup("battery_power_sensor", 0x40, 10.0f,
+                                         0.015f);
 Drivers::I2CPowerDriver* powerDriver = nullptr;
 Subsystem::BatterySubsystem* batterySubsystem = nullptr;
 
@@ -172,7 +173,8 @@ void testSubsystemFunctionality() {
   Serial.println(" C");
 
   // Validate readings are in reasonable ranges
-  bool voltageValid = (voltage >= 0.0f && voltage < 30.0f);  // Typical battery range
+  bool voltageValid =
+      (voltage >= 0.0f && voltage < 30.0f);  // Typical battery range
   printTestResult("Voltage reading is reasonable (0-30V)", voltageValid);
 
   bool currentValid = (current >= -20000.0f && current < 20000.0f);  // ±20A

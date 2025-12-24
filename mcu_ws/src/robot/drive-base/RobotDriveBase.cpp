@@ -61,7 +61,8 @@ void RobotDriveBase::driveVelocity(Vector2D& targetVelocity) {
       {currentVelocity_.getTheta(), currentVelocity_.getTheta(), 0.0f});
 
   // Set target velocity as goal (final velocity = target velocity)
-  linearMotionProfile_.setGoal({targetVelocity_.getX(), targetVelocity_.getX()});
+  linearMotionProfile_.setGoal(
+      {targetVelocity_.getX(), targetVelocity_.getX()});
   angularMotionProfile_.setGoal(
       {targetVelocity_.getTheta(), targetVelocity_.getTheta()});
 

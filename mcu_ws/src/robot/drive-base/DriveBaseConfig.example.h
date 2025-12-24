@@ -1,7 +1,7 @@
 /**
  * @file DriveBaseConfig.example.h
- * @brief Example configuration for DriveBase with motion profiles and trajectory
- * controller
+ * @brief Example configuration for DriveBase with motion profiles and
+ * trajectory controller
  * @date 12/24/2025
  *
  * This file demonstrates how to properly configure the DriveBaseSetup with:
@@ -22,45 +22,45 @@
 
 // Example robot physical constants
 namespace DriveConfig {
-constexpr float WHEEL_TRACK_WIDTH = 12.0f;    // inches between left/right wheels
-constexpr float WHEEL_DIAMETER = 4.0f;        // inches
-constexpr int ENCODER_TICKS_PER_REV = 2048;   // encoder resolution
+constexpr float WHEEL_TRACK_WIDTH = 12.0f;   // inches between left/right wheels
+constexpr float WHEEL_DIAMETER = 4.0f;       // inches
+constexpr int ENCODER_TICKS_PER_REV = 2048;  // encoder resolution
 constexpr float INCHES_PER_TICK =
     (WHEEL_DIAMETER * M_PI) / ENCODER_TICKS_PER_REV;
 
 // Robot performance limits
-constexpr float MAX_LINEAR_VELOCITY = 24.0f;      // inches/sec
-constexpr float MAX_LINEAR_ACCEL = 12.0f;         // inches/sec^2
-constexpr float MAX_LINEAR_JERK = 48.0f;          // inches/sec^3
-constexpr float MAX_ANGULAR_VELOCITY = 3.0f;      // rad/sec
-constexpr float MAX_ANGULAR_ACCEL = 6.0f;         // rad/sec^2
-constexpr float MAX_ANGULAR_JERK = 24.0f;         // rad/sec^3
+constexpr float MAX_LINEAR_VELOCITY = 24.0f;  // inches/sec
+constexpr float MAX_LINEAR_ACCEL = 12.0f;     // inches/sec^2
+constexpr float MAX_LINEAR_JERK = 48.0f;      // inches/sec^3
+constexpr float MAX_ANGULAR_VELOCITY = 3.0f;  // rad/sec
+constexpr float MAX_ANGULAR_ACCEL = 6.0f;     // rad/sec^2
+constexpr float MAX_ANGULAR_JERK = 24.0f;     // rad/sec^3
 }  // namespace DriveConfig
 
 // --- Motor driver setups ---
 // Left motors
 static Drivers::MotorDriverSetup g_left_motor1_setup("left_motor_1",
-                                                      /*pwm_pin*/ 3,
-                                                      /*dir_pin*/ 4);
+                                                     /*pwm_pin*/ 3,
+                                                     /*dir_pin*/ 4);
 static Drivers::MotorDriverSetup g_left_motor2_setup("left_motor_2",
-                                                      /*pwm_pin*/ 5,
-                                                      /*dir_pin*/ 6);
+                                                     /*pwm_pin*/ 5,
+                                                     /*dir_pin*/ 6);
 
 // Right motors
 static Drivers::MotorDriverSetup g_right_motor1_setup("right_motor_1",
-                                                       /*pwm_pin*/ 7,
-                                                       /*dir_pin*/ 8);
+                                                      /*pwm_pin*/ 7,
+                                                      /*dir_pin*/ 8);
 static Drivers::MotorDriverSetup g_right_motor2_setup("right_motor_2",
-                                                       /*pwm_pin*/ 9,
-                                                       /*dir_pin*/ 10);
+                                                      /*pwm_pin*/ 9,
+                                                      /*dir_pin*/ 10);
 
 // --- Encoder driver setups ---
 static Drivers::EncoderDriverSetup g_left_encoder_setup("left_encoder",
-                                                         /*pinA*/ 18,
-                                                         /*pinB*/ 19);
+                                                        /*pinA*/ 18,
+                                                        /*pinB*/ 19);
 static Drivers::EncoderDriverSetup g_right_encoder_setup("right_encoder",
-                                                          /*pinA*/ 20,
-                                                          /*pinB*/ 21);
+                                                         /*pinA*/ 20,
+                                                         /*pinB*/ 21);
 
 // --- Wheel velocity PID configurations ---
 // These PIDs control individual wheel velocities
@@ -103,8 +103,8 @@ static SCurveMotionProfile::Config createLinearProfileConfig() {
   cfg.limits.j_max = DriveConfig::MAX_LINEAR_JERK;
 
   // Tolerances for "close enough"
-  cfg.pos_tol = 0.1f;   // inches
-  cfg.vel_tol = 0.5f;   // inches/sec
+  cfg.pos_tol = 0.1f;  // inches
+  cfg.vel_tol = 0.5f;  // inches/sec
 
   // dt guards
   cfg.min_dt = 1e-6f;
@@ -150,11 +150,11 @@ static TrajectoryController::Config createTrajControllerConfig() {
   cfg.preserve_curvature_on_w_saturation = true;
 
   // Slow down as we approach the goal
-  cfg.slowdown_dist = 8.0f;  // inches
+  cfg.slowdown_dist = 8.0f;    // inches
   cfg.min_v_near_goal = 2.0f;  // inches/sec minimum creep speed
 
   // Goal tolerances
-  cfg.pos_tol = 0.5f;     // inches
+  cfg.pos_tol = 0.5f;      // inches
   cfg.heading_tol = 0.1f;  // radians (~5.7 degrees)
 
   // Final heading control

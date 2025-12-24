@@ -69,4 +69,5 @@ jobs:
             -e test-control-scurve-motion-profile \
             -e test-control-trajectory-controller \
             -e test-utils-filters \
-            -e test-utils-units
+            -e test-utils-units \
+            -e test-drive-tankdrivelocalization

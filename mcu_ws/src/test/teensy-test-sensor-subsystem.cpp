@@ -19,6 +19,7 @@
 #include <Arduino.h>
 #include <TOF.h>
 #include <robot/subsystems/SensorSubsystem.h>
+
 #include <vector>
 
 // Test configuration
@@ -63,10 +64,9 @@ void testSubsystemExists() {
   const int numSensors = 4;
 
   for (int i = 0; i < numSensors; i++) {
-    Drivers::TOFDriverSetup setup(
-        ("tof_sensor_" + String(i)).c_str(),  // ID
-        500,                                    // Timeout (ms)
-        0                                       // Cooldown (ms)
+    Drivers::TOFDriverSetup setup(("tof_sensor_" + String(i)).c_str(),  // ID
+                                  500,  // Timeout (ms)
+                                  0     // Cooldown (ms)
     );
     Drivers::TOFDriver* driver = new Drivers::TOFDriver(setup);
     tofDrivers.push_back(driver);
@@ -118,7 +118,8 @@ void testSubsystemInit() {
     Serial.println("  Check:");
     Serial.println("    - TOF sensors are connected");
     Serial.println("    - I2C wiring is correct (SDA, SCL)");
-    Serial.println("    - I2C multiplexer is connected (if using multiple sensors)");
+    Serial.println(
+        "    - I2C multiplexer is connected (if using multiple sensors)");
     Serial.println("    - Sensors have power");
   }
 
@@ -207,14 +208,17 @@ void testSubsystemFunctionality() {
   }
 
   char resultMsg[100];
-  snprintf(resultMsg, sizeof(resultMsg), "Sensor readings are in valid range (%d/%d sensors)",
-           validCount, (int)tofDrivers.size());
+  snprintf(resultMsg, sizeof(resultMsg),
+           "Sensor readings are in valid range (%d/%d sensors)", validCount,
+           (int)tofDrivers.size());
   printTestResult(resultMsg, validCount > 0);
 
   if (anyValidReading) {
     printTestResult("At least one sensor producing valid readings", true);
   } else {
-    Serial.println("[INFO] No valid sensor readings - sensors may not be connected or need calibration");
+    Serial.println(
+        "[INFO] No valid sensor readings - sensors may not be connected or "
+        "need calibration");
   }
 }
 

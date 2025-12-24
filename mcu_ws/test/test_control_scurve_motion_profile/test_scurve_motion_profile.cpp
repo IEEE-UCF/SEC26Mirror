@@ -652,10 +652,11 @@ void test_scurve_retarget_forward_extension() {
   TEST_ASSERT_GREATER_OR_EQUAL(0.0f, st.vel);  // Should maintain forward velocity
 
   // Run to completion
-  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+  for(int i = 0; i < 500 && !profile.isFinished(); i++) {
     profile.update(0.05f);
   }
 
+  TEST_ASSERT_TRUE(profile.isFinished());
   TEST_ASSERT_TRUE(floatEqual(25.0f, profile.state().pos, 0.3f));
 }
 

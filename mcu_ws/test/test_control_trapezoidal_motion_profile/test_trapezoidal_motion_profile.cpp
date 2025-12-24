@@ -8,10 +8,11 @@
 #include <unity.h>
 #include <motion_profile.h>
 #include <cmath>
+#include <cstdio>
 
 // Helper function to compare floats with tolerance
 bool floatEqual(float a, float b, float epsilon = 0.001f) {
-  return fabs(a - b) < epsilon;
+  return fabs(a - b) <= epsilon;
 }
 
 void setUp(void) {}
@@ -145,6 +146,7 @@ void test_trapezoid_acceleration_phase() {
   cfg.limits.v_max = 2.0f;
   cfg.limits.a_max = 1.0f;
   cfg.limits.d_max = 1.0f;
+  cfg.max_dt = 2.0f;  // Allow larger dt for this test
 
   TrapezoidalMotionProfile profile(cfg);
 
@@ -159,7 +161,7 @@ void test_trapezoid_acceleration_phase() {
 
   // After 1s at a_max=1: v = 1 m/s, pos = 0.5 m
   TEST_ASSERT_TRUE(floatEqual(1.0f, st.vel, 0.1f));
-  TEST_ASSERT_GREATER_THAN(0.0f, st.pos);
+  TEST_ASSERT_TRUE(st.pos > 0.0f);
   TEST_ASSERT_FALSE(profile.isFinished());
 }
 
@@ -299,7 +301,7 @@ void test_trapezoid_negative_goal() {
   profile.update(0.1f);
   MotionState st = profile.state();
 
-  TEST_ASSERT_LESS_THAN(0.0f, st.vel);  // Negative velocity
+  TEST_ASSERT_TRUE(st.vel < 0.0f);  // Negative velocity
   TEST_ASSERT_FALSE(profile.isFinished());
 }
 
@@ -458,7 +460,7 @@ void test_trapezoid_pass_through_max_vel() {
   MotionState final_state = profile.state();
 
   // Should be near max velocity or goal velocity
-  TEST_ASSERT_GREATER_THAN(1.5f, final_state.vel);
+  TEST_ASSERT_TRUE(final_state.vel > 1.5f);
 }
 
 // === Mid-Motion Retargeting Tests ===
@@ -487,7 +489,7 @@ void test_trapezoid_retarget_mid_motion() {
 
   MotionState mid_state = profile.state();
   TEST_ASSERT_FALSE(profile.isFinished());
-  TEST_ASSERT_GREATER_THAN(0.0f, mid_state.vel);  // Should be moving
+  TEST_ASSERT_TRUE(mid_state.vel > 0.0f);  // Should be moving
 
   // Change goal mid-motion
   MotionGoal goal2;
@@ -544,10 +546,11 @@ void test_trapezoid_retarget_forward_extension() {
   TEST_ASSERT_GREATER_OR_EQUAL(0.0f, st.vel);  // Should maintain forward velocity
 
   // Run to completion
-  for(int i = 0; i < 200 && !profile.isFinished(); i++) {
+  for(int i = 0; i < 500 && !profile.isFinished(); i++) {
     profile.update(0.05f);
   }
 
+  TEST_ASSERT_TRUE(profile.isFinished());
   TEST_ASSERT_TRUE(floatEqual(25.0f, profile.state().pos, 0.3f));
 }
 

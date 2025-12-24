@@ -11,10 +11,10 @@
 #define TANKDRIVELOCALIZATION_H
 
 #define _USE_MATH_DEFINES
-#include <Arduino.h>
 #include <Pose2D.h>
 
 #include <cmath>
+#include <cstdio>
 
 namespace Drive {
 
@@ -75,7 +75,7 @@ class TankDriveLocalization {
 
   Pose2D getPose() const { return currentPose; }
   void update(long leftTicks, long rightTicks, float yaw);
-  void printInfo() const;
+  const char* getInfo();
   void reset();
 
  private:
@@ -83,6 +83,7 @@ class TankDriveLocalization {
   Pose2D currentPose;
   long prevLeftTicks = 0;
   long prevRightTicks = 0;
+  char infoBuffer_[64];
 };
 
 }  // namespace Drive

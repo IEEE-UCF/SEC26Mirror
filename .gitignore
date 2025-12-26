@@ -63,7 +63,5 @@ ros2_ws/.vscode/*
 .pio/*
 mcu_ws/.vscode/*
 
-# python
-*.pyc
-
-
+# ai agents
+.claude/*

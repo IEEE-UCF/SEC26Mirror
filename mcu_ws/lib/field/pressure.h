@@ -19,7 +19,7 @@ class PressureSetup : public Classes::BaseSetup {
   PressureSetup() = delete;
 
   PressureSetup(const char* _id, const uint8_t forcePin)
-      : BaseSetup(_id), _forcePin(forcePin) {};
+      : BaseSetup(_id), _forcePin(forcePin){};
 
   const uint8_t _forcePin;
 };

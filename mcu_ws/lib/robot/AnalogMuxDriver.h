@@ -15,6 +15,8 @@
 #include <array>
 #include <string>
 
+#include "AnalogRead.h"
+
 namespace Drivers {
 
 class AnalogMuxDriverSetup : public Classes::BaseSetup {
@@ -24,9 +26,11 @@ class AnalogMuxDriverSetup : public Classes::BaseSetup {
 
   AnalogMuxDriverSetup(const char* _id, std::array<uint8_t, 4> sPins,
                        uint8_t sigPin)
-      : Classes::BaseSetup(_id), _sPins(sPins), _sigPin(sigPin) {
-        
-      };
+      : Classes::BaseSetup(_id),
+        _sPins(sPins),
+        _sigPin(sigPin){
+
+        };
 
   const std::array<uint8_t, 4> _sPins;
   const float _sigPin;
@@ -36,9 +40,8 @@ class AnalogMuxDriver : public Classes::BaseDriver {
  public:
   AnalogMuxDriver(const AnalogMuxDriverSetup& setup)
       : BaseDriver(setup), _setup(setup) {
-
-        pinMode(_setup._sigPin, OUTPUT);
-      };
+    pinMode(_setup._sigPin, OUTPUT);
+  };
   ~AnalogMuxDriver() override = default;
 
   /// @brief  Initialize driver

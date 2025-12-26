@@ -49,7 +49,7 @@ class RGBAnalogLED : public Classes::BaseDriver {
   ~RGBAnalogLED() override = default;
 
   RGBAnalogLED(const RGBAnalogLEDSetup& setup)
-      : _setup(setup), _colorBuffer(RGBColor(0, 0, 0)), BaseDriver(setup) {};
+      : _setup(setup), _colorBuffer(RGBColor(0, 0, 0)), BaseDriver(setup){};
 
   /// @brief  Initialize driver
   /// @return Success

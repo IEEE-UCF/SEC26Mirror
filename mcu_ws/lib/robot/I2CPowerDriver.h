@@ -26,7 +26,7 @@ class I2CPowerDriverSetup : public Classes::BaseSetup {
       : Classes::BaseSetup(_id),
         _address(address),
         _maxCurrent(maxCurrent),
-        _shuntRes(shuntRes) {};
+        _shuntRes(shuntRes){};
 
   const uint8_t _address;   // i2c address default is 0x40
   const float _maxCurrent;  // max current
@@ -46,7 +46,7 @@ struct PowerDriverData {
 class I2CPowerDriver : public Classes::BaseDriver {
  public:
   I2CPowerDriver(const I2CPowerDriverSetup& setup)
-      : BaseDriver(setup), _setup(setup) {};
+      : BaseDriver(setup), _setup(setup){};
 
   ~I2CPowerDriver() override = default;
 
@@ -64,7 +64,7 @@ class I2CPowerDriver : public Classes::BaseDriver {
 
   /// @brief  Get current
   /// @return float
-  float getCurrentmW();
+  float getCurrentmA();
 
   /// @brief  Get power
   /// @return float

@@ -1,1 +1,6 @@
-# Switch tasks and start or stop the mission.
+# Request to switch the robot to a specific task
+# task_id corresponds to a predefined task index (e.g., antenna task)
+uint8 task_id
+---
+# Response: True if the task switch request was accepted
+bool accepted

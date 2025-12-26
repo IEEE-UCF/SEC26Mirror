@@ -26,7 +26,7 @@ class TOFDriverSetup : public Classes::BaseSetup {
 
   TOFDriverSetup(const char* _id, uint16_t _timeout = 500,
                  uint16_t _cooldown = 0)
-      : Classes::BaseSetup(_id), timeout(_timeout), cooldown(_cooldown) {};
+      : Classes::BaseSetup(_id), timeout(_timeout), cooldown(_cooldown){};
 
  private:
 };
@@ -37,7 +37,7 @@ struct TOFDriverData {
 
 class TOFDriver : public Classes::BaseDriver {
  public:
-  TOFDriver(const TOFDriverSetup& setup) : BaseDriver(setup), setup_(setup) {};
+  TOFDriver(const TOFDriverSetup& setup) : BaseDriver(setup), setup_(setup){};
 
   ~TOFDriver() override = default;
 
@@ -54,7 +54,7 @@ class TOFDriver : public Classes::BaseDriver {
 
   /// @brief Get info in the form of a data string
   /// @return data string
-  std::string getInfo() override;
+  const char* getInfo() override;
 
  private:
   const TOFDriverSetup setup_;

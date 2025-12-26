@@ -1,0 +1,73 @@
+# MCU Unit Tests - Run on Pull Requests
+name: MCU Unit Tests
+
+on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+    paths:
+      - 'mcu_ws/**'
+      - '.gitea/workflows/platformio-robot.yml'
+      - 'ros2_ws/src/mcu_msgs/**'
+  workflow_dispatch: # Allow to trigger from UI
+
+jobs:
+  test-mcu:
+    name: Run MCU Unit Tests
+    if: "!startsWith(github.head_ref, 'doc')"
+    runs-on: [ubuntu-latest, linux-amd64]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Prepare MCU extra packages (mcu_msgs)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p mcu_ws/extra_packages
+          # Copy mcu_msgs from ros2_ws into PlatformIO extra_packages
+          if [ -d ros2_ws/src/mcu_msgs ]; then
+            rm -rf mcu_ws/extra_packages/mcu_msgs
+            cp -a ros2_ws/src/mcu_msgs mcu_ws/extra_packages/mcu_msgs
+          else
+            echo "mcu_msgs not found at ros2_ws/src/mcu_msgs" >&2
+            exit 1
+          fi
+
+      - name: Install CMake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build all PlatformIO environments
+        working-directory: mcu_ws/
+        shell: bash
+        run: |
+          # Build all native test environments
+          pio test \
+            -e test-math-pose2d \
+            -e test-math-vector2d \
+            -e test-math-pose3d \
+            -e test-control-pid \
+            -e test-control-arm-kinematics \
+            -e test-control-trapezoidal-motion-profile \
+            -e test-control-scurve-motion-profile \
+            -e test-control-trajectory-controller \
+            -e test-utils-filters \
+            -e test-utils-units \
+            -e test-drive-tankdrivelocalization

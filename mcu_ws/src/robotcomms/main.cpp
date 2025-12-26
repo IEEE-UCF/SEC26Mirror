@@ -1,9 +1,8 @@
-/** Placeholder file */
-#include <Arduino.h>
-void setup() {
+/**
+ * @file main.cpp
+ * @brief Robotcomms ESP32 main entry point (UWB Tag for main robot)
+ */
 
-}
+#include "robotcomms/machines/RobotcommsLogic.h"
 
-void loop() {
-    
-}
+// Setup and loop are defined in RobotcommsLogic.h

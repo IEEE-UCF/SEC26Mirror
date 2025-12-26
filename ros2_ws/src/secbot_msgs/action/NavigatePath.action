@@ -1,1 +1,10 @@
-# Long-running goals with feedback.
+# Navigate along a path
+
+# Goal: start navigation
+bool start
+---
+# Result: finished or failed
+bool success
+---
+# Feedback: percent complete (0.0-1.0)
+float32 progress

@@ -1,1 +1,10 @@
-# Long-running goals with feedback.
+# Approach a specific antenna/target until within range
+
+# Goal: which antenna to approach
+uint8 antenna_id
+---
+# Result: reached target or failed
+bool success
+---
+# Feedback: estimated distance remaining to target (meters)
+float32 distance_remaining

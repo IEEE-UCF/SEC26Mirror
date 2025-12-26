@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Readme: To Run: 
-# sudo chmod +x ros2_ws/src/secbot_vision/scripts/test_field_world.sh
+# sudo chmod +x ros2_ws/src/secbot_vision/scripts/test_proper_field.sh
 # then Run 
-# ros2_ws/src/secbot_vision/scripts/test_field_world.sh
+# ros2_ws/src/secbot_vision/scripts/test_proper_field.sh
 
 set -e
 
@@ -36,12 +36,13 @@ if ! ros2 pkg prefix image_tools >/dev/null 2>&1 || ! ros2 pkg prefix vision_msg
 fi
 
 # Export resource path for Gazebo to find the field mesh
-# Points to .../share/secbot_vision/worlds so model://field resolves to .../worlds/field
+# Points to .../share/secbot_vision/worlds so model://proper_field resolves correctly if needed
 export GZ_SIM_RESOURCE_PATH="$(ros2 pkg prefix --share secbot_vision)/worlds:$GZ_SIM_RESOURCE_PATH"
 
 # ---- Start sim in background ----
-echo "Launching field simulation..."
-ros2 launch secbot_vision field_sim.launch.py &
+echo "Launching Proper Field simulation..."
+# You can add num_blocks:=5 or x_offset:=1.0 here if desired
+ros2 launch secbot_vision proper_field_sim.launch.py &
 LAUNCH_PID=$!
 
 # Get the process group ID for the launch (so we can kill the whole tree)
@@ -69,26 +70,18 @@ cleanup() {
 trap cleanup INT TERM EXIT
 
 # ---- Give sim time ----
-sleep 8
-
-# -------- Spawn test object (Mustard Bottle) --------
-# Use ros2 pkg prefix to find the share directory dynamically
-SHARE_DIR=$(ros2 pkg prefix --share secbot_vision)
-MODEL="$SHARE_DIR/worlds/default/model.sdf"
-WORLD="field_world"  # This must match the name in field.world
-
-echo "Spawning mustard bottle for testing..."
-ros2 run ros_gz_sim create -world "$WORLD" -name mustard_bottle_test -file "$MODEL" -x 1.0 -y 0.0 -z 0.5 -Y 0.0
+sleep 5
 
 # Open debug view
 echo "Showing /vision/debug_image "
 ros2 run image_tools showimage --ros-args -r image:=/vision/debug_image &
+echo "Showing /camera/image_raw "
+ros2 run image_tools showimage --ros-args -r image:=/camera/image_raw &
 
 echo "---------------------------------------------------------"
-echo "Field Test is running!"
-echo "To verify detections, open a new terminal and run:"
-echo "  source install/setup.bash"
-echo "  ros2 topic echo /detected_objects"
+echo "Proper Field Test is running!"
+echo "Configuration is loaded from config/spawn_locations.yaml"
+echo "To verify detections, open receive /detected_objects"
 echo "---------------------------------------------------------"
 
 # Wait for background processes to finish

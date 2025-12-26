@@ -26,7 +26,7 @@ def package_files(directory, data_files, install_base):
         # Filter files to include
         files_to_install = []
         for filename in filenames:
-            if filename.endswith(('.sdf', '.dae', '.png', '.mtl', '.stl', '.world', '.config')):
+            if filename.endswith(('.sdf', '.dae', '.png', '.mtl', '.stl', '.world', '.config', '.obj')):
                 files_to_install.append(os.path.join(path, filename))
         
         if files_to_install:

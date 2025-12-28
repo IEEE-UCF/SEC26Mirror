@@ -1,0 +1,74 @@
+# UWB Beacon Configuration
+# This file defines the beacon setup for the UWB positioning system
+
+uwb_positioning_node:
+  ros__parameters:
+    # Frame IDs
+    map_frame: "map"
+    odom_frame: "odom"
+
+    # Beacon configuration
+    beacons:
+      # Stationary Beacon 1 - Bottom-left corner of field
+      10:
+        type: "stationary"
+        position:
+          x: 0.0
+          y: 0.0
+          z: 0.15  # Height of beacon mount
+        known_axes: ["x", "y", "z"]  # All axes known for stationary beacons
+        description: "Stationary beacon at origin"
+
+      # Stationary Beacon 2 - Top-right corner of field
+      11:
+        type: "stationary"
+        position:
+          x: 3.0
+          y: 3.0
+          z: 0.15  # Height of beacon mount
+        known_axes: ["x", "y", "z"]  # All axes known for stationary beacons
+        description: "Stationary beacon at far corner"
+
+      # Moving Beacon - Main robot
+      12:
+        type: "moving"
+        position:
+          x: 0.0  # Initial estimate
+          y: 0.0  # Initial estimate
+          z: 0.20  # Robot height - fixed/known
+        known_axes: ["z"]  # Only Z-axis is fixed (robot height)
+        odometry_topic: "/robot/pose"  # Topic providing robot's fused odometry
+        use_odometry_fusion: true  # Use odometry + UWB triangulation
+        description: "Moving beacon on main robot"
+
+    # Tag configuration (devices that are tracked)
+    tags:
+      # Drone tag
+      20:
+        description: "Drone UWB tag"
+        publish_topic: "/uwb/pose/drone"
+        enable_3d_positioning: true  # Enable full 3D positioning for drone
+
+      # Mini robot tag (optional - if you add a mini robot later)
+      # 21:
+      #   description: "Mini robot UWB tag"
+      #   publish_topic: "/uwb/pose/mini_robot"
+      #   enable_3d_positioning: false  # 2D positioning only
+
+    # Positioning algorithm parameters
+    positioning:
+      min_beacons_2d: 3  # Minimum beacons for 2D trilateration
+      min_beacons_3d: 4  # Minimum beacons for 3D trilateration (with moving beacon)
+      max_residual: 0.5  # Maximum acceptable residual error (meters)
+      outlier_threshold: 2.0  # Distance threshold for outlier rejection (meters)
+
+    # Covariance settings
+    covariance:
+      base_xy_variance: 0.05  # Base variance for X/Y position (m^2)
+      base_z_variance: 0.10   # Base variance for Z position (m^2)
+      scale_with_residual: true  # Scale covariance with positioning residual
+
+    # Publishing settings
+    publishing:
+      rate_hz: 20.0  # Publishing rate for position estimates
+      publish_diagnostics: true  # Publish diagnostic information

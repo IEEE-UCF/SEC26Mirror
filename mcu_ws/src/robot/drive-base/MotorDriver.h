@@ -23,8 +23,9 @@ class MotorDriverSetup : public Classes::BaseSetup {
   ~MotorDriverSetup() = default;
   MotorDriverSetup() = delete;
 
-  MotorDriverSetup(const char* _id, HAL::HALPin* _pwm_pin, HAL::HALPin* _dir_pin)
-      : Classes::BaseSetup(_id), pwm_pin(_pwm_pin), dir_pin(_dir_pin){};
+  MotorDriverSetup(const char* _id, HAL::HALPin* _pwm_pin,
+                   HAL::HALPin* _dir_pin)
+      : Classes::BaseSetup(_id), pwm_pin(_pwm_pin), dir_pin(_dir_pin) {};
 
  private:
 };
@@ -36,7 +37,7 @@ class MotorDriver : public Classes::BaseDriver {
 
   ~MotorDriver() override = default;
   MotorDriver(const MotorDriverSetup& setup)
-      : BaseDriver(setup), setup_(setup){};
+      : BaseDriver(setup), setup_(setup) {};
 
   bool init() override;
   void update() override;
@@ -48,6 +49,7 @@ class MotorDriver : public Classes::BaseDriver {
   const MotorDriverSetup setup_;
   int pwmOut;
   bool motorDirection;
+  elapsedMicros prevReverseTime;
   char infoBuffer_[64];
 };
 }  // namespace Drivers

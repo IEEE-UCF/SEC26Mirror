@@ -17,9 +17,11 @@
 
 #include "EncoderDriver.h"
 #include "MotorDriver.h"
+#include "motion_profile.h"
 #include "pid_controller.h"
+#include "traj_controller.h"
 
-enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE };
+enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE, TRAJECTORY_DRIVE };
 
 struct DriveBaseSetup {
   std::vector<Drivers::MotorDriverSetup> motorSetups;
@@ -30,7 +32,14 @@ struct DriveBaseSetup {
 
   Drive::TankDriveLocalizationSetup localizationSetup;
 
-  // Robot constants for control
+  // Motion profile configs for smooth velocity ramping
+  SCurveMotionProfile::Config linearProfileConfig;
+  SCurveMotionProfile::Config angularProfileConfig;
+
+  // Trajectory controller config for path following
+  TrajectoryController::Config trajControllerConfig;
+
+  // Robot constants for control (kept for backward compatibility)
   float maxVelocity;
   float maxAcceleration;
   float maxAngularVelocity;
@@ -44,6 +53,8 @@ class RobotDriveBase {
 
   void driveVelocity(Vector2D& targetVelocity);
   void driveSetPoint(Pose2D& targetPose);
+  void driveTrajectory(const TrajectoryController::Waypoint* waypoints,
+                       size_t count);
 
   void manualMotorSpeeds(int leftSpeed, int rightSpeed);
 
@@ -60,10 +71,19 @@ class RobotDriveBase {
  private:
   void velocityControl(float dt);
   void setPointControl(float dt);
+  void trajectoryControl(float dt);
   void writeMotorSpeeds(int leftSpeed, int rightSpeed);
 
+  // Wheel velocity PIDs
   PIDController leftWheelPID_;
   PIDController rightWheelPID_;
+
+  // Motion profiles for smooth velocity ramping
+  SCurveMotionProfile linearMotionProfile_;
+  SCurveMotionProfile angularMotionProfile_;
+
+  // Trajectory controller for path following
+  TrajectoryController trajController_;
 
   DriveBaseSetup setup_;
   Drive::TankDriveLocalization localization_;

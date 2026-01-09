@@ -31,6 +31,15 @@ void TrapezoidalMotionProfile::configure(const Config& cfg) {
 void TrapezoidalMotionProfile::setGoal(const MotionGoal& goal) {
   goal_ = goal;
   finished_ = false;
+
+  // Check if we're already at the goal
+  if (std::fabs(goal_.pos - st_.pos) <= cfg_.pos_tol &&
+      std::fabs(goal_.vel - st_.vel) <= cfg_.vel_tol) {
+    st_.pos = goal_.pos;
+    st_.vel = goal_.vel;
+    st_.acc = 0.0f;
+    finished_ = true;
+  }
 }
 
 const MotionGoal& TrapezoidalMotionProfile::goal() const { return goal_; }
@@ -201,6 +210,15 @@ void SCurveMotionProfile::configure(const Config& cfg) {
 void SCurveMotionProfile::setGoal(const MotionGoal& goal) {
   goal_ = goal;
   finished_ = false;
+
+  // Check if we're already at the goal
+  if (std::fabs(goal_.pos - st_.pos) <= cfg_.pos_tol &&
+      std::fabs(goal_.vel - st_.vel) <= cfg_.vel_tol) {
+    st_.pos = goal_.pos;
+    st_.vel = goal_.vel;
+    st_.acc = 0.0f;
+    finished_ = true;
+  }
 }
 
 const MotionGoal& SCurveMotionProfile::goal() const { return goal_; }

@@ -8,12 +8,13 @@ FieldMessage ControllerDriver::_receivedMessage = {};
 volatile bool ControllerDriver::_hasNewMessage = false;
 
 // Menu structure definitions
-MenuItem ControllerDriver::_statusItems[NUM_ELEMENTS] = {
+MenuItem ControllerDriver::_statusItems[NUM_STATUS_ITEMS] = {
     {"button.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::BUTTON},
     {"crank.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::CRANK},
     {"pressure.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::PRESSURE},
     {"keypad.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::KEYPAD},
-    {"earth.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::EARTH}
+    {"earth.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::EARTH},
+    {"timeleft.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::CONTROLLER}
 };
 
 MenuItem ControllerDriver::_fieldActions[2] = {
@@ -59,7 +60,9 @@ ControllerDriver::ControllerDriver(const ControllerSetup& setup)
       _lastSerialPrint(0),
       _lastDisplayUpdate(0),
       _displayNeedsUpdate(true),
-      _sequenceNum(0) {
+      _sequenceNum(0),
+      _timerRunning(false),
+      _timerStartTime(0) {
   for (int i = 0; i < NUM_ELEMENTS; i++) {
     _elementStatus[i] = ElementStatus::NOT_ONLINE;
     _lastStatusTime[i] = 0;
@@ -101,11 +104,11 @@ void ControllerDriver::initMenu() {
   // Set up parent-child relationships using pointers to static members
   // (avoid copying structs which would lose updates)
 
-  // Status folder contains element displays
+  // Status folder contains element displays and timer
   _menuFieldStatus.children = _statusItems;
-  _menuFieldStatus.childCount = NUM_ELEMENTS;
+  _menuFieldStatus.childCount = NUM_STATUS_ITEMS;
   _menuFieldStatus.parent = &_menuField;
-  for (int i = 0; i < NUM_ELEMENTS; i++) {
+  for (int i = 0; i < NUM_STATUS_ITEMS; i++) {
     _statusItems[i].parent = &_menuFieldStatus;
   }
 
@@ -123,7 +126,7 @@ void ControllerDriver::initMenu() {
   }
   // Re-link status children since we copied
   _menuField.children[0].children = _statusItems;
-  _menuField.children[0].childCount = NUM_ELEMENTS;
+  _menuField.children[0].childCount = NUM_STATUS_ITEMS;
 
   // Control folder contains: cycledisplay.action
   _menuControl.children = _controlActions;
@@ -190,6 +193,15 @@ void ControllerDriver::update() {
   handleNavigation();
   processMessages();
   checkStatusTimeouts();
+
+  // Force display update when timer is running and timer display is shown
+  if (_timerRunning && _currentMenu->childCount > 0) {
+    MenuItem* selected = &_currentMenu->children[_menuIndex];
+    if (selected->type == MenuItemType::MENU_DISPLAY &&
+        selected->elementId == ElementId::CONTROLLER) {
+      _displayNeedsUpdate = true;
+    }
+  }
 
   // Only update display when needed and throttled
   if (_displayNeedsUpdate && (now - _lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL)) {
@@ -295,6 +307,8 @@ void ControllerDriver::updateDisplay() {
   if (selected->type == MenuItemType::MENU_DISPLAY) {
     if (selected->elementId == ElementId::EARTH) {
       displayEarthStatus();
+    } else if (selected->elementId == ElementId::CONTROLLER) {
+      displayTimeLeft();
     } else {
       displayElementStatus(selected->elementId);
     }
@@ -337,6 +351,29 @@ void ControllerDriver::displayEarthStatus() {
   _lcd.print(_earthData.correctCount);
   _lcd.print(" W:");
   _lcd.print(_earthData.wrongCount);
+}
+
+void ControllerDriver::displayTimeLeft() {
+  _lcd.setCursor(0, 0);
+  _lcd.print("TIME LEFT");
+
+  _lcd.setCursor(0, 1);
+  if (!_timerRunning) {
+    _lcd.print("--:--");
+  } else {
+    unsigned long elapsed = millis() - _timerStartTime;
+    if (elapsed >= TIMER_DURATION_MS) {
+      _lcd.print("00:00");
+      _timerRunning = false;
+    } else {
+      unsigned long remaining = TIMER_DURATION_MS - elapsed;
+      uint8_t minutes = remaining / 60000;
+      uint8_t seconds = (remaining % 60000) / 1000;
+      char buf[6];
+      snprintf(buf, sizeof(buf), "%02d:%02d", minutes, seconds);
+      _lcd.print(buf);
+    }
+  }
 }
 
 void ControllerDriver::processMessages() {
@@ -432,11 +469,15 @@ void ControllerDriver::sendCommand(FieldCommand cmd, ElementId target) {
 void ControllerDriver::actionReset() {
   Serial.println("Executing RESET action");
   sendCommand(FieldCommand::RESET);
+  _timerRunning = false;
+  _timerStartTime = 0;
 }
 
 void ControllerDriver::actionStart() {
   Serial.println("Executing START action");
   sendCommand(FieldCommand::START);
+  _timerRunning = true;
+  _timerStartTime = millis();
 }
 
 void ControllerDriver::actionCycleDisplay() {

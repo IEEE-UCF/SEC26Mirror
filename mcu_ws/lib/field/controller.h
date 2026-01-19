@@ -19,6 +19,9 @@ namespace Field {
 /// @brief Number of field elements (excluding controller)
 constexpr uint8_t NUM_ELEMENTS = 5;
 
+/// @brief Number of status display items (elements + timer)
+constexpr uint8_t NUM_STATUS_ITEMS = 6;
+
 /// @brief Menu item types
 enum class MenuItemType { MENU_FOLDER, MENU_DISPLAY, MENU_ACTION };
 
@@ -118,6 +121,11 @@ class ControllerDriver {
   // Status timeout (mark as NOT_ONLINE if no update received)
   static constexpr unsigned long STATUS_TIMEOUT = 5000;
 
+  // Timer (3 minutes)
+  static constexpr unsigned long TIMER_DURATION_MS = 180000;
+  bool _timerRunning;
+  unsigned long _timerStartTime;
+
   // Serial print timing
   unsigned long _lastSerialPrint;
   static constexpr unsigned long SERIAL_PRINT_INTERVAL = 1000;
@@ -135,7 +143,7 @@ class ControllerDriver {
   static MenuItem _menuField;
   static MenuItem _menuFieldStatus;
   static MenuItem _menuControl;
-  static MenuItem _statusItems[NUM_ELEMENTS];
+  static MenuItem _statusItems[NUM_STATUS_ITEMS];
   static MenuItem _fieldActions[2];
   static MenuItem _controlActions[1];
 
@@ -156,6 +164,7 @@ class ControllerDriver {
   void displayMenuItem(uint8_t row, MenuItem* item, bool selected);
   void displayElementStatus(ElementId id);
   void displayEarthStatus();
+  void displayTimeLeft();
 
   // ESP-NOW callbacks
   static void onDataRecv(const uint8_t* mac, const uint8_t* data, int len);

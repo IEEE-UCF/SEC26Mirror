@@ -3,7 +3,11 @@
 
 namespace Field {
 
-bool PressureDriver::init() { return true; }
+bool PressureDriver::init() {
+  pinMode(_setup._forcePin, INPUT);
+  Serial.println("Pressure initialized");
+  return true;
+}
 
 void PressureDriver::update() {
   unsigned long currentmiliseconds = millis();
@@ -11,12 +15,12 @@ void PressureDriver::update() {
   if (timeInterval >= 500) {
     _timeTracker = currentmiliseconds;
     _analogReading = analogRead(_setup._forcePin);
-    Serial.println("Force sensing....");
+    Serial.print("Force: ");
+    Serial.println(_analogReading);
     if (_analogReading <= 30) {
-      //        Serial.println("Duck is OFF!!");
-      task = COMPLETE;
+      task = COMPLETE;  // Duck OFF plate
     } else {
-      //        Serial.println("Duck is on!");
+      task = NOTCOMPLETE;  // Duck ON plate
     }
   }
 }

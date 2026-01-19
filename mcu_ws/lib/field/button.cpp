@@ -3,12 +3,16 @@
 namespace Field {
 
 bool ButtonDriver::init() {
+  pinMode(_setup._rygPins[0], OUTPUT);  // r
+  pinMode(_setup._rygPins[1], OUTPUT);  // y
+  pinMode(_setup._rygPins[2], OUTPUT);  // g
+
   reset();
+  Serial.println("Button initialized");
   return true;
 }
 
 void ButtonDriver::update() {
-  ezButton button(_setup._swPin);
   button.loop();
   if (button.isPressed()) {
     _counter++;

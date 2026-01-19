@@ -14,7 +14,7 @@
 
 // just a pointer to whatever variable x maybe.....
 #define makeKeymap(x) ((char*)x)
-#define sizepassword 6
+#define sizepassword 5
 
 namespace Field {
 
@@ -91,7 +91,7 @@ class KeypadDriver : public Classes::BaseDriver {
   char _prev_key;
   unsigned long _debounce_time;
   unsigned long _prev_time;
-  const String actualPassword = "73738#";
+  const String actualPassword = "73738";
   String password;
 };
 

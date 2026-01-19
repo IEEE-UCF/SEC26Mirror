@@ -13,7 +13,6 @@
 
 #include <Arduino.h>
 #include <BaseDriver.h>
-#include <IRremote.hpp>
 
 #include <array>
 

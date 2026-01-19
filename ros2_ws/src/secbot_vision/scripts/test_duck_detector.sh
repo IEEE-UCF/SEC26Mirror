@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Readme: To Run: 
-# sudo chmod +x ros2_ws/src/secbot_vision/scripts/test_duck_detector.sh
+# sudo chmod +x src/sec26ros/secbot_vision/scripts/test_duck_detector.sh
 # then Run 
-# ros2_ws/src/secbot_vision/scripts/test_duck_detector.sh
+# src/sec26ros/secbot_vision/scripts/test_duck_detector.sh
 
 set -e
 

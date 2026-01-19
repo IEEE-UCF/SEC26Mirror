@@ -153,6 +153,13 @@ Contains a custom environment based on `robot_field.stl`.
 - **Scale**: The STL is scaled by `0.001` to convert millimeters to meters.
 - **Robot**: Uses a standalone 1ft³ (0.3048m) version of the robot spawned at runtime.
 
+### Proper Field World (`worlds/proper_field/`)
+
+The primary testing environment using the full field model (`proper_field.obj`).
+
+- **Configurable Spawns**: Uses `config/spawn_locations.yaml` for robot and item positions.
+- **Launch**: `proper_field_sim.launch.py`
+
 ## Testing
 
 A test script is provided to verify the setup:
@@ -164,7 +171,7 @@ ros2 run secbot_vision test_duck_detector.sh
 Or directly from the scripts directory:
 
 ```bash
-./src/secbot_vision/scripts/test_duck_detector.sh
+src/sec26ros/secbot_vision/scripts/test_duck_detector.sh
 ```
 
 This script:
@@ -173,6 +180,14 @@ This script:
 2. Launches `robot_sim.launch.py`.
 3. Spawns test objects (Mustard Bottles) in the simulation.
 4. Opens image viewers for the raw feed and debug output.
+
+### Proper Field Test -> use this one for better testing
+
+To test the full `proper_field` environment with configurable spawns:
+
+```bash
+src/sec26ros/secbot_vision/scripts/test_proper_field.sh
+```
 
 ### Field World Test
 

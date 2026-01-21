@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Launch file for my_bot in Gazebo Harmonic with ROS 2 bridge
+Launch file for field world in Gazebo Harmonic with ROS 2 bridge
 """
 
 import os
@@ -13,24 +13,34 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    # Path to SDF file
-    sdf_file = os.path.join(
-        get_package_share_directory('secbot_vision'),
+    pkg_share = get_package_share_directory('secbot_vision')
+    
+    # Path to World file
+    world_file = os.path.join(
+        pkg_share,
         'worlds',
-        'default',
-        'my_bot_harmonic.sdf'
+        'field',
+        'field.world'
     )
     
+    # Path to Robot SDF for spawning
+    robot_sdf_file = os.path.join(
+        pkg_share,
+        'worlds',
+        'default',
+        'my_bot.sdf'
+    )
+
     # Path to bridge config
     bridge_config = os.path.join(
-        get_package_share_directory('secbot_vision'),
+        pkg_share,
         'config',
         'ros_gz_bridge.yaml'
     )
 
     # Gazebo Sim (Harmonic)
     gz_sim = ExecuteProcess(
-        cmd=['gz', 'sim', sdf_file, '-r'],
+        cmd=['gz', 'sim', world_file, '-r'],
         output='screen'
     )
 
@@ -46,28 +56,25 @@ def generate_launch_description():
         output='screen'
     )
 
-    # image_topic_arg = DeclareLaunchArgument('image_topic', default_value='/camera2/image_raw')
-    # image_topic = LaunchConfiguration('image_topic')
-
-    
-    # vision = Node(
-    #     package='secbot_vision',
-    #     executable='detector_node',
-    #     name='detector_node',
-    #     output='screen',
-    #     parameters=[{
-    #         'image_topic': image_topic,     # change if your bridge publishes a different name
-    #         'class_name':  'yellow_object',
-    #         'debug_viz':   True,
-    #         'pub_topic': '/detected_objects',
-    #         'pub_debug_image': '/vision/debug_image',
-    #     }],
-    # )
+    # Spawn Robot
+    spawn_robot = Node(
+        package='ros_gz_sim',
+        executable='create',
+        arguments=[
+            '-file', robot_sdf_file,
+            '-name', 'my_bot',
+            '-x', '0.0',
+            '-y', '0.0',
+            '-z', '0.2'
+        ],
+        output='screen'
+    )
 
     vision_config = os.path.join(
-        get_package_share_directory('secbot_vision'), 
+        pkg_share, 
         'config', 
         'vision.yaml')
+        
     vision = Node(
         package = 'secbot_vision',
         executable='detector_node',
@@ -79,6 +86,6 @@ def generate_launch_description():
     return LaunchDescription([
         gz_sim,
         bridge,
-        # image_topic_arg ,
+        spawn_robot,
         vision,
     ])

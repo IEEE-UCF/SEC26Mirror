@@ -40,6 +40,9 @@
 # debug information files
 *.dwo
 
+# python
+*.pyc
+
 # vscode
 # Ignore global .vscode by default, but keep ROS2 IntelliSense config
 .vscode/*

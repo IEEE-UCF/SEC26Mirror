@@ -17,7 +17,7 @@ namespace secbot_navigation
     }
 
     // === Calculates the eheading angle that points towards the next point ===
-    void Trajectory::compute_headings()
+    void Trajectory::compute_direction()
     {
         for (size_t i = 0; i < points_.size() - 1; ++i)
         {
@@ -67,24 +67,14 @@ namespace secbot_navigation
     }
 
 
-    // === Projects a point P onto segment AB ===
+    // === Closest point to robot P on line segment AB ===
     std::pair<double, double>
-    PurePursuitController::vector_projection(std::pair<double, double> A,
-                                             std::pair<double, double> B,
-                                             std::pair<double, double> P)
+    PurePursuitController::vector_projection(std::pair<double, double> A, std::pair<double, double> B, std::pair<double, double> P)
     {
-
-        double ax = A.first;
-        double ay = A.second;
-        double bx = B.first;
-        double by = B.second;
-        double px = P.first;
-        double py = P.second;
-
-        double ab_x = bx - ax;
-        double ab_y = by - ay;
-        double ap_x = px - ax;
-        double ap_y = py - ay;
+        double ab_x = B.first - A.first;
+        double ab_y = B.second - A.second;
+        double ap_x = P.first - A.first;
+        double ap_y = P.second - A.second;
 
         // dot products for projection to scalar t
         double dot_ap_ab = ap_x * ab_x + ap_y * ab_y;
@@ -102,13 +92,12 @@ namespace secbot_navigation
 
 
         // A + t * (B-A)
-        return {ax + t * ab_x, ay + t * ab_y};
+        return {A.first + t * ab_x, A.second + t * ab_y};
     }
 
 
-    // === Find llookahead point "carrot" on path ===
-    TrajectoryPoint PurePursuitController::find_lookahead_point(double robot_x,
-                                                                double robot_y)
+    // === Find lookahead point "carrot" on path ===
+    TrajectoryPoint PurePursuitController::find_lookahead_point(double robot_x, double robot_y)
     {
         if (current_path_points_.empty())
         {
@@ -123,10 +112,8 @@ namespace secbot_navigation
         // Iterate segments
         for (size_t i = 0; i < current_path_points_.size() - 1; ++i)
         {
-            std::pair<double, double> p1 = {current_path_points_[i].x,
-                                            current_path_points_[i].y};
-            std::pair<double, double> p2 = {current_path_points_[i + 1].x,
-                                            current_path_points_[i + 1].y};
+            std::pair<double, double> p1 = {current_path_points_[i].x, current_path_points_[i].y};
+            std::pair<double, double> p2 = {current_path_points_[i + 1].x, current_path_points_[i + 1].y};
               
             // Closest point on segment to robot
             std::pair<double, double> proj =
@@ -151,7 +138,7 @@ namespace secbot_navigation
             best_proj = {current_path_points_[0].x, current_path_points_[0].y};
         }
 
-        // 2. Lookahead Logic
+        // 2. Lookahead Configs
         double dist_travelled = 0.0;
         std::pair<double, double> current_pos = best_proj;
 
@@ -183,34 +170,26 @@ namespace secbot_navigation
 
 
     // === Scale down speed as robot gets close to goal ===
-    double PurePursuitController::linear_slowdown(double desired_v,
-                                                  double dist_to_goal)
+    double PurePursuitController::linear_slowdown(double desired_v, double dist_to_goal)
     {
         if (slow_dist_ <= 0)
             return desired_v;
-        double scale = std::min(dist_to_goal / slow_dist_, 1.0);
-        return desired_v * scale;
+        return desired_v * std::min(dist_to_goal / slow_dist_, 1.0);
     }
 
-    std::pair<double, double> PurePursuitController::coordinate_transform(
-        std::tuple<double, double, double> robot_pose,
-        std::pair<double, double> target_point)
+
+    // === Converts the global target points to robots local frame (WHERE ROBOT IS FACING) ===
+    std::pair<double, double> PurePursuitController::coordinate_transform(std::tuple<double, double, double> robot_pose, std::pair<double, double> target_point)
     {
-        double rx = std::get<0>(robot_pose);
-        double ry = std::get<1>(robot_pose);
-        double theta = std::get<2>(robot_pose);
 
-        double tx = target_point.first;
-        double ty = target_point.second;
+        double dx = target_point.first - std::get<0>(robot_pose);
+        double dy = target_point.second - std::get<1>(robot_pose);
 
-        double dx = tx - rx;
-        double dy = ty - ry;
+        // x = (target_x - robot_x) * cos(robot_theta) + (target_y - robot_y) * sin(robot_theta)
+        double x_local = dx * std::cos(std::get<2>(robot_pose)) + dy * std::sin(std::get<2>(robot_pose));
 
-        double c = std::cos(theta);
-        double s = std::sin(theta);
-
-        double x_local = dx * c + dy * s;
-        double y_local = -dx * s + dy * c;
+        // y = -(target_x - robot_x) * cos(robot_theta) + (target_y - robot_y) * sin(robot_theta)
+        double y_local = -dx * std::sin(std::get<2>(robot_pose)) + dy * std::cos(std::get<2>(robot_pose));
 
         return {x_local, y_local};
 
@@ -218,67 +197,52 @@ namespace secbot_navigation
 
 
 
-    // === computes pure pursuit curavture and applies angular velocty limits ===
-    // kappa = 2*y / (x^2 + y^2)
-    // w = v * kappa
-    // keeps w close to max_w_ and reduces v if needed
-    std::pair<double, double> PurePursuitController::compute_curvature_and_velocity(
-        std::pair<double, double> local_point, double current_v)
+    // === computes pure pursuit curavture and applies angular velocty limits to reach the next lookahead point "carrot" ===
+    std::pair<double, double> PurePursuitController::compute_curvature_and_velocity(std::pair<double, double> local_point, double current_v)
     {
-        double x = local_point.first;
-        double y = local_point.second;
 
-        double L2 = x * x + y * y;
-        if (L2 < 0.0001)
+        double L2 = local_point.first * local_point.first + local_point.second * local_point.second;
+        if (L2 < 0.0001) // if lookahead poitn is robots current position
             return {0.0, 0.0};
 
-        double kappa = (2.0 * y) / L2;
+        // kappa = 2*y / (x^2 + y^2)
+        double kappa = (2.0 * local_point.second) / L2;
+        // w = v * kappa
         double w = current_v * kappa;
 
         // Scale v down if w exceeds max_w to prevent understeering
-        if (std::abs(w) > max_w_)
-        {
-            w = std::copysign(max_w_, w);
-            if (std::abs(kappa) > 1e-6)
-            {
-                current_v = std::abs(w / kappa);
-            }
-            else
-            {
-                current_v = 0.0;
-            }
+        if(std::abs(w) <= max_w_){
+            return {current_v, w};
         }
 
+        w = std::copysign(max_w_, w);
+
+        if (std::abs(kappa) <= 1e-6){
+            return {0.0, w};
+        }
+
+        // reduce linear speed
+        current_v = std::abs(w/kappa);
         return {current_v, w};
     }
 
 
     // === converts (v, w) into left/right wheel velocities ===
-    // Differential drive:
-    // v_left  = v - w*(track_width/2)
-    // v_right = v + w*(track_width/2)
-    std::pair<double, double>
-    PurePursuitController::differential_drive_kinematics(double v, double w)
+    std::pair<double, double> PurePursuitController::differential_drive_kinematics(double v, double w)
     {
         double half_track = track_width_ / 2.0;
-        double v_left = v - w * half_track;
-        double v_right = v + w * half_track;
-        return {v_left, v_right};
+        // v_left  = v - w*(track_width/2)
+        // v_right = v + w*(track_width/2)
+        return {v - w * half_track, v + w * half_track};
     }
 
 
 
     // === pipeline ===
-    std::pair<double, double> PurePursuitController::compute_control(
-        std::tuple<double, double, double> robot_pose,
-        std::pair<double, double> lookahead_point,
-        std::pair<double, double> goal_point)
+    std::pair<double, double> PurePursuitController::compute_control(std::tuple<double, double, double> robot_pose, std::pair<double, double> lookahead_point, std::pair<double, double> goal_point)
     {
         // 1. Linear Slowdown
-        double rx = std::get<0>(robot_pose);
-        double ry = std::get<1>(robot_pose);
-        double dist_to_goal = std::sqrt(std::pow(rx - goal_point.first, 2) +
-                                        std::pow(ry - goal_point.second, 2));
+        double dist_to_goal = std::sqrt(std::pow(std::get<0>(robot_pose) - goal_point.first, 2) + std::pow(std::get<1>(robot_pose) - goal_point.second, 2));
         double v_desired = linear_slowdown(max_v_, dist_to_goal);
 
         // 2. Coordinate Transform
@@ -288,7 +252,7 @@ namespace secbot_navigation
         auto [v_cmd, w_cmd] = compute_curvature_and_velocity(local_point, v_desired);
 
         // 4. Differential Drive Kinematics
-        return differential_drive_kinematics(v_cmd, w_cmd);
+        return differential_drive_kinematics(v_cmd, w_cmd); // returns how fast the wheels should turn
     }
 
 }

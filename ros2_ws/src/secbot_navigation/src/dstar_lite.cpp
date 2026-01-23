@@ -9,9 +9,7 @@ namespace secbot_navigation
   static const double INF = std::numeric_limits<double>::infinity();
 
   // === Constructor ===
-  DStarLite::DStarLite(GridMap &grid_map, Node start, Node goal,
-                       DStarLiteConfig config)
-      : map_(grid_map), start_(start), goal_(goal), km_(0.0)
+  DStarLite::DStarLite(GridMap &grid_map, Node start, Node goal, DStarLiteConfig config): map_(grid_map), start_(start), goal_(goal), offset_old_poriority_(0.0)
   {
     (void)config; 
 
@@ -19,37 +17,44 @@ namespace secbot_navigation
     int cols = map_.get_cols();
 
     // Initialize grids with Infinite cost
-    g_.assign(rows, std::vector<double>(cols, INF));
-    rhs_.assign(rows, std::vector<double>(cols, INF));
+    // === USED IN HEURISTICS ===
+    g_.assign(rows, std::vector<double>(cols, INF)); // this is the cost from the node to the goal
+    rhs_.assign(rows, std::vector<double>(cols, INF)); // this is the lookahead cost (rhs(s) = min(cost(s, s') + g(s')))
     // Initialize Open Set tracker
     open_hash_.assign(rows, std::vector<CellInfo>(cols, {false, {0.0, 0.0}}));
 
     // Initialize Goal Node:
     // In D* Lite. search from Goal to Start.
-    rhs_[goal_.first][goal_.second] = 0.0;
+    rhs_[goal_.r][goal_.c] = 0.0;
 
     // Add Goal to priority queue
-    insert(goal_, calculate_key(goal_));
+    insert(goal_, calculate_priority(goal_));
   }
 
 
   // === Heuristic ===
-  double DStarLite::manhattan(const Node &a, const Node &b)
+  // The manhattan distance h(a,b) = |r_a - r_b| + |c_a - c_b|
+  double DStarLite::distance_between_points(const Node &a, const Node &b) const
   {
-    return std::abs(a.first - b.first) + std::abs(a.second - b.second);
+    return std::abs(a.r - b.r) + std::abs(a.c - b.c);
   }
 
   // === Calculate Key ===
-  // k1 = min(g, rhs) + h + km (Total estimated cost)
+  // k1 = min(g, rhs) + h + offset_old_poriority (Total estimated cost)
   // k2 = min(g, rhs)          (Cost so far)
-  DStarLite::Key DStarLite::calculate_key(const Node &s)
+  DStarLite::Priority DStarLite::calculate_priority(const Node &s) const
   {
-    double min_val = std::min(g_[s.first][s.second], rhs_[s.first][s.second]);
-    return {min_val + manhattan(start_, s) + km_, min_val};
+
+    // === this is the real heuristics ===
+    // min(g, rhs) known aass cost to go from s -> goal (biases search towards nodes closer to the robot)
+    double min_val = std::min(g_[s.r][s.c], rhs_[s.r][s.c]);
+
+    // lower k1 higher priority           k2 prevents oscillation (stability)
+    return {min_val + distance_between_points(start_, s) + offset_old_poriority_, min_val}; 
   }
 
   // === Edge Cost ===
-  double DStarLite::cost(const Node &a, const Node &b)
+  double DStarLite::cost(const Node &a, const Node &b) const
   {
     if (!map_.is_free(a) || !map_.is_free(b))
     {
@@ -59,49 +64,49 @@ namespace secbot_navigation
   }
 
   // === Priority Queue Operations ===
-  void DStarLite::insert(Node u, Key k)
+  void DStarLite::insert(Node n, Priority p)
   {
-    U_.insert({k, u});
-    CellInfo &info = open_hash_[u.first][u.second];
+    nodes_to_process_.insert({p, n});
+    CellInfo &info = open_hash_[n.r][n.c];
     info.in_queue = true;
-    info.key = k;
+    info.prio = p;
   }
 
-  void DStarLite::remove(Node u)
+  void DStarLite::remove(Node n)
   {
-    CellInfo &info = open_hash_[u.first][u.second];
+    CellInfo &info = open_hash_[n.r][n.c];
     if (info.in_queue)
     {
-      U_.erase({info.key, u});
+      nodes_to_process_.erase({info.prio, n});
       info.in_queue = false;
     }
   }
 
-  // === Check consistency between g(u) and rhs(u) ===
-  void DStarLite::update_vertex(Node u)
+  // === Check consistency between g(n) and rhs(n) ===
+  void DStarLite::update_vertex(Node n)
   {
-    if (u != goal_)
+    if (n != goal_)
     {
       double min_rhs = INF;
       // Look at all neighbors to find the best parent
-      for (const auto &s : map_.neighbors(u))
+      for (const auto &s : map_.neighbors(n))
       {
-        double c = cost(u, s);
-        double g_val = g_[s.first][s.second];
+        double c = cost(n, s);
+        double g_val = g_[s.r][s.c];
         if (c != INF && g_val != INF)
         {
           min_rhs = std::min(min_rhs, c + g_val);
         }
       }
-      rhs_[u.first][u.second] = min_rhs;
+      rhs_[n.r][n.c] = min_rhs;
     }
 
-    remove(u);
+    remove(n);
 
     // If node is inconsistent (g != rhs), add to queue for processing
-    if (g_[u.first][u.second] != rhs_[u.first][u.second])
+    if (g_[n.r][n.c] != rhs_[n.r][n.c])
     {
-      insert(u, calculate_key(u));
+      insert(n, calculate_priority(n));
     }
   }
 
@@ -110,9 +115,10 @@ namespace secbot_navigation
   {
     if (start != start_)
     {
-      // Increment km (key modifier) to account for robot movement
-      // This avoids recomputing keys for the entire graph.
-      km_ += manhattan(start_, start);
+      // Increment offset_old_poriority (priority modifier) to account for robot movement
+      // This avoids recomputing prioritys for the entire graph.
+      offset_old_poriority_ += distance_between_points(start_, start);  // this is HUGE ( when the robot moves the distance changes - 
+                                                                        // instead of recomputing D* Lite shifts priority to offset_old_poriority_ also known as km)
       start_ = start;
     }
   }
@@ -120,38 +126,38 @@ namespace secbot_navigation
   // === Main Compute Loop ===
   void DStarLite::compute_shortest_path()
   {
-    while (!U_.empty())
+    while (!nodes_to_process_.empty())
     {
-      auto top_it = U_.begin();
-      Key k_old = top_it->first;
-      Node u = top_it->second;
+      auto top_it = nodes_to_process_.begin();
+      Priority p_old = top_it->first;
+      Node n = top_it->second;
 
-      Key k_start = calculate_key(start_);
+      Priority p_start = calculate_priority(start_);
 
       // Stop Condition:
-      // If the smallest key in queue is >= start's key
+      // If the smallest priority in queue is >= start's priority
       // AND start node is consistent (g == rhs), we are done.
-      if (k_old >= k_start &&
-          rhs_[start_.first][start_.second] == g_[start_.first][start_.second])
+      if (p_old >= p_start &&
+          rhs_[start_.r][start_.c] == g_[start_.r][start_.c])
       {
         break;
       }
 
-      U_.erase(top_it);
-      open_hash_[u.first][u.second].in_queue = false;
+      nodes_to_process_.erase(top_it);
+      open_hash_[n.r][n.c].in_queue = false;
 
-      Key k_new = calculate_key(u);
+      Priority p_new = calculate_priority(n);
 
       // Case 1: Node key is outdated (lazy update)
-      if (k_old < k_new)
+      if (p_old < p_new)
       {
-        insert(u, k_new);
+        insert(n, p_new);
       }
       // Case 2: Overconsistent (g > rhs) - classic Dijkstra/A* relaxation
-      else if (g_[u.first][u.second] > rhs_[u.first][u.second])
+      else if (g_[n.r][n.c] > rhs_[n.r][n.c])
       {
-        g_[u.first][u.second] = rhs_[u.first][u.second];
-        for (const auto &s : map_.neighbors(u))
+        g_[n.r][n.c] = rhs_[n.r][n.c];
+        for (const auto &s : map_.neighbors(n))
         {
           update_vertex(s);
         }
@@ -159,9 +165,9 @@ namespace secbot_navigation
       // Case 3: Underconsistent (g < rhs) - occurs when obstacle appears
       else
       {
-        g_[u.first][u.second] = INF;
-        update_vertex(u);
-        for (const auto &s : map_.neighbors(u))
+        g_[n.r][n.c] = INF;
+        update_vertex(n);
+        for (const auto &s : map_.neighbors(n))
         {
           update_vertex(s);
         }
@@ -172,7 +178,7 @@ namespace secbot_navigation
   // === Extract Path ===
   std::vector<DStarLite::Node> DStarLite::extract_path()
   {
-    if (rhs_[start_.first][start_.second] == INF)
+    if (rhs_[start_.r][start_.c] == INF)
     {
       return {};
     }
@@ -193,7 +199,7 @@ namespace secbot_navigation
       for (const auto &s : map_.neighbors(current))
       {
         double c = cost(current, s);
-        double g_val = g_[s.first][s.second];
+        double g_val = g_[s.r][s.c];
         if (c != INF && g_val != INF)
         {
           if (c + g_val < min_cost)

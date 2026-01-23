@@ -6,38 +6,32 @@ namespace secbot_navigation
   // === Constructor ===
   GridMap::GridMap(const std::vector<std::vector<int>> &grid) : grid_(grid)
   {
-    rows_ = grid.size();
-    cols_ = (rows_ > 0) ? grid[0].size() : 0;
+    rows_ = grid.size();          // size of map horizontally
+    cols_ = (rows_ > 0) ? grid[0].size() : 0; // size of map vertically
   }
 
-  // === Getters ===
-  int GridMap::get_rows() const { return rows_; }
+  int GridMap::get_rows() const { return rows_; } // get the rows
 
-  int GridMap::get_cols() const { return cols_; }
+  int GridMap::get_cols() const { return cols_; } // get the columns
 
   // === Checking Bounds ===
-  bool GridMap::in_bounds(const std::pair<int, int> &cell) const
+  bool GridMap::in_bounds(const Cell &cell) const
   {
-    int r = cell.first;
-    int c = cell.second;
-    return r >= 0 && r < rows_ && c >= 0 && c < cols_;
+    return cell.r >= 0 && cell.r < rows_ && cell.c >= 0 && cell.c < cols_;
   }
 
   // === Check Traversability ===
-  bool GridMap::is_free(const std::pair<int, int> &cell) const
+  bool GridMap::is_free(const Cell &cell) const
   {
-    int r = cell.first;
-    int c = cell.second;
-    return grid_[r][c] == 0;
+    return grid_[cell.r][cell.c] == 0;
   }
 
   // === Get Neighbors ===
-  std::vector<std::pair<int, int>>
-  GridMap::neighbors(const std::pair<int, int> &cell) const
+  std::vector<GridMap::Cell> GridMap::neighbors(const Cell &cell) const
   {
-    std::vector<std::pair<int, int>> result;
-    int r = cell.first;
-    int c = cell.second;
+    std::vector<Cell> result;
+    int r = cell.r;
+    int c = cell.c;
 
     // Directions: Up, Down, Left, Right
     int dr[] = {-1, 1, 0, 0};
@@ -45,21 +39,21 @@ namespace secbot_navigation
 
     for (int i = 0; i < 4; ++i)
     {
-      std::pair<int, int> n = {r + dr[i], c + dc[i]};
+      Cell n = {r + dr[i], c + dc[i]};
       if (in_bounds(n) && is_free(n))
       {
-        result.push_back(n);
+        result.push_back({n.r, n.c});
       }
     }
     return result;
   }
 
   // === Set Obstacle ===
-  void GridMap::set_obstacle(const std::pair<int, int> &cell)
+  void GridMap::set_obstacle(const Cell &cell)
   {
     if (in_bounds(cell))
     {
-      grid_[cell.first][cell.second] = 1;
+      grid_[cell.r][cell.c] = 1;
     }
   }
 

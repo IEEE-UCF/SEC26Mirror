@@ -1,6 +1,6 @@
 #ifndef SECBOT_NAVIGATION_PATH_SMOOTHER_HPP
 #define SECBOT_NAVIGATION_PATH_SMOOTHER_HPP
-
+#include "secbot_navigation/grid_map.hpp"
 #include <utility>
 #include <vector>
 
@@ -9,10 +9,7 @@ namespace secbot_navigation
 
   struct PathSmootherConfig
   {
-    int iterations = 50;
-    double alpha = 0.5;
-    double beta = 0.2;
-    double max_step = 0.05;
+    int max_skip = 1;
   };
 
   // === Post-processes Grid Paths to make them smoother ===
@@ -20,18 +17,19 @@ namespace secbot_navigation
   {
   public:
     // === Constructor ===
-    explicit PathSmoother(PathSmootherConfig config = PathSmootherConfig());
+    explicit PathSmoother(const GridMap& grid_map, PathSmootherConfig config = PathSmootherConfig());
 
     // === Smooths a given path ===
-    std::vector<std::pair<int, int>>
-    smooth(const std::vector<std::pair<int, int>> &path);
+    using Cell = GridMap::Cell;
+    std::vector<Cell> smooth(const std::vector<Cell>& path);
 
   private:
-    bool _line_is_clear(const std::pair<int, int> &p1,
-                        const std::pair<int, int> &p2);
+    
+    bool _line_is_clear(const Cell& p1, const Cell& p2);
 
+    const GridMap& grid_map_;
     PathSmootherConfig config_;
-    int max_skip_; 
+    size_t max_skip_; 
   };
 
 } 

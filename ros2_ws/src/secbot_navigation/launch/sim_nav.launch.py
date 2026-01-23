@@ -16,7 +16,7 @@ def generate_launch_description():
         name='pathing_node',
         output='screen',
         parameters=[{
-            'use_sim_time': True,
+            'use_sim': True,
             'config_file': 'nav_sim.yaml',
             'arena_file': 'arena_layout.yaml',
         }]

@@ -12,37 +12,38 @@ namespace secbot_navigation
 
   struct DStarLiteConfig
   {
-    int max_steps = 50000;
+    int max_steps = 0; // just in case grid fails to create rows and columns
   };
 
   // === Implements the D* Lite algorithm ===
   class DStarLite
   {
   public:
-    using Key = std::pair<double, double>;
-    using Node = std::pair<int, int>;
+    using Priority = std::pair<double, double>; // finds the priority of g to rhs
+    using Node = GridMap::Cell;
 
     // === Initializes the DStarLite planner ===
-    DStarLite(GridMap &grid_map, Node start, Node goal,
-              DStarLiteConfig config = DStarLiteConfig());
+    DStarLite(GridMap &grid_map, Node start, Node goal, DStarLiteConfig config = DStarLiteConfig());
 
-    void update_start(Node start);
-    void compute_shortest_path();
-    std::vector<Node> extract_path();
+    void update_start(Node start);  // update the start
+    void compute_shortest_path();   // computes the shortest path, used in re planning
+    std::vector<Node> extract_path(); // show the path
 
   private:
-    double manhattan(const Node &a, const Node &b);
-    Key calculate_key(const Node &s);
-    double cost(const Node &a, const Node &b);
+    double distance_between_points(const Node &a, const Node &b) const; // find distance between 2 nodes
+    Priority calculate_priority(const Node &s) const; // find the cost so far
+    double cost(const Node &a, const Node &b) const; // finds if node is free on the map
 
-    void insert(Node u, Key k);
-    void remove(Node u);
-    void update_vertex(Node u);
+    void insert(Node n, Priority p);
+    void remove(Node n);
+    void update_vertex(Node n);
 
+
+    // configs
     GridMap &map_;
     Node start_;
     Node goal_;
-    double km_;
+    double offset_old_poriority_; // also known as km which is just lazily given the old priority (HEURISTICS)
 
     std::vector<std::vector<double>> g_;
     std::vector<std::vector<double>> rhs_;
@@ -50,11 +51,11 @@ namespace secbot_navigation
     struct CellInfo
     {
       bool in_queue = false;
-      Key key;
+      Priority prio;
     };
     std::vector<std::vector<CellInfo>> open_hash_;
 
-    std::set<std::pair<Key, Node>> U_;
+    std::set<std::pair<Priority, Node>> nodes_to_process_;
   };
 
 } 

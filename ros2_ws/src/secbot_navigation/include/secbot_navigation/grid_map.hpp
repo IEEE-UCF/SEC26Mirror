@@ -11,30 +11,40 @@ namespace secbot_navigation
 
   // Used by:
   //   - DStarLite: To know which cells are traversable.
+  //   - PathSmoother: To check if line is clear to proceed on using Bresenham's algorithm
   //   - PlannerServer: To initialize the planning environment.
   //   - PathingNode: To load the initial map from arena_layout.yaml.
   
   class GridMap
   {
   public:
+
+    struct Cell { 
+                  int r; int c; 
+                  bool operator==(const Cell& cell) const { return r == cell.r && c == cell.c; }
+                  bool operator!=(const Cell& cell) const { return !(*this == cell); }
+                  bool operator<(const Cell& cell) const 
+                  {
+                    return (r < cell.r) || (r == cell.r && c < cell.c);
+                  }
+                };
     // === Constructor ===
     GridMap(const std::vector<std::vector<int>> &grid);
 
-    int get_rows() const;
-    int get_cols() const;
+    int get_rows() const; // gets the rows
+    int get_cols() const; // gets the columns
 
     // === Checks if a cell is within the grid boundaries ===
-    bool in_bounds(const std::pair<int, int> &cell) const;
+    bool in_bounds(const Cell &cell) const;  
 
     // === Checks if a cell is traversable ===
-    bool is_free(const std::pair<int, int> &cell) const;
+    bool is_free(const Cell &cell) const;
 
     // === Marks a cell as an obstacle ===
-    void set_obstacle(const std::pair<int, int> &cell);
+    void set_obstacle(const Cell &cell);
 
     // === Gets valid neighboring cells ===
-    std::vector<std::pair<int, int>>
-    neighbors(const std::pair<int, int> &cell) const;
+    std::vector<GridMap::Cell> neighbors(const Cell &cell) const;
 
   private:
     std::vector<std::vector<int>> grid_;

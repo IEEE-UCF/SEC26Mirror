@@ -1,12 +1,14 @@
 #include "secbot_navigation/path_smoother.hpp"
+#include "secbot_navigation/grid_map.hpp"
 #include <algorithm>
+#include <cstdlib>
 
 namespace secbot_navigation
 {
 
-  PathSmoother::PathSmoother(PathSmootherConfig config) : config_(config)
+  PathSmoother::PathSmoother(const GridMap& grid_map, PathSmootherConfig config) 
+  : grid_map_(grid_map), config_(config), max_skip_(static_cast<size_t>(config.max_skip))
   {
-    max_skip_ = config_.iterations;
   }
 
   // === Smoothing Algorithm ===
@@ -16,15 +18,15 @@ namespace secbot_navigation
   // 3. Backward check from j to i: can we connect i -> j directly?
   // 4. If yes, add j to smoothed path and advance i to j.
   // 5. If no, reduce j and try again.
-  std::vector<std::pair<int, int>>
-  PathSmoother::smooth(const std::vector<std::pair<int, int>> &path)
+  std::vector<PathSmoother::Cell>
+  PathSmoother::smooth(const std::vector<Cell>& path)
   {
     if (path.size() < 3)
     {
       return path;
     }
 
-    std::vector<std::pair<int, int>> smoothed;
+    std::vector<Cell> smoothed;
     smoothed.push_back(path[0]); // Always keep start
 
     size_t i = 0;
@@ -51,13 +53,37 @@ namespace secbot_navigation
     return smoothed;
   }
 
-  // === Line of Sight Check ===
-  bool PathSmoother::_line_is_clear(const std::pair<int, int> &p1,
-                                    const std::pair<int, int> &p2)
+  // === Bresenham's Line Algorithm ===
+  bool PathSmoother::_line_is_clear(const Cell &p1,
+                                    const Cell &p2)
   {
-    // TODO: Implement Raycasting (Bresenham's Line Algorithm)
-    // For now, checks are disabled (assumes clear), preserving Python behavior.
-    // In a real robot, checking the grid_map along the line is required.
+    int x0 = p1.r;
+    int y0 = p1.c;
+    int x1 = p2.r;
+    int y1 = p2.c;
+
+    int dx = std::abs(x1 - x0);
+    int dy = std::abs(y1 - y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+
+    int err = dx - dy;
+
+    while (true)
+    {
+      GridMap::Cell cell{x0, y0};
+
+      if (!grid_map_.in_bounds(cell) || !grid_map_.is_free(cell))
+        return false;
+
+      if (x0 == x1 && y0 == y1)
+        break;
+
+      int e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; x0 += sx; }
+      if (e2 <  dx) { err += dx; y0 += sy; }
+    }
+
     return true;
   }
 

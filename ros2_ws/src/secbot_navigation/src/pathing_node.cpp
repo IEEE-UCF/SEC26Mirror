@@ -29,38 +29,31 @@ namespace secbot_navigation
   class PathingNode : public rclcpp::Node
   {
   public:
-  // === Node constructor ===
     PathingNode() : Node("pathing_node")
     {
-      // 1. Declare Parameters
-      if (!this->has_parameter("use_sim_time"))
-      {
-        this->declare_parameter("use_sim_time", false);
-      }
+      // Get parameters from launch.py file
+      if (!this->has_parameter("use_sim"))
+      { this->declare_parameter("use_sim", false); }
       this->declare_parameter("config_file", "nav.yaml");
       this->declare_parameter("arena_file", "arena_layout.yaml");
 
-      // 2. Load Configuration
+      // Load configs
       load_config();
 
-      // 3. Initialize Planner
+      // Init the planner (brain of pathing) using grid map
       init_planner();
 
-      // 5. Setup ROS Interfaces
-      publisher_ =
-          this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
-      subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-          "/odom", 10, std::bind(&PathingNode::odom_callback, this, _1));
+      // Ros interfaces publish and subscriber nodes
+      publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10); // output motion commands
+      subscription_ = this->create_subscription<nav_msgs::msg::Odometry>("/odom", 10, std::bind(&PathingNode::odom_callback, this, _1)); // input robot pose
+      timer_ = this->create_wall_timer(100ms, std::bind(&PathingNode::control_loop, this)); // timer at 10 Hz, controls output
+      path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/global_path", 1); // publish planned path for RViz
+      debug_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/nav_debug", 1); // placeholder for markers
+      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/nav_pose", 10); // placeholder for publishing pose
 
-      // Control Loop Timer (10 Hz if configured)
-      timer_ = this->create_wall_timer(
-          100ms, std::bind(&PathingNode::control_loop, this));
-      path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/global_path", 1);
-      debug_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/nav_debug", 1);
-      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/nav_pose", 10);
-
-      // 4. Compute Initial Plan
-      compute_plan();
+      // Compute Initial Plan
+      compute_plan(); // info from yaml file
+      
       RCLCPP_INFO(this->get_logger(), "Pathing Node Initialized");
     }
 
@@ -74,74 +67,25 @@ namespace secbot_navigation
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_; 
 
     rclcpp::TimerBase::SharedPtr timer_;
-    // === helpers ===
+    // === helper ===
     void log_state(const char *tag)
     {
       RCLCPP_INFO(this->get_logger(), tag);
     }
 
-    void diagnose(const char *tag)
-    {
-      RCLCPP_INFO(
-          this->get_logger(),
-          "[%s] pose=(%.2f, %.2f) yaw=%.2f goal=(%.2f, %.2f) odom=%d path=%d",
-          tag,
-          robot_x_, robot_y_, robot_theta_,
-          goal_x_, goal_y_,
-          state_received_ ? 1 : 0,
-          current_trajectory_ ? 1 : 0);
-    }
-
-    // === Callback to handle new goals from vision ===
-    void vision_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
-    {
-      double new_x = msg->pose.position.x;
-      double new_y = msg->pose.position.y;
-
-      RCLCPP_INFO(this->get_logger(), "Vision Detected Goal: (%f, %f)", new_x,
-                  new_y);
-
-      // === Update Goal ===
-      goal_x_ = new_x;
-      goal_y_ = new_y;
-
-      // === Trigger Re-planning ===
-      int gr = static_cast<int>((goal_y_ - origin_.second) / resolution_);
-      int gc = static_cast<int>((goal_x_ - origin_.first) / resolution_);
-      planner_->set_goal({gr, gc});
-
-      // === Recompute path from current robot position ===
-      int sr = static_cast<int>((robot_y_ - origin_.second) / resolution_);
-      int sc = static_cast<int>((robot_x_ - origin_.first) / resolution_);
-
-      if (!state_received_){}
-
-      auto traj_opt = planner_->compute_plan({sr, sc});
-      if (traj_opt)
-      {
-        current_trajectory_ = std::make_unique<Trajectory>(*traj_opt);
-        controller_->set_path(*current_trajectory_);
-        RCLCPP_INFO(this->get_logger(), "Replanned path to vision target");
-      }
-      else
-      {
-        RCLCPP_WARN(this->get_logger(), "Failed to plan path to vision target");
-      }
-    }
-
     // Components
-    std::unique_ptr<GridMap> grid_map_;
-    std::unique_ptr<PlannerServer> planner_;
-    std::unique_ptr<PurePursuitController> controller_;
-    std::unique_ptr<Trajectory> current_trajectory_;
+    std::unique_ptr<GridMap> grid_map_; // Occupancy grid
+    std::unique_ptr<PlannerServer> planner_; // Planning of D* Lite + smoothing + trajecotry conversion
+    std::unique_ptr<PurePursuitController> controller_; // pure pursuit (THE RAFEED ALGORITM)
+    std::unique_ptr<Trajectory> current_trajectory_; // Current followed plan 
 
-    // State
+    // State from odom
     double robot_x_ = 0.0;
     double robot_y_ = 0.0;
     double robot_theta_ = 0.0;
     bool state_received_ = false;
 
-    // Configs
+    // Configs from yaml
     double start_x_ = 0.0;
     double start_y_ = 0.0;
     double goal_x_ = 0.0;
@@ -151,23 +95,26 @@ namespace secbot_navigation
     double resolution_ = 0.1;
     int max_skip_ = 1;
 
+    // === helper file path loader ===
+    std::string load_filepath(const std::string& folder, const std::string& filename)
+    {
+      return ament_index_cpp::get_package_share_directory("secbot_navigation") + folder + filename;
+    }
 
     // === loads nav.yaml configs ===
     void load_config()
     {
+      log_state("--------------------");
       log_state("Starting loading config");
-      std::string pkg_share =
-          ament_index_cpp::get_package_share_directory("secbot_navigation");
+      std::string pkg_share = ament_index_cpp::get_package_share_directory("secbot_navigation");
 
-      std::string nav_file = this->get_parameter("config_file").as_string();
-      std::string arena_file = this->get_parameter("arena_file").as_string();
 
-      std::string nav_path = pkg_share + "/config/" + nav_file;
-      std::string arena_path = pkg_share + "/config/" + arena_file;
+      std::string nav_path = load_filepath("/config/", this->get_parameter("config_file").as_string());
+      std::string arena_path = load_filepath("/config/", this->get_parameter("arena_file").as_string());
 
-      RCLCPP_INFO(this->get_logger(), "Loading configs: %s, %s", nav_path.c_str(),
-                  arena_path.c_str());
 
+      RCLCPP_INFO(this->get_logger(),"Loaded nav_path config: %s", nav_path.c_str());
+      RCLCPP_INFO(this->get_logger(),"Loaded arena_path config: %s", arena_path.c_str());
       try
       {
         YAML::Node nav_cfg = YAML::LoadFile(nav_path);
@@ -181,8 +128,7 @@ namespace secbot_navigation
         origin_.second = arena_cfg["origin"]["y"].as<double>();
 
         // === Init Grid ===
-        std::vector<std::vector<int>> grid_data(height,
-                                                std::vector<int>(width, 0));
+        std::vector<std::vector<int>> grid_data(height, std::vector<int>(width, 0));
         grid_map_ = std::make_unique<GridMap>(grid_data);
 
         // === Obstacles ===
@@ -192,7 +138,7 @@ namespace secbot_navigation
           const YAML::Node &obs = obstacles[i];
           if (obs["type"].as<std::string>() == "rectangle")
           {
-            mark_rectangle_obstacle(obs);
+            mark_rectangle_obstacle(obs); // generate obstacles
           }
         }
 
@@ -208,81 +154,83 @@ namespace secbot_navigation
         speed_ = 0.5;
         double lookahead = 1.0;
         max_skip_ = 1;
-        if (nav_cfg["trajectory"]["speed"])
-          speed_ = nav_cfg["trajectory"]["speed"].as<double>();
-        if (nav_cfg["trajectory"]["lookahead_distance"])
-          lookahead = nav_cfg["trajectory"]["lookahead_distance"].as<double>();
-        if (nav_cfg["smoothing"]["max_skip"])
-          max_skip_ = nav_cfg["smoothing"]["max_skip"].as<double>();
+        if (nav_cfg["trajectory"]["speed"]) speed_ = nav_cfg["trajectory"]["speed"].as<double>(); // add speed
+        if (nav_cfg["trajectory"]["lookahead_distance"]) lookahead = nav_cfg["trajectory"]["lookahead_distance"].as<double>(); // add lookahead distance
+        if (nav_cfg["smoothing"]["max_skip"]) max_skip_ = nav_cfg["smoothing"]["max_skip"].as<double>(); // add max skip
 
         // === Init Controller ===
-        controller_ = std::make_unique<PurePursuitController>(0.5, lookahead,
-                                                              speed_, 2.0, 2.0);
-        log_state("STOPPED loading config");
+        controller_ = std::make_unique<PurePursuitController>(0.5, lookahead, speed_, 2.0, 2.0);
+        log_state("Configs loaded successfully");
       }
       catch (const std::exception &e)
       {
         RCLCPP_ERROR(this->get_logger(), "Config Load Error: %s", e.what());
       }
     }
+
+
     // === Marks obstacle from YAML into GridMap ===
     void mark_rectangle_obstacle(const YAML::Node &obs)
     {
-      double x0 = obs["x"].as<double>();
-      double y0 = obs["y"].as<double>();
-      double w = obs["width"].as<double>();
-      double h = obs["height"].as<double>();
-
-      double x = x0;
-      while (x < x0 + w)
+      double x = obs["x"].as<double>();
+      while (x < obs["x"].as<double>() + obs["width"].as<double>()) // prevents all logic if obstacle is out of bounds on the x axis
       {
-        double y = y0;
-        while (y < y0 + h)
+        double y = obs["y"].as<double>();
+        while (y < obs["y"].as<double>() + obs["height"].as<double>()) // prevents all logic if obstacle is out of bounds on the y axis
         {
-          int r = static_cast<int>((y - origin_.second) / resolution_);
-          int c = static_cast<int>((x - origin_.first) / resolution_);
-          if (r >= 0 && r < grid_map_->get_rows() && c >= 0 &&
-              c < grid_map_->get_cols())
-          {
-            grid_map_->set_obstacle({r, c});
-          }
-          y += resolution_;
+          int r = static_cast<int>((y - origin_.second) / resolution_); // (y - origin_y) / resolution      (THIS RENDERS THE OBSTACLE ON THE Y AXIS)
+          int c = static_cast<int>((x - origin_.first) / resolution_); // (x - origin_x) / resolution      (THIS RENDERS THE OBSTACLE ON THE X AXIS)
+
+          if (r >= 0 && r < grid_map_->get_rows() && c >= 0 && c < grid_map_->get_cols()) // if the obstacle is within bounds
+          { grid_map_->set_obstacle({r, c}); } // sets the new obstacle
+          y += resolution_; // jump to the next y in real world coordinates
         }
-        x += resolution_;
+        x += resolution_; // jump to the next x in real world coordinates
       }
     }
+
+
+
     // === initializes plannerserver and sets goal ===
     void init_planner()
     {
-
+      log_state("--------------------");
       log_state("STARTED init planner");
       PlannerConfig p_cfg;
       p_cfg.speed = speed_;
       p_cfg.max_skip = max_skip_;
       planner_ = std::make_unique<PlannerServer>(*grid_map_, p_cfg);
 
-      // Set Goal
-      int gr = static_cast<int>((goal_y_ - origin_.second) / resolution_);
-      int gc = static_cast<int>((goal_x_ - origin_.first) / resolution_);
-      planner_->set_goal({gr, gc});
+      log_state("updated planner server configs (speed & max_skip)");
 
-      log_state("STOPPED init planner");
+      // Set Goal
+      int gr = static_cast<int>((goal_y_ - origin_.second) / resolution_); // Sets the goal on map using resolution to guide it
+      int gc = static_cast<int>((goal_x_ - origin_.first) / resolution_);
+      planner_->set_goal(GridMap::Cell{gr, gc});
+      log_state("Added goad to planner");
+
+      log_state("init planner completed successfully");
     }
     
     // === computes inital plam from YAML start to goal ===
     void compute_plan()
     {
+      log_state("--------------------");
+      log_state("Computing initial path");
+      // created plan
+      auto trajectory_plan = planner_->compute_plan(GridMap::Cell{
+        static_cast<int>((start_y_ - origin_.second) / resolution_), 
+        static_cast<int>((start_x_ - origin_.first) / resolution_)
+      });
 
-      int sr = static_cast<int>((start_y_ - origin_.second) / resolution_);
-      int sc = static_cast<int>((start_x_ - origin_.first) / resolution_);
 
-      auto traj_opt = planner_->compute_plan({sr, sc});
-      if (traj_opt)
+      if (trajectory_plan)
       {
-        current_trajectory_ = std::make_unique<Trajectory>(*traj_opt);
+        current_trajectory_ = std::make_unique<Trajectory>(*trajectory_plan);
         controller_->set_path(*current_trajectory_);
-        RCLCPP_INFO(this->get_logger(), "Path Computed Successfully");
+        log_state("Path Computed Successfully");
         this->publish_and_print_path(*current_trajectory_); // visualize path
+        log_state("Visualized path");
       }
       else
       {
@@ -292,60 +240,68 @@ namespace secbot_navigation
 
 
     // === Odom callback updates robot pose ===
-    void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+    void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) // uses robot pose from odometry
     {
-      robot_x_ = msg->pose.pose.position.x;
-      robot_y_ = msg->pose.pose.position.y;
-
-      tf2::Quaternion q(
-          msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
-          msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+      log_state("--------------------");
+      log_state("Odom callback being ran");
+      // converts quaternion orientation to yaw using tf2
+      tf2::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
       tf2::Matrix3x3 m(q);
       double roll, pitch, yaw;
       m.getRPY(roll, pitch, yaw);
       robot_theta_ = yaw;
-
-      state_received_ = true;
+      log_state("Converted quaternion orientation to yaw");
+      state_received_ = true; // so control loop can run
     }
     
-    // // === main control loop // ===
+    // === main control loop ===
     void control_loop()
     {
-      if (!state_received_ || !current_trajectory_)
-        return;
+      log_state("--------------------");
+      log_state("Starting control loop");
+
+      if (!state_received_ || !current_trajectory_) {
+        RCLCPP_INFO(this->get_logger(), "Skipping control loop (state_received=%d, trajectory=%d)", 
+        state_received_ ? 1 : 0, 
+        current_trajectory_ ? 1 : 0
+      );
+        if (!state_received_) { log_state("Not recieved /odom command to start (please call in another terminal)"); }
+        if (!current_trajectory_) { log_state("No trajecotry to follow"); }
+        return; // no odom no trajectory -> STOP
+      }
 
       // Check goal
       double dx = goal_x_ - robot_x_;
       double dy = goal_y_ - robot_y_;
-      if (std::sqrt(dx * dx + dy * dy) < 0.2)
+
+      if (std::sqrt(dx * dx + dy * dy) < 0.2) // check the distance to the goal
       {
-        // Stop
         auto stop_msg = geometry_msgs::msg::Twist();
         publisher_->publish(stop_msg);
+        log_state("Distance to goal reached");
         return;
       }
 
-      // Pure Pursuit Control
+      // === Pure Pursuit Control ===
+      log_state("Starting pure pursuit");
+      
       // Find Carrot
-      TrajectoryPoint carrot =
-          controller_->find_lookahead_point(robot_x_, robot_y_);
+      TrajectoryPoint carrot = controller_->find_lookahead_point(robot_x_, robot_y_);
+      RCLCPP_INFO(this->get_logger(), "Found carrot at (x=%.2f, y=%.2f), v=%.2f", carrot.x, carrot.y, carrot.v);
 
-      // Compute Control
-      auto wheel_speeds =
-          controller_->compute_control({robot_x_, robot_y_, robot_theta_},
-                                       {carrot.x, carrot.y}, {goal_x_, goal_y_});
+      // Compute wheel speeds
+      auto wheel_speeds = controller_->compute_control(
+        {robot_x_, robot_y_, robot_theta_},
+        {carrot.x, carrot.y}, {goal_x_, goal_y_}
+      );
+      RCLCPP_INFO(this->get_logger(), "Wheel speeds set at (left=%.3f, right=%.3f", wheel_speeds.first, wheel_speeds.second);
 
       // Convert Wheel Speeds to Twist (v, w)
-      double vl = wheel_speeds.first;
-      double vr = wheel_speeds.second;
-      double track = controller_->get_track_width();
+      auto cmd_msg = geometry_msgs::msg::Twist(); // publish to /cmd_vel
 
-      double v = (vr + vl) / 2.0;
-      double w = (vr - vl) / track;
+      cmd_msg.linear.x = (wheel_speeds.second + wheel_speeds.first) / 2.0; // velocity
+      cmd_msg.angular.z = (wheel_speeds.second - wheel_speeds.first) / controller_->get_track_width(); // angular velocity
 
-      auto cmd_msg = geometry_msgs::msg::Twist();
-      cmd_msg.linear.x = v;
-      cmd_msg.angular.z = w;
       publisher_->publish(cmd_msg);
     }
 
@@ -362,7 +318,7 @@ namespace secbot_navigation
         ps.header = path.header;
         ps.pose.position.x = p.x;
         ps.pose.position.y = p.y;
-        ps.pose.orientation.w = 1.0; // no yaw stored here
+        ps.pose.orientation.w = 1.0;
         path.poses.push_back(ps);
       }
       return path;
@@ -375,13 +331,13 @@ namespace secbot_navigation
       path_pub_->publish(path_msg);
 
       // 2. print to console
-      RCLCPP_INFO(this->get_logger(), "=== GENERATED PATH SEQP ===");
+      log_state("=== GENERATED PATH SEQP ===");
       int idx = 0;
       for (const auto &p : traj)
       {
-        RCLCPP_INFO(this->get_logger(), "Point %d: (%.2f, %.2f)", idx++, p.x, p.y);
+        RCLCPP_INFO(this->get_logger(), "Point %d: (%.2f, %.2f) v=%.2f", idx++, p.x, p.y, p.v);
       }
-      RCLCPP_INFO(this->get_logger(), "===========================");
+      log_state("===========================");
     }
   };
 

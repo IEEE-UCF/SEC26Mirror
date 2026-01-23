@@ -14,102 +14,78 @@ namespace secbot_navigation
 
   struct PlannerConfig
   {
-    int max_skip = 1;   // Smoothing parameter (how many points to skip)
-    double speed = 0.5; // Default robot speed in m/s
+    int max_skip = 1;   // max skipping if no skips provided
+    double speed = 0.5; // robot speed if no speed provided
   };
 
-  
-  // Contains:
-  // 1. The GridMap (Environment)
-  // 2. The DStarLite Planner (Algorithm)
-  // 3. The Path Smoother (Post-processing)
   class PlannerServer
   {
   public:
+    using Cell = GridMap::Cell;
+
     // === Initializes the server with map and config ===
-    PlannerServer(GridMap &grid_map, const PlannerConfig &config)
-        : grid_map_(grid_map), config_(config)
+    PlannerServer(GridMap &grid_map, const PlannerConfig &config) : grid_map_(grid_map), config_(config)
     {
       PathSmootherConfig ps_config;
-      ps_config.iterations = config.max_skip;
-      smoother_ = std::make_unique<PathSmoother>(ps_config);
+      ps_config.max_skip = config.max_skip;
+      smoother_ = std::make_unique<PathSmoother>(grid_map_, ps_config);
     }
 
     // === Sets or updates the goal position ===
-    void set_goal(const std::pair<int, int> &goal)
+    void set_goal(const Cell& goal)
     {
       goal_ = goal;
       planner_.reset();
     }
 
     // ===Main planning function===
-    std::optional<Trajectory> compute_plan(const std::pair<int, int> &start)
+    std::optional<Trajectory> compute_plan(const Cell& start)
     {
       if (!goal_)
       {
         throw std::runtime_error("Goal not set");
       }
 
-      if (!planner_)
-      {
-        // 1. Check if goal is set.
-        planner_ = std::make_unique<DStarLite>(grid_map_, start, *goal_);
-      }
-      else
-      {
-        // 2. Initialize or Update D* Lite planner.
-        planner_->update_start(start);
-      }
-      // 3. Compute shortest path (Grid Indices).
+      // Checks if there is a plan set
+      if (!planner_)        // If not generate one
+      { planner_ = std::make_unique<DStarLite>(grid_map_, start, *goal_); }
+      else                  // If there is one update the start
+      { planner_->update_start(start); }
+
+
+      // Compute the shortest path
       planner_->compute_shortest_path();
       auto raw_path = planner_->extract_path();
 
-      if (raw_path.empty())
-      {
-        return std::nullopt;
-      }
+      if (raw_path.empty()) // No path generated
+      { return std::nullopt; }
 
-      // 4. Smooth the path to remove unnecessary waypoints.
-      auto smooth_path = smoother_->smooth(raw_path);
+      auto smooth_path = smoother_->smooth(raw_path); // Smooth the path removing unneccesary points
 
-      // 5. Convert to World Trajectory (Meters & Headings).
-      return _build_trajectory(smooth_path);
-    }
-
-    // === Safety check ===
-    bool trajectory_blocked(const Trajectory &trajectory)
-    {
-      for (const auto &p : trajectory)
-      {
-        if (!grid_map_.is_free({static_cast<int>(p.x), static_cast<int>(p.y)}))
-        {
-          return true;
-        }
-      }
-      return false;
+      return _build_trajectory(smooth_path);  // Use trajectory class and convert points for robot from global -> local
     }
 
   private:
     // === Converts a list of grid cells to a trajectory with physics properties ===
     // Assigns speed and computes orientation (theta) for each point.
-    Trajectory _build_trajectory(const std::vector<std::pair<int, int>> &path)
+    Trajectory _build_trajectory(const std::vector<Cell> &path) // Build the path
     {
       Trajectory traj;
       for (const auto &p : path)
       {
-        traj.add_point(static_cast<double>(p.first),
-                       static_cast<double>(p.second), config_.speed);
+        traj.add_point(static_cast<double>(p.r), static_cast<double>(p.c), config_.speed);
       }
-      traj.compute_headings(); // Calculate theta for each point
+      traj.compute_direction(); // Calculate theta for each point
       return traj;
     }
-
+    
+    // configs
     GridMap &grid_map_;
     PlannerConfig config_;
 
     std::unique_ptr<PathSmoother> smoother_;
     std::unique_ptr<DStarLite> planner_;
-    std::optional<std::pair<int, int>> goal_;
+    std::optional<Cell> goal_;
   };
 
 }

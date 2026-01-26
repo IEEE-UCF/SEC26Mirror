@@ -9,8 +9,7 @@
  * - Connection monitoring
  * - Automatic reconnection on disconnect
  * - Optional multi-AP support (connect to strongest signal)
- *
- * 
+ */
 #pragma once
 
 #include <Arduino.h>

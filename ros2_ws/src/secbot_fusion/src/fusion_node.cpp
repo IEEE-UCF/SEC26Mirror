@@ -1,1 +1,1 @@
-// Wires everything and publishes nav_msgs/Odometry.
+#include "fusion_node.hpp"

@@ -12,6 +12,9 @@
  */
 #pragma once
 
+// Only compile for ESP32 platform
+#ifdef ESP32
+
 #include <Arduino.h>
 #include <BaseSubsystem.h>
 #include <WiFi.h>
@@ -170,3 +173,5 @@ class ESP32WifiSubsystem : public Subsystem::TimedSubsystem {
 };
 
 }  // namespace Subsystem
+
+#endif  // ESP32

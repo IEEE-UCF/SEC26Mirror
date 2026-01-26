@@ -4,6 +4,9 @@
  * @brief Implementation of ESP32 WiFi connection management subsystem
  */
 
+// Only compile for ESP32 platform
+#ifdef ESP32
+
 #include "ESP32WifiSubsystem.h"
 
 namespace Subsystem {
@@ -266,3 +269,5 @@ int8_t ESP32WifiSubsystem::scanForBestAP() {
 }
 
 }  // namespace Subsystem
+
+#endif  // ESP32

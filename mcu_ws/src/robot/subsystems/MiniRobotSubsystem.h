@@ -3,6 +3,7 @@
 #include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
 
+#include "Pose2D.h"
 #include "TimedSubsystem.h"
 #include "mcu_msgs/msg/mini_robot_state.h"
 
@@ -38,14 +39,6 @@ enum class MiniRobotCommand : uint8_t {
   START_MISSION = 1,
   STOP = 2,
   RETURN_HOME = 3
-};
-
-/**
- * @brief Simple 2D position for UWB-based navigation
- */
-struct Position2D {
-  float x = 0.0f;
-  float y = 0.0f;
 };
 
 /**
@@ -97,14 +90,14 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
 
   // Public Commands
   void startMission(float target_x, float target_y);
-  void startMission(const Position2D& target);
+  void startMission(const Pose2D& target);
   void stop();
   void returnHome();
 
   // External Data Input
   // Called by UWB subsystem or other source to update position
   void updatePosition(float x, float y);
-  void updatePosition(const Position2D& pos);
+  void updatePosition(const Pose2D& pos);
 
   // State Queries
   MiniRobotMissionState getMissionState() const { return mission_state_; }
@@ -117,8 +110,8 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   bool isConnected() const { return comms_status_ == CommsStatus::CONNECTED; }
 
   // Position Queries
-  Position2D getCurrentPosition() const { return current_position_; }
-  Position2D getTargetPosition() const { return target_position_; }
+  Pose2D getCurrentPosition() const { return current_position_; }
+  Pose2D getTargetPosition() const { return target_position_; }
   float getDistanceToTarget() const;
 
  private:
@@ -134,7 +127,7 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   bool pollEsp32Status();
 
   // Distance Calculations
-  float calculateDistance(const Position2D& a, const Position2D& b) const;
+  float calculateDistance(const Pose2D& a, const Pose2D& b) const;
   bool hasArrivedAtTarget() const;
   bool hasArrivedAtHome() const;
 
@@ -154,10 +147,10 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   uint32_t last_position_update_ms_ = 0;
 
   // Position State
-  Position2D current_position_;
-  Position2D target_position_;
-  Position2D home_position_;  // Where we started / return to
-  Position2D pending_target_; // Target for pending START_MISSION command
+  Pose2D current_position_;
+  Pose2D target_position_;
+  Pose2D home_position_;  // Where we started / return to
+  Pose2D pending_target_; // Target for pending START_MISSION command
 
   // Communication State
   CommsStatus comms_status_ = CommsStatus::DISCONNECTED;

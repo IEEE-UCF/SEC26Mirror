@@ -96,7 +96,7 @@ void MiniRobotSubsystem::startMission(float target_x, float target_y) {
   pending_command_ = MiniRobotCommand::START_MISSION;
 }
 
-void MiniRobotSubsystem::startMission(const Position2D& target) {
+void MiniRobotSubsystem::startMission(const Pose2D& target) {
   startMission(target.x, target.y);
 }
 
@@ -116,7 +116,7 @@ void MiniRobotSubsystem::updatePosition(float x, float y) {
   last_position_update_ms_ = millis();
 }
 
-void MiniRobotSubsystem::updatePosition(const Position2D& pos) {
+void MiniRobotSubsystem::updatePosition(const Pose2D& pos) {
   updatePosition(pos.x, pos.y);
 }
 
@@ -282,8 +282,8 @@ bool MiniRobotSubsystem::pollEsp32Status() {
 
 // Distance Calculations
 
-float MiniRobotSubsystem::calculateDistance(const Position2D& a,
-                                             const Position2D& b) const {
+float MiniRobotSubsystem::calculateDistance(const Pose2D& a,
+                                             const Pose2D& b) const {
   float dx = b.x - a.x;
   float dy = b.y - a.y;
   return sqrtf(dx * dx + dy * dy);

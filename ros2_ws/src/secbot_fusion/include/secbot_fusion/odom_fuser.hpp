@@ -14,12 +14,12 @@
 namespace secbot_fusion {
 
 class OdomFuser {
-public:
-  OdomFuser() : {};
+ public:
+  OdomFuser();
 
-  nav_msgs::msg::Odometry
-  convert_to_odom(const mcu_msgs::msg : DriveBase::SharedPtr msg);
+  nav_msgs::msg::Odometry convert_to_odom(
+      const mcu_msgs::msg::DriveBase::SharedPtr msg);
 
-private:
-}
-} // namespace secbot_fusion
+ private:
+};
+}  // namespace secbot_fusion

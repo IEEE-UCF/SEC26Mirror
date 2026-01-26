@@ -7,9 +7,9 @@
 
 namespace secbot_fusion {
 class TFBroadcaster {
-public:
-  TFBroadcaster() : {};
+ public:
+  TFBroadcaster();
 
-private:
+ private:
 };
-} // namespace secbot_fusion
+}  // namespace secbot_fusion

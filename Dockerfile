@@ -101,7 +101,7 @@ RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
 RUN echo "" >> /home/$USER_NAME/.bashrc && \
     echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USER_NAME/.bashrc && \
     echo "source /home/$USER_NAME/ros2_workspaces/install/setup.bash" >> /home/$USER_NAME/.bashrc
-    #echo "source /home/$USER_NAME/ros2_workspaces/microros_agent_ws/install/setup.bash" >> /home/$USER_NAME/.bashrc
+#echo "source /home/$USER_NAME/ros2_workspaces/microros_agent_ws/install/setup.bash" >> /home/$USER_NAME/.bashrc
 
 # 7. Install PlatformIO via pipx
 # Note: We manually set ENV PATH so 'pio' is immediately available in this container's
@@ -115,11 +115,11 @@ USER root
 # 8. Install any other python3 libraries here
 # Ensure gpiozero is available for Raspberry Pi GPIO control
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3-gpiozero \
-        python3-lgpio \
-        python3-rpi.gpio \
-        python3-serial \
-        python3-requests && \
+    python3-gpiozero \
+    python3-lgpio \
+    python3-rpi.gpio \
+    python3-serial \
+    python3-requests && \
     rm -rf /var/lib/apt/lists/*
 
 FROM base AS dev
@@ -131,6 +131,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-ros-gz \
     ros-$ROS_DISTRO-rviz2 \
     ros-$ROS_DISTRO-gz-ros2-control \
+    ros-$ROS_DISTRO-robot-localization \
     curl \
     lsb-release \
     gnupg \
@@ -146,7 +147,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Cleanup apt caches
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    #Add rqt graph
+#Add rqt graph
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-rqt-graph 
 

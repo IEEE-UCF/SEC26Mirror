@@ -45,6 +45,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DriveCommand.msg"
   "msg/DroneControl.msg"
   "msg/DroneState.msg"
+  "msg/IntakeState.msg"
   "msg/IRCommand.msg"
   "msg/LedColor.msg"
   "msg/McuState.msg"

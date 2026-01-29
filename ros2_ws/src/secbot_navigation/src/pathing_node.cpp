@@ -2,6 +2,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
@@ -50,6 +51,8 @@ namespace secbot_navigation
       path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/global_path", 1); // publish planned path for RViz
       debug_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/nav_debug", 1); // placeholder for markers
       pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/nav_pose", 10); // placeholder for publishing pose
+      goal_reached_pub_ = this->create_publisher<std_msgs::msg::Bool>("/nav/goal_reached", 10); // signals when nav goal is reached
+      vision_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("/goal_pose", 10, std::bind(&PathingNode::goal_callback, this, _1)); // dynamic goal input
 
       // Compute Initial Plan
       compute_plan(); // info from yaml file
@@ -64,9 +67,11 @@ namespace secbot_navigation
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vision_sub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_; // Path publisher for RViz
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr debug_pub_; // MarkerArray publisher for debug visualization
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_; 
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr goal_reached_pub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
+    bool goal_reached_ = false;
     // === helper ===
     void log_state(const char *tag)
     {
@@ -239,6 +244,23 @@ namespace secbot_navigation
     }
 
 
+    // Dynamic goal callback from /goal_pose
+    void goal_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
+    {
+      log_state("--------------------");
+      log_state("Received new goal_pose");
+      goal_x_ = msg->pose.position.x;
+      goal_y_ = msg->pose.position.y;
+      goal_reached_ = false;
+
+      // Replan from current robot position to new goal
+      start_x_ = robot_x_;
+      start_y_ = robot_y_;
+      init_planner();
+      compute_plan();
+      RCLCPP_INFO(this->get_logger(), "Replanned to goal (%.2f, %.2f) from (%.2f, %.2f)", goal_x_, goal_y_, robot_x_, robot_y_);
+    }
+
     // === Odom callback updates robot pose ===
     void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) // uses robot pose from odometry
     {
@@ -249,6 +271,8 @@ namespace secbot_navigation
       tf2::Matrix3x3 m(q);
       double roll, pitch, yaw;
       m.getRPY(roll, pitch, yaw);
+      robot_x_ = msg->pose.pose.position.x;
+      robot_y_ = msg->pose.pose.position.y;
       robot_theta_ = yaw;
       log_state("Converted quaternion orientation to yaw");
       state_received_ = true; // so control loop can run
@@ -278,6 +302,12 @@ namespace secbot_navigation
       {
         auto stop_msg = geometry_msgs::msg::Twist();
         publisher_->publish(stop_msg);
+        if (!goal_reached_) {
+          goal_reached_ = true;
+          auto reached_msg = std_msgs::msg::Bool();
+          reached_msg.data = true;
+          goal_reached_pub_->publish(reached_msg);
+        }
         log_state("Distance to goal reached");
         return;
       }

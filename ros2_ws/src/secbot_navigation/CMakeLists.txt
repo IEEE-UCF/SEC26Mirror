@@ -40,7 +40,8 @@ ament_target_dependencies(pathing_node
   visualization_msgs
   tf2
   ament_index_cpp
-  # std_msgs
+  yaml-cpp
+  std_msgs
 )
 
 target_link_libraries(pathing_node yaml-cpp)
@@ -61,6 +62,7 @@ install(DIRECTORY config
 install(DIRECTORY include/
   DESTINATION include/
 )
+
 
 ament_export_include_directories(include)
 

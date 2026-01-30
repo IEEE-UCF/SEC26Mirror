@@ -1,0 +1,141 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="default">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    
+
+    <!-- Mustard bottles (spawned at world load) -->
+    <!-- <include>
+      <name>mustard_bottle_0</name>
+      <uri>file:///home/ubuntu/ros2_workspaces/src/sec26ros/src/robot_workshop/worlds/model.sdf</uri>
+      <pose>1.0 0.0 0.15 0 0 0</pose>
+    </include>
+
+    <include>
+      <name>mustard_bottle_1</name>
+      <uri>file:///home/ubuntu/ros2_workspaces/src/sec26ros/src/robot_workshop/worlds/model.sdf</uri>
+      <pose>1.0 0.3 0.15 0 0 0</pose>
+    </include>
+
+    <include>
+      <name>mustard_bottle_2</name>
+      <uri>file:///home/ubuntu/ros2_workspaces/src/sec26ros/src/robot_workshop/worlds/model.sdf</uri>
+      <pose>1.0 -0.6 0.15 0 0 0</pose>
+    </include> -->
+
+    
+    <!-- ===== Obstacles from arena_layout.yaml ===== -->
+    <model name="wall_top">
+      <static>true</static>
+      <pose>0.0 4.1 0.15 0 0 0</pose> <!-- center: x=-8+16/2=0, y=3.9+0.4/2=4.1 -->
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>16.0 0.4 0.3</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>16.0 0.4 0.3</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_bottom">
+      <static>true</static>
+      <pose>0.0 -4.1 0.15 0 0 0</pose> <!-- y=-4.3+0.4/2=-4.1 -->
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>16.0 0.4 0.3</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>16.0 0.4 0.3</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_left">
+      <static>true</static>
+      <pose>-8.1 0.0 0.15 0 0 0</pose> <!-- x=-8.3+0.4/2=-8.1, y=-4+8/2=0 -->
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>0.4 8.0 0.3</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>0.4 8.0 0.3</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_right">
+      <static>true</static>
+      <pose>8.1 0.0 0.15 0 0 0</pose> <!-- x=7.9+0.4/2=8.1 -->
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>0.4 8.0 0.3</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>0.4 8.0 0.3</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <model name="obstacle_0">
+      <static>true</static>
+      <pose>3.0 -1.0 0.15 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>1.0 1.0 0.3</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>1.0 1.0 0.3</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+
+
+  </world>
+</sdf>

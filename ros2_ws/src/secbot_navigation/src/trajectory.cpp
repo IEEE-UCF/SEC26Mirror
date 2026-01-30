@@ -158,7 +158,7 @@ namespace secbot_navigation
                 double ratio = remain / dist_to_next;
                 double carrot_x = current_pos.first + ratio * dx;
                 double carrot_y = current_pos.second + ratio * dy;
-                return {carrot_x, carrot_y, 0.0, 0.0};
+                return {carrot_x, carrot_y, 0.0, max_v_};
             }
 
             dist_travelled += dist_to_next;

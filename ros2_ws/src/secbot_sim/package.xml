@@ -9,6 +9,11 @@
 
 	<buildtool_depend>ament_cmake</buildtool_depend>
 
+	<depend>rclcpp</depend>
+	<depend>std_msgs</depend>
+	<depend>geometry_msgs</depend>
+	<depend>mcu_msgs</depend>
+
 	<export>
 		<build_type>ament_cmake</build_type>
 	</export>

@@ -4,10 +4,14 @@
 namespace Field {
 
 bool CrankDriver::init() {
-  Serial.begin(9600);
+  pinMode(_setup._clk_k, INPUT);
+  pinMode(_setup._dt_k, INPUT);
+  pinMode(_setup._ledPin, OUTPUT);
+
   reset();
   _prevClk = digitalRead(_setup._clk_k);
 
+  Serial.println("Crank initialized");
   return true;
 }
 

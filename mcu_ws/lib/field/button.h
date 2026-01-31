@@ -34,7 +34,8 @@ class ButtonDriver : public Classes::BaseDriver {
   ~ButtonDriver() override = default;
 
   ButtonDriver(const ButtonSetup& setup)
-      : BaseDriver(setup), _setup(setup), _counter(0) {
+      : BaseDriver(setup), _setup(setup), _counter(0), button(setup._swPin) {
+    button.setDebounceTime(50);
     pinMode(setup._ledPin, OUTPUT);  // LED PIN
     task = NOTCOMPLETE;
   };
@@ -60,6 +61,7 @@ class ButtonDriver : public Classes::BaseDriver {
  private:
   const ButtonSetup _setup;
   int _counter;
+  ezButton button;
 
   enum TASK { COMPLETE, NOTCOMPLETE } task;
 };

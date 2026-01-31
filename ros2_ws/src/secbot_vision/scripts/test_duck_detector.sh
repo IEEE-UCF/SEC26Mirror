@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Readme: To Run: 
-# sudo chmod +x ros2_ws/src/secbot_vision/scripts/test_duck_detector.sh
+# sudo chmod +x src/sec26ros/secbot_vision/scripts/test_duck_detector.sh
 # then Run 
-# ros2_ws/src/secbot_vision/scripts/test_duck_detector.sh
+# src/sec26ros/secbot_vision/scripts/test_duck_detector.sh
 
 set -e
 
@@ -84,7 +84,7 @@ sleep 5
 # -------- Spawn mustard bottles --------
 # Use ros2 pkg prefix to find the share directory dynamically
 SHARE_DIR=$(ros2 pkg prefix --share secbot_vision)
-MODEL="$SHARE_DIR/worlds/model.sdf"
+MODEL="$SHARE_DIR/worlds/default/model.sdf"
 WORLD="default"
 
 echo "Spawning mustard bottles using model: $MODEL"

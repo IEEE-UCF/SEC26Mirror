@@ -44,6 +44,8 @@ struct BNO085DriverData {
   float qw = 0.0f;
 
   float yaw = 0.0f;
+  float roll = 0.0f;
+  float pitch = 0.0f;
 };
 
 class BNO085Driver : public Classes::BaseDriver {
@@ -54,20 +56,21 @@ class BNO085Driver : public Classes::BaseDriver {
       : BaseDriver(setup), setup_(setup), imu_(setup.reset_pin){};
 
   bool init() override;
-  void update() override;
+  void update() override;//constantly read for values and update data in the BNO085Driver Structure
   const char* getInfo() override;
 
   BNO085DriverData getData() { return data_; };
-
+  float calculateRoll(float qx,float qy,float qz,float qw);
+  float calculatePitch(float qx,float qy,float qz,float qw);
   float calculateYaw(float qx, float qy, float qz, float qw);
-
+  float radians_to_degree(float angle);
  private:
   const BNO085DriverSetup setup_;
-  BNO085DriverData data_;
+  BNO085DriverData data_; //structure data of the 
   char infoBuffer_[64];
 
-  Adafruit_BNO08x imu_;
-  sh2_SensorValue_t sensorValue_;
+  Adafruit_BNO08x imu_; // object instance of the actual IMU sensor
+  sh2_SensorValue_t sensorValue_; //structure for sensor value
 };
 }  // namespace Drivers
 #endif

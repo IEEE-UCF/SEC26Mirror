@@ -68,3 +68,12 @@ mcu_ws/.vscode/*
 
 # ai agents
 .claude/*
+
+#specific fix for jh directory
+ros2_ws/src/build/
+ros2_ws/src/install/
+ros2_ws/src/log
+#general safety net for any ROS folder depth
+**/build/
+**/install/
+**/log/

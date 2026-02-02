@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+	<name>secbot_jh_test</name>
+	<version>0.0.1</version>
+	<description>seeing_what_i_can_and_cannot_add_here</description>
+	<maintainer email="maintainers@example.com">SEC26</maintainer>
+	<license>MIT</license>
+
+	<buildtool_depend>ament_cmake</buildtool_depend>
+	<exec_depend>ros_gz_sim</exec_depend>
+	<exec_depend>ros2launch</exec_depend>
+	<export>
+		<build_type>ament_cmake</build_type>
+		<gazebo_model_path>${prefix}/..</gazebo_model_path>
+	</export>
+</package>
+<!--
+In ROS2, a package is just a folder UNTIL you define it in the package.xml
+	-Dependencies: By adding ros_gz_sim and ros2launch your "launch file"(the .py file) uses these to START the gazebo engine
+	-Export: the <gazebo_model_path>${prefix}/..</gazebo_model_path> line is necessary.
+	By deafult, Gazebo only looks in its own internal folders for models. The line tells the build system to append your package's directory(jh_testing)
+	to the GZ_SIM_RESOURCE_PATH(which if you wanted to know how to you'd have to say this EVERYTIME on the terminal "ros2 launch ros_gz_sim gz_server.launch.py world_sdf_file:=empty.sdf"
+	which sucks) so to just point your resource you include that export line
+-->

@@ -1,8 +1,7 @@
 ekf_node:
   ros__parameters:
     frequency: 30.0
-
-    two_d_mode: true
+    two_d_mode: false
     publish_tf: true
 
     map_frame: map              # Defaults to "map" if unspecified
@@ -12,7 +11,7 @@ ekf_node:
 
     odom0: /odom/unfiltered
 
-    odom0_config: [false, false, false,
+    odom0_config:    [false, false, false,
                       false, false, false,
                       true,  false, false,
                       false, false, true,
@@ -23,7 +22,7 @@ ekf_node:
 
     imu0: /mcu_robot/imu/data
 
-    imu0_config: [false, false, false,
+    imu0_config:     [false, false, false,
                       false, false, true,
                       false,  false, false,
                       false, false, true,
@@ -33,3 +32,13 @@ ekf_node:
     imu0_differential: false
     # not sure here
     imu0_relative: false
+
+    pose0: /uwb/pose/robot
+    pose0_config:    [true, true, true,
+                      false, false, false,
+                      false,  false, false,
+                      false, false, false,
+                      false, false, false]
+    pose0_differential: false
+    # tune here
+    pose0_rejection_threshold: 2.0

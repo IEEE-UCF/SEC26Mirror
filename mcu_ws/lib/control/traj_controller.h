@@ -79,15 +79,17 @@ class TrajectoryController {
         0.0f;  // small creep speed, if we want we can keep it 0 for full stop
 
     // Goal tolerances
-    float pos_tol = 0.03f;      // meters
-    float heading_tol = 0.08f;  // radians
+    float pos_tol = 0.03f;       // meters
+    float pos_tol_sq = 0.0009f;  // pos_tol^2, set by configure()
+    float heading_tol = 0.08f;   // radians
 
     // Final heading behavior (rotate-in-place at the end)
     bool use_final_heading = true;
     float k_heading = 2.5f;  // P gain for final heading hold
 
-    // “Progress” logic: how close before we advance along the path
-    float advance_tol = 0.10f;  // meters
+    // "Progress" logic: how close before we advance along the path
+    float advance_tol = 0.10f;     // meters
+    float advance_tol_sq = 0.01f;  // advance_tol^2, set by configure()
 
     // dt guards
     float min_dt = 1e-6f;
@@ -131,10 +133,11 @@ class TrajectoryController {
   void advanceIfNeeded(const Pose2D& pose);
 
   static float clamp(float x, float lo, float hi);
-  static bool isFinite(float x);
+  static bool checkDt(float dt, float min_dt, float max_dt);
   static float wrapAngle(float a);
   static float hypot2(float x, float y);
   static float sanitizePositive(float x, float fallback);
+  static void sincosFast(float t, float* s, float* c);
 
   Config cfg_{};
 

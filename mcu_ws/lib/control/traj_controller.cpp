@@ -25,6 +25,9 @@ void TrajectoryController::configure(const Config& cfg) {
   cfg_.heading_tol = sanitizePositive(cfg_.heading_tol, 0.0f);
   cfg_.advance_tol = sanitizePositive(cfg_.advance_tol, 0.0f);
 
+  cfg_.pos_tol_sq = cfg_.pos_tol * cfg_.pos_tol;
+  cfg_.advance_tol_sq = cfg_.advance_tol * cfg_.advance_tol;
+
   cfg_.k_heading = sanitizePositive(cfg_.k_heading, 0.0f);
   cfg_.min_v_near_goal = clamp(cfg_.min_v_near_goal, 0.0f, cfg_.max_v);
 
@@ -68,7 +71,7 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
   }
 
   // reject bad dt (keeps us deterministic and prevents div0 explosions)
-  if (!(dt >= cfg_.min_dt) || !(dt <= cfg_.max_dt) || !isFinite(dt)) {
+  if (!checkDt(dt, cfg_.min_dt, cfg_.max_dt)) {
     cmd.v = 0.0f;
     cmd.w = 0.0f;
     cmd.lookahead_x = lookahead_x_;
@@ -81,9 +84,9 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
   if (count_ == 1) {
     const float dx = pts_[0].x - pose.x;
     const float dy = pts_[0].y - pose.y;
-    const float dist = hypot2(dx, dy);
+    const float dist_sq = dx * dx + dy * dy;
 
-    if (dist <= cfg_.pos_tol) {
+    if (dist_sq <= cfg_.pos_tol_sq) {
       // optional final heading hold, this is just quality of life slop
       float w = 0.0f;
       if (cfg_.use_final_heading && pts_[0].has_heading) {
@@ -112,21 +115,22 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
     lookahead_y_ = ly;
 
     // transform lookahead into robot frame
-    const float c = std::cos(pose.theta);
-    const float s = std::sin(pose.theta);
+    float c, s;
+    sincosFast(pose.theta, &s, &c);
     const float rx = lx - pose.x;
     const float ry = ly - pose.y;
     const float x_local = c * rx + s * ry;
     const float y_local = -s * rx + c * ry;
 
-    const float L = hypot2(x_local, y_local);
-    const float L2 = (L > 1e-6f) ? (L * L) : 1e-6f;
+    const float L_sq = x_local * x_local + y_local * y_local;
+    const float L2 = (L_sq > 1e-12f) ? L_sq : 1e-12f;
 
     float v_des = cfg_.cruise_v;
     if (pts_[0].has_vel) v_des = clamp(pts_[0].v, 0.0f, cfg_.max_v);
 
     // slowdown near goal
     if (cfg_.slowdown_dist > 0.0f) {
+      const float dist = hypot2(dx, dy);
       const float scale = clamp(dist / cfg_.slowdown_dist, 0.0f, 1.0f);
       v_des = clamp(v_des * scale, cfg_.min_v_near_goal, cfg_.max_v);
     }
@@ -166,9 +170,9 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
   const Waypoint& last = pts_[count_ - 1];
   const float dx_goal = last.x - pose.x;
   const float dy_goal = last.y - pose.y;
-  const float dist_goal = hypot2(dx_goal, dy_goal);
+  const float dist_goal_sq = dx_goal * dx_goal + dy_goal * dy_goal;
 
-  if (dist_goal <= cfg_.pos_tol && seg_i_ >= (count_ - 2)) {
+  if (dist_goal_sq <= cfg_.pos_tol_sq && seg_i_ >= (count_ - 2)) {
     // optional final heading hold
     if (cfg_.use_final_heading && last.has_heading) {
       const float err_h = wrapAngle(last.heading - pose.theta);
@@ -199,15 +203,15 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
   lookahead_y_ = ly;
 
   // transform lookahead into robot frame
-  const float c = std::cos(pose.theta);
-  const float s = std::sin(pose.theta);
+  float c, s;
+  sincosFast(pose.theta, &s, &c);
   const float rx = lx - pose.x;
   const float ry = ly - pose.y;
   const float x_local = c * rx + s * ry;
   const float y_local = -s * rx + c * ry;
 
-  const float L = hypot2(x_local, y_local);
-  const float L2 = (L > 1e-6f) ? (L * L) : 1e-6f;
+  const float L_sq = x_local * x_local + y_local * y_local;
+  const float L2 = (L_sq > 1e-12f) ? L_sq : 1e-12f;
 
   // choose desired speed:
   // - use waypoint speed if available (we sample from the segment end waypoint)
@@ -220,6 +224,7 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
 
   // slowdown near the final goal
   if (cfg_.slowdown_dist > 0.0f) {
+    const float dist_goal = hypot2(dx_goal, dy_goal);
     const float scale = clamp(dist_goal / cfg_.slowdown_dist, 0.0f, 1.0f);
     v_des = clamp(v_des * scale, cfg_.min_v_near_goal, cfg_.max_v);
   }
@@ -257,9 +262,8 @@ void TrajectoryController::advanceIfNeeded(const Pose2D& pose) {
   const Waypoint& next = pts_[seg_i_ + 1];
   const float dx = next.x - pose.x;
   const float dy = next.y - pose.y;
-  const float dist = hypot2(dx, dy);
 
-  if (dist <= cfg_.advance_tol) {
+  if (dx * dx + dy * dy <= cfg_.advance_tol_sq) {
     seg_i_++;
     if (seg_i_ > (count_ - 2)) seg_i_ = (count_ - 2);
   }
@@ -364,22 +368,26 @@ void TrajectoryController::chassisToWheelSpeeds(float v, float w,
 }
 
 float TrajectoryController::clamp(float x, float lo, float hi) {
-  if (x < lo) return lo;
-  if (x > hi) return hi;
-  return x;
+  return fmaxf(lo, fminf(x, hi));
 }
 
-bool TrajectoryController::isFinite(float x) {
-  return (x == x) && (x > -3.4e38f) && (x < 3.4e38f);  // filters NaN/Inf
+bool TrajectoryController::checkDt(float dt, float min_dt, float max_dt) {
+  float a = dt - min_dt;
+  float b = max_dt - dt;
+  uint32_t a_bits, b_bits;
+  __builtin_memcpy(&a_bits, &a, 4);
+  __builtin_memcpy(&b_bits, &b, 4);
+  uint32_t combined = a_bits | b_bits;
+  return ((0x7F800000u - combined) >> 31) ^ 1;
 }
 
 float TrajectoryController::wrapAngle(float a) {
-  // wrap into [-pi, pi]
-  const float kPi = 3.14159265358979323846f;
-
-  while (a > kPi) a -= 2.0f * kPi;
-  while (a < -kPi) a += 2.0f * kPi;
-  return a;
+  constexpr float kPi = 3.14159265f;
+  constexpr float kTwoPi = 6.28318530f;
+  constexpr float kInvTwoPi = 1.0f / 6.28318530f;
+  a += kPi;
+  a -= kTwoPi * floorf(a * kInvTwoPi);
+  return a - kPi;
 }
 
 float TrajectoryController::hypot2(float x, float y) {
@@ -387,7 +395,20 @@ float TrajectoryController::hypot2(float x, float y) {
 }
 
 float TrajectoryController::sanitizePositive(float x, float fallback) {
-  if (!isFinite(x)) return fallback;
-  if (x < 0.0f) return -x;
-  return x;
+  x = std::fabs(x);
+  uint32_t bits;
+  __builtin_memcpy(&bits, &x, 4);
+  return (bits >= 0x7F800000u) ? fallback : x;
+}
+
+void TrajectoryController::sincosFast(float t, float* s, float* c) {
+  float h = t * 0.5f;
+  float h2 = h * h;
+  float sin_h =
+      h * (1.0f + h2 * (-0.16666658f + h2 * (0.00833255f - h2 * 0.00019587f)));
+  float cos_h =
+      1.0f + h2 * (-0.49999905f + h2 * (0.04165588f - h2 * 0.00135884f));
+  float two_sin_h = sin_h + sin_h;
+  *s = two_sin_h * cos_h;
+  *c = 1.0f - two_sin_h * sin_h;
 }

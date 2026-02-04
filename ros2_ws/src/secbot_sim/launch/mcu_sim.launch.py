@@ -3,42 +3,50 @@ MCU Subsystem Simulator Launch File
 
 Launches the mcu_subsystem_sim node that simulates Drive, Battery, and Heartbeat subsystems
 """
+# TO START RUN chmod +x /home/ubuntu/ros2_workspaces/src/sec26ros/secbot_sim/scripts/run_sim.sh 
+# this initializes the .sh file
+
+# this file is used to make it easier to run mcu_sim.launch.py since making sure all nodes are updated is super tedious
+
+# FINALLY RUN /home/ubuntu/ros2_workspaces/src/sec26ros/secbot_sim/scripts/run_sim.sh
+# this is to run the actual file itself
+
 import os
 import yaml
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.actions import ExecuteProcess, DeclareLaunchArgument, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
+
+
 def generate_launch_description():
 
-    pkg_share = get_package_share_directory('secbot_sim')
-    
-    # Path to World file
-    world_file = os.path.join(
-        pkg_share,
-        'worlds',
-        # 'field',
-        'bot',
-        # 'proper_field.world'
-        'my_bot_harmonic.sdf'
-        # 'field.world'
-        
-    )
-    
-    # Path to Robot SDF for spawning
-    robot_sdf_file = os.path.join(
-        pkg_share,
-        'worlds',
-        'bot',
-        'my_bot.sdf'
-    )
+    # package directories =====================================
+    pkg_secbot_sim = get_package_share_directory('secbot_sim')
+    pkg_secbot_fusion = get_package_share_directory('secbot_fusion')
+    pkg_secbot_navigation = get_package_share_directory('secbot_navigation')
+    pkg_secbot_vision = get_package_share_directory('secbot_vision')
 
-    # Ensure Gazebo can find the models
-    gz_resource_path = os.path.join(pkg_share, 'worlds')
     
+    # configs ===============================
+    vision_config = os.path.join(pkg_secbot_vision, 'config', 'vision.yaml')
+    ekf_config_path = os.path.join(pkg_secbot_fusion, 'config', 'ekf.yaml')
+    nav_config_path = os.path.join(pkg_secbot_navigation, 'config', 'nav_sim.yaml')
+    arena_config_path = os.path.join(pkg_secbot_navigation, 'config', 'arena_layout.yaml')
+    bridge_config = os.path.join(pkg_secbot_sim,'controllers','ros2_control.yaml')# Path to bridge config
+    
+    # world info ===================================
+    world_file = os.path.join(pkg_secbot_sim, 'worlds','bot', 'my_bot_harmonic.sdf') # Path to World file
+    robot_sdf_file = os.path.join(pkg_secbot_sim, 'worlds', 'bot', 'my_bot.sdf')    # Path to Robot SDF for spawning
+    gz_resource_path = os.path.join(pkg_secbot_sim, 'worlds') # Ensure Gazebo can find the models
+    spawn_yaml_path = os.path.join(pkg_secbot_vision,'controllers', 'spawn_locations.yaml')# Path to Spawn Locations YAML
+    yellow_box_sdf = os.path.join(pkg_secbot_sim,'worlds','proper_field','yellow_box.sdf')# Path to Yellow Box SDF
+    
+
+    # THIS IS WHAT IS USED TO START GAZEBO ===========================
     if 'GZ_SIM_RESOURCE_PATH' in os.environ:
         gz_resource_path += os.pathsep + os.environ['GZ_SIM_RESOURCE_PATH']
         
@@ -51,41 +59,64 @@ def generate_launch_description():
         additional_env=env
     )
 
-    # Spawn Robot
-    # Path to Spawn Locations YAML
-    spawn_yaml_path = os.path.join(
-        pkg_share,
-        'controllers',
-        'spawn_locations.yaml'
-    )
-    
-    # Load YAML if exists
-    yaml_data = {}
-    if os.path.exists(spawn_yaml_path):
-        with open(spawn_yaml_path, 'r') as f:
-            yaml_data = yaml.safe_load(f) or {}
 
-    # Spawn Robot
-    # Default Spawn Location from YAML or Fallback
-    robot_cfg = yaml_data.get('robot', {})
-    default_x = str(robot_cfg.get('x', '0.25'))
-    default_y = str(robot_cfg.get('y', '-1.0'))
-    default_z = str(robot_cfg.get('z', '0.2'))
-    default_yaw = str(robot_cfg.get('yaw', '0.0'))
+    # ARGS ==========================================
+    num_blocks_arg = DeclareLaunchArgument('num_blocks', default_value='3', description='Number of yellow boxes to spawn (max 6)')# Declare num_blocks argument
+    block_scale_arg = DeclareLaunchArgument('block_scale',default_value='1.0',description='Uniform scale factor for yellow boxes (e.g., 0.5, 2.0)')# Declare num_blocks argument
 
-    # Declare launch arguments for offsets
-    # x_offset_arg = DeclareLaunchArgument('x_offset', default_value='0.0', description='X offset for robot spawn')
-    # y_offset_arg = DeclareLaunchArgument('y_offset', default_value='0.0', description='Y offset for robot spawn')
-    # z_offset_arg = DeclareLaunchArgument('z_offset', default_value='0.0', description='Z offset for robot spawn')
-    # yaw_offset_arg = DeclareLaunchArgument('yaw_offset', default_value='0.0', description='Yaw offset for robot spawn')
+    def spawn_yellow_boxes(context, *args, **kwargs):
+        num_blocks_str = LaunchConfiguration('num_blocks').perform(context)
+        try:
+            num_blocks = int(num_blocks_str)
+        except ValueError:
+            num_blocks = 1
+            
+        # Load spawn locations from YAML (re-read to ensure we get locations)
+        spawn_poses = []
+        if os.path.exists(spawn_yaml_path):
+            with open(spawn_yaml_path, 'r') as f:
+                y_data = yaml.safe_load(f) or {}
+                if 'locations' in y_data:
+                    # Convert values to strings for Launch arguments
+                    spawn_poses = [
+                        {k: str(v) for k, v in loc.items()} 
+                        for loc in y_data['locations']
+                    ]
+        
+        # Fallback if YAML fails or is empty
+        if not spawn_poses:
+            spawn_poses = [
+                {'x': f'7.0', 'y': f'2.0', 'z': '0.1'},
+            ]
+        
+        # Clamp number of blocks
+        num_blocks = max(0, min(num_blocks, len(spawn_poses)))
+        nodes = []
+        for i in range(num_blocks):
+            pose = spawn_poses[i]
 
-    # Calculate final spawn position
-    # Calculate final spawn position
-    x_pos = PythonExpression([default_x, " + ", LaunchConfiguration('x_offset')])
-    y_pos = PythonExpression([default_y, " + ", LaunchConfiguration('y_offset')])
-    z_pos = PythonExpression([default_z, " + ", LaunchConfiguration('z_offset')])
-    yaw_pos = PythonExpression([default_yaw, " + ", LaunchConfiguration('yaw_offset')])
 
+            scale = LaunchConfiguration('block_scale').perform(context)
+
+            node = Node(
+                package='ros_gz_sim',
+                executable='create',
+                arguments=[
+                    '-file', yellow_box_sdf,
+                    '-name', f'yellow_box_{i+1}',
+                    '-x', pose['x'],
+                    '-y', pose['y'],
+                    '-z', pose['z'],
+                    '-s', scale,   # <-- add this
+                ],
+                output='screen'
+            )
+            nodes.append(node)
+        return nodes
+
+    spawn_boxes_opaque = OpaqueFunction(function=spawn_yellow_boxes)
+
+    # NODES TIME ================================================
     # Spawn Robot
     spawn_robot = Node(
         package='ros_gz_sim',
@@ -97,12 +128,34 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Path to bridge config
-    bridge_config = os.path.join(
-        pkg_share,
-        'controllers',
-        'ros2_control.yaml'
+    # vision
+    vision = Node(
+        package = 'secbot_vision',
+        executable='detector_node',
+        name='detector_node',
+        output='screen',
+        parameters=[vision_config, {'use_sim_time': True,}]
     )
+
+    # compute goal based on info from vision
+    vision_to_goal = Node(
+        package ='secbot_sim',
+        executable='convert_vision_to_goal.py',
+        name='vision_to_goal',
+        output='screen',
+        parameters=[{
+            'detections_topic': '/duck_detections',
+            'camera_info_topic': '/camera/camera_info',
+            'use_sim_time': True,
+            'odom_topic': '/odom',
+            'camera_height': 0.30,
+            'camera_tilt_deg': 0,
+            'goal_standoff': 0.0,
+            'min_confidence': 60.0,
+            'use_largest_area': True,
+        }]
+    )
+
 
     # ROS-Gazebo Bridge
     bridge = Node(
@@ -113,10 +166,11 @@ def generate_launch_description():
             '-p',
             f'config_file:={bridge_config}'
             ],
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': True,}]
     )
 
-
+    # mcu dummy node
     mcu_subsystem = Node(
             package='secbot_sim',
             executable='mcu_subsystem_sim',
@@ -127,6 +181,29 @@ def generate_launch_description():
             }],
         )
     
+    # ekf 
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_node',
+        output='screen',
+        parameters=[ekf_config_path, {'use_sim_time': True}],
+        remappings=[
+            ('/odom/unfiltered', '/odom'),
+        ],
+    )
+
+    # fusion
+    fusion_node = Node(
+        package='secbot_fusion',
+        executable='fusion_node',
+        name='fusion_node',
+        output='screen',
+        parameters=[{'use_sim_time': True}],
+    )
+    
+
+    # pathing to goal
     pathing_node = Node(
             package='secbot_navigation',
             executable='pathing_node',
@@ -134,25 +211,34 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'use_sim': True,
-                'config_file': 'nav_sim.yaml',
-                'arena_file': 'arena_layout.yaml',
+                'use_sim_time': True,
+                'config_file': nav_config_path,
+                'arena_file': arena_config_path,
             }],
-            # If needed, remap topics here (see notes below)
-            # remappings=[
-            #   ('/odom', '/odom'), 
-            #   ('/cmd_vel', '/cmd_vel'),
-            # ]
+            remappings=[
+                # ('/odom','/odometry/filtered'),
+                # ('/odom_raw','/odom'),
+                ('/odom','/odom')
+            ]
         )
 
 
     return LaunchDescription([
-        # x_offset_arg,
-        # y_offset_arg,
-        # z_offset_arg,
-        # yaw_offset_arg,
+        # sim ==============
         gz_sim,
-        spawn_robot,
-        bridge,
+
+        # args =============
+        num_blocks_arg,
+        block_scale_arg,
+        spawn_boxes_opaque,
+
+        # nodes ============
         mcu_subsystem,
+        spawn_robot,
+        vision,
+        bridge,
+        ekf_node,
+        fusion_node,
+        vision_to_goal,
         pathing_node,
     ])

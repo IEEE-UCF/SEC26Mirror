@@ -12,8 +12,17 @@ topics:
   trajectory: "/trajectory"
 
 smoothing:
-  max_skip: 3
+  max_skip: 1
 
 trajectory:
-  speed: 0.8
-  lookahead_distance: 1.2
+  speed: 1.0
+  lookahead_distance: 0.7
+
+pure_pursuit:
+  max_v: 1.0
+  max_w:  1.7
+  slowdown_dist: 3.0
+  pos_tol: 0.45
+  advance_tol: 0.45
+  preserve_curvature_on_w_saturation: true
+  min_v_near_goal: 0.15

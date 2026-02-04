@@ -1,0 +1,19 @@
+# nav_sim.yaml (custom config read by yaml-cpp)
+frames:
+  map: "map"
+  odom: "odom"
+  base: "base_link"
+
+topics:
+  odom: "/odom"
+  cmd_vel: "/cmd_vel"
+  goal: "/goal_pose"
+  path: "/global_path"
+  trajectory: "/trajectory"
+
+smoothing:
+  max_skip: 3
+
+trajectory:
+  speed: 0.8
+  lookahead_distance: 1.2

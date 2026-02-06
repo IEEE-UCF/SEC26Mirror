@@ -51,6 +51,7 @@ private:
   int min_beacons_3d_;
   double max_residual_;
   double outlier_threshold_;
+  double robot_height_;
 
   double base_xy_variance_;
   double base_z_variance_;

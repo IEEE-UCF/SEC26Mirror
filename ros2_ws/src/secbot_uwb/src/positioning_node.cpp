@@ -42,6 +42,7 @@ void UWBPositioningNode::declareParameters() {
   this->declare_parameter("positioning.min_beacons_3d", 4);
   this->declare_parameter("positioning.max_residual", 0.5);
   this->declare_parameter("positioning.outlier_threshold", 2.0);
+  this->declare_parameter("positioning.robot_height", 0.20);
 
   // Covariance parameters
   this->declare_parameter("covariance.base_xy_variance", 0.05);
@@ -64,6 +65,7 @@ void UWBPositioningNode::loadConfiguration() {
   max_residual_ = this->get_parameter("positioning.max_residual").as_double();
   outlier_threshold_ =
       this->get_parameter("positioning.outlier_threshold").as_double();
+  robot_height_ = this->get_parameter("positioning.robot_height").as_double();
 
   // Load covariance parameters
   base_xy_variance_ =
@@ -311,11 +313,9 @@ bool UWBPositioningNode::trilaterate(const std::map<int, double> &ranges,
     b(row) = ref_norm_sq - beacon_norm_sq + dist * dist - ref_dist * ref_dist;
 
     if (!enable_3d) {
-      // pull this from yaml or something idk
-      double known_robot_z = 0.20; // 20cm height
       // The term 2*z*(z_ref - z_i) was on the Left Side.
       // We move it to the Right Side (b), so we SUBTRACT it.
-      double z_correction = 2.0 * known_robot_z * (ref_pos[2] - beacon_pos[2]);
+      double z_correction = 2.0 * robot_height_ * (ref_pos[2] - beacon_pos[2]);
       b(row) -= z_correction;
     }
 
@@ -327,12 +327,11 @@ bool UWBPositioningNode::trilaterate(const std::map<int, double> &ranges,
 
   position[0] = solution(0);
   position[1] = solution(1);
-  position[2] = solution(2);
 
   if (enable_3d) {
     position[2] = solution(2);
   } else {
-    position[2] = 0.0;
+    position[2] = 0.0f;
   }
 
   // Calculate residual

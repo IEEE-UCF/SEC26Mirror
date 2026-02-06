@@ -59,6 +59,7 @@ uwb_positioning_node:
       min_beacons_3d: 3  # Minimum beacons for 3D trilateration (this might not work for the drone)
       max_residual: 0.3  # Maximum acceptable residual error (meters)
       outlier_threshold: 1.0  # Distance threshold for outlier rejection (meters)
+      robot_height: 0.20 # meters
 
     # Covariance settings
     covariance:

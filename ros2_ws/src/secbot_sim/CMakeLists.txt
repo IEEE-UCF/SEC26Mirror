@@ -18,6 +18,9 @@ find_package(mcu_msgs REQUIRED)
 # MCU workspace pure-C++ sources (PID, motion profiles, trajectory, localization, math)
 set(MCU_WS_DIR "/home/ubuntu/mcu_workspaces/sec26mcu" CACHE PATH
 	"MCU workspace root inside Docker")
+if(NOT EXISTS "${MCU_WS_DIR}/lib/control")
+	set(MCU_WS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../mcu_ws")
+endif()
 
 # Include directories
 include_directories(

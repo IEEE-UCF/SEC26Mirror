@@ -13,6 +13,7 @@ find_package(nav_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
@@ -42,6 +43,7 @@ ament_target_dependencies(pathing_node
   visualization_msgs
   tf2
   tf2_ros
+  tf2_geometry_msgs
   ament_index_cpp
   yaml-cpp
   std_msgs

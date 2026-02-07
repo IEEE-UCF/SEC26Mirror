@@ -20,7 +20,7 @@ trajectory:
 
 pure_pursuit:
   max_v: 1.0
-  max_w:  1.7
+  max_w:  3.0
   slowdown_dist: 3.0
   pos_tol: 0.45
   advance_tol: 0.45

@@ -86,7 +86,7 @@ def generate_launch_description():
         # Fallback if YAML fails or is empty
         if not spawn_poses:
             spawn_poses = [
-                {'x': f'7.0', 'y': f'2.0', 'z': '0.1'},
+                {'x': f'7.0', 'y': f'0.0', 'z': '0.1'},
             ]
         
         # Clamp number of blocks
@@ -237,8 +237,8 @@ def generate_launch_description():
         spawn_robot,
         vision,
         bridge,
-        ekf_node,
-        fusion_node,
+        # ekf_node,
+        # fusion_node,
         vision_to_goal,
         pathing_node,
     ])

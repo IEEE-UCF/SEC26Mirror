@@ -133,7 +133,7 @@ void UWBPositioningNode::loadConfiguration() {
   }
 
   // Load tag configurations
-  std::vector<int> tag_ids = {20, 21, 22, 23};
+  std::vector<int> tag_ids = {12, 20, 21, 22, 23};
 
   for (int tag_id : tag_ids) {
     std::string prefix = "tags." + std::to_string(tag_id) + ".";
@@ -242,6 +242,35 @@ void UWBPositioningNode::rangingCallback(
   double residual;
 
   if (trilaterate(ranges, tag_config.enable3D(), position, residual)) {
+    // Outlier rejection: remove worst beacon if error exceeds threshold
+    if (ranges.size() > static_cast<size_t>(min_beacons)) {
+      double worst_error = 0.0;
+      int worst_id = -1;
+
+      for (const auto &[beacon_id, dist] : ranges) {
+        auto bp = getBeaconPosition(beacon_id);
+        double dx = position[0] - bp[0];
+        double dy = position[1] - bp[1];
+        double dz = position[2] - bp[2];
+        double predicted = std::sqrt(dx * dx + dy * dy + dz * dz);
+        double error = std::abs(predicted - dist);
+        if (error > worst_error) {
+          worst_error = error;
+          worst_id = beacon_id;
+        }
+      }
+
+      if (worst_error > outlier_threshold_ && worst_id >= 0) {
+        RCLCPP_WARN(this->get_logger(),
+                    "Tag %d: Rejecting beacon %d (error=%.3fm > %.3fm threshold)",
+                    tag_id, worst_id, worst_error, outlier_threshold_);
+        ranges.erase(worst_id);
+        if (!trilaterate(ranges, tag_config.enable3D(), position, residual)) {
+          return;
+        }
+      }
+    }
+
     // Check residual
     if (residual > max_residual_) {
       RCLCPP_WARN(

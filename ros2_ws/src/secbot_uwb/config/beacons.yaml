@@ -51,7 +51,7 @@ uwb_positioning_node:
       12:
         description: "Main Robot"
         publish_topic: "/uwb/pose/robot"
-        enable_3d_positioning: false
+        enable_3d_positioning: true
 
     # Positioning algorithm parameters
     positioning:

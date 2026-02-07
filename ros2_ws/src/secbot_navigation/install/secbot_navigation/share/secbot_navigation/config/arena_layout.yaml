@@ -1,0 +1,66 @@
+# Antenna poses, zone bounds, crater location.
+# COORDS IN WORLD METERS - DERIVED FROM robot_field.stl
+
+grid:
+  resolution: 0.25 # meters per cell
+  width: 64 # 16.0 m / 0.25
+  height: 32 # 8.0  m / 0.25
+
+# Where grid is generated from
+origin:
+  x: -8.0 # left edge of field
+  y: -4.0 # bottom edge of field
+
+# === world coordinates ===
+start:
+  x: 0.0
+  y: 0.0
+
+goal:
+  x: 6.0
+  y: -1.0
+
+obstacles:
+  # === FIELD WALLS ===
+  # Top wall
+  - type: rectangle
+    x: -8.0
+    y: 3.9
+    width: 16.0
+    height: 0.4
+
+  # Bottom wall
+  - type: rectangle
+    x: -8.0
+    y: -4.3
+    width: 16.0
+    height: 0.4
+
+  # Left wall
+  - type: rectangle
+    x: -8.3
+    y: -4.0
+    width: 0.4
+    height: 8.0
+
+  # Right wall
+  - type: rectangle
+    x: 7.9
+    y: -4.0
+    width: 0.4
+    height: 8.0
+
+  # # === custom obstical ===
+  # - type: rectangle
+  #   x: 0.0
+  #   y: -2.0
+  #   width: 1.0
+  #   height: 4.0
+
+  # === custom obstical ===
+  - type: rectangle
+    x: 3.0
+    y: -1.0
+    width: 1.0
+    height: 1.0
+

@@ -19,24 +19,37 @@ find_package(mcu_msgs REQUIRED)
 set(MCU_WS_DIR "/home/ubuntu/mcu_workspaces/sec26mcu" CACHE PATH
 	"MCU workspace root inside Docker")
 if(NOT EXISTS "${MCU_WS_DIR}/lib/control")
+	# Repo-relative path (host builds without Docker)
 	set(MCU_WS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../mcu_ws")
 endif()
+if(NOT EXISTS "${MCU_WS_DIR}/lib/control")
+	# CI seeded path (ros2_src volume: src/sec26ros/_mcu_lib/)
+	set(MCU_WS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../_mcu_lib")
+	set(MCU_LIB_DIR "${MCU_WS_DIR}")
+endif()
+
+# Use lib/ subdirectory unless CI seeded flat structure
+if(NOT DEFINED MCU_LIB_DIR)
+	set(MCU_LIB_DIR "${MCU_WS_DIR}/lib")
+endif()
+
+message(STATUS "MCU sources: ${MCU_LIB_DIR}")
 
 # Include directories
 include_directories(
 	include
-	${MCU_WS_DIR}/lib/control
-	${MCU_WS_DIR}/lib/math
-	${MCU_WS_DIR}/lib/drive
+	${MCU_LIB_DIR}/control
+	${MCU_LIB_DIR}/math
+	${MCU_LIB_DIR}/drive
 )
 
 # MCU pure-C++ sources to compile (no Arduino deps)
 set(MCU_SOURCES
-	${MCU_WS_DIR}/lib/control/motion_profile.cpp
-	${MCU_WS_DIR}/lib/control/traj_controller.cpp
-	${MCU_WS_DIR}/lib/math/Pose2D.cpp
-	${MCU_WS_DIR}/lib/math/Vector2D.cpp
-	${MCU_WS_DIR}/lib/drive/TankDriveLocalization.cpp
+	${MCU_LIB_DIR}/control/motion_profile.cpp
+	${MCU_LIB_DIR}/control/traj_controller.cpp
+	${MCU_LIB_DIR}/math/Pose2D.cpp
+	${MCU_LIB_DIR}/math/Vector2D.cpp
+	${MCU_LIB_DIR}/drive/TankDriveLocalization.cpp
 )
 
 # Add executable

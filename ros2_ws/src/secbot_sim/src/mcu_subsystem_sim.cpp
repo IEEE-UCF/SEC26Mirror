@@ -1,6 +1,7 @@
 /**
  * @file mcu_subsystem_sim.cpp
- * @brief MCU Subsystem Simulator — full control pipeline matching real Teensy
+ * @author Rafeed Khan
+ * @brief MCU Subsystem Simulator! Full control pipeline that matches the real Teensy
  * @date 2025-12-25
  *
  * Simulates all MCU subsystems: Drive (with real S-curve + PID + localization),
@@ -8,12 +9,12 @@
  *
  * The drive control path mirrors RobotDriveBase exactly:
  *   cmd_vel / drive_base/command
- *     → driveVelocity() (reset S-curve profiles, set goals)
- *     → update loop:
- *         simulatePhysics() (motor PWM → wheel vel → encoder ticks)
+ *     -> driveVelocity() (reset S-curve profiles, set goals)
+ *     -> update loop:
+ *         simulatePhysics() (motor PWM -> wheel vel -> encoder ticks)
  *         getCurrentVelocity() (encoder tick deltas)
  *         localization_.update(ticks, yaw)
- *         velocityControl(): S-curve → inverse kinematics → PID → motor PWM
+ *         velocityControl(): S-curve -> inverse kinematics → PID → motor PWM
  */
 
 #include "secbot_sim/mcu_subsystem_sim.hpp"
@@ -39,7 +40,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
 
   RCLCPP_INFO(this->get_logger(), "Starting MCU Subsystem Simulator");
 
-  // ── Declare all parameters ──
+  // Declare all parameters
   this->declare_parameter("num_tof_sensors", 4);
   num_tof_sensors_ = this->get_parameter("num_tof_sensors").as_int();
 
@@ -74,7 +75,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   this->declare_parameter("angular_d_max", 6.0);
   this->declare_parameter("angular_j_max", 24.0);
 
-  // ── Read parameters ──
+  // Read parameters
   track_width_ = static_cast<float>(this->get_parameter("track_width").as_double());
   wheel_diameter_ = static_cast<float>(this->get_parameter("wheel_diameter").as_double());
   encoder_ticks_per_rev_ = this->get_parameter("encoder_ticks_per_rev").as_int();
@@ -88,7 +89,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   long ticks_per_rev = static_cast<long>(encoder_ticks_per_rev_) * gear_ratio_;
   inches_per_tick_ = wheel_circumference / static_cast<float>(ticks_per_rev);
 
-  // ── Configure PID controllers (same config for both wheels) ──
+  // Configure PID controllers (same config for both wheels)
   PIDController::Config pid_cfg;
   pid_cfg.gains.kp = static_cast<float>(this->get_parameter("pid_kp").as_double());
   pid_cfg.gains.ki = static_cast<float>(this->get_parameter("pid_ki").as_double());
@@ -103,7 +104,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   left_pid_.configure(pid_cfg);
   right_pid_.configure(pid_cfg);
 
-  // ── Configure S-curve motion profiles ──
+  // Configure S-curve motion profiles
   SCurveMotionProfile::Config linear_cfg;
   linear_cfg.limits.v_max = static_cast<float>(this->get_parameter("linear_v_max").as_double());
   linear_cfg.limits.a_max = static_cast<float>(this->get_parameter("linear_a_max").as_double());
@@ -118,7 +119,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   angular_cfg.limits.j_max = static_cast<float>(this->get_parameter("angular_j_max").as_double());
   angular_profile_.configure(angular_cfg);
 
-  // ── Configure localization ──
+  // Configure localization
   loc_setup_ = std::make_unique<Drive::TankDriveLocalizationSetup>(
       "sim", track_width_, wheel_diameter_, encoder_ticks_per_rev_, gear_ratio_);
   localization_ = std::make_unique<Drive::TankDriveLocalization>(*loc_setup_);
@@ -126,7 +127,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   // Initialize last update time
   last_update_time_ = this->now();
 
-  // ── Publishers (all 8 MCU subsystems) ──
+  // Publishers (all 8 MCU subsystems)
   drive_status_pub_ = this->create_publisher<mcu_msgs::msg::DriveBase>(
       "drive_base/status", 10);
 
@@ -154,7 +155,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   mcu_state_pub_ = this->create_publisher<mcu_msgs::msg::McuState>(
       "/mcu_robot/mcu_state", 10);
 
-  // ── Subscribers ──
+  // Subscribers
   drive_command_sub_ = this->create_subscription<mcu_msgs::msg::DriveBase>(
       "drive_base/command", 10,
       std::bind(&McuSubsystemSimulator::driveCommandCallback, this, std::placeholders::_1));
@@ -163,7 +164,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       "/cmd_vel", 10,
       std::bind(&McuSubsystemSimulator::cmdVelCallback, this, std::placeholders::_1));
 
-  // ── Timers ──
+  // Timers
   // Physics + control update @ 100 Hz (10 ms)
   update_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(10),
@@ -217,10 +218,8 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       "MCU Subsystem Simulator initialized (9 subsystems + real control pipeline)");
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// Drive command callback — mirrors DriveSubsystem::drive_callback
-// ════════════════════════════════════════════════════════════════════════════
 
+// Drive command callback, mirrors DriveSubsystem::drive_callback
 void McuSubsystemSimulator::driveCommandCallback(
     const mcu_msgs::msg::DriveBase::SharedPtr msg) {
 
@@ -293,10 +292,8 @@ void McuSubsystemSimulator::driveCommandCallback(
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// cmd_vel callback — convenience bridge, same as driveVelocity
-// ════════════════════════════════════════════════════════════════════════════
 
+// cmd_vel callback, convenience bridge, same as driveVelocity
 void McuSubsystemSimulator::cmdVelCallback(
     const geometry_msgs::msg::Twist::SharedPtr msg) {
   float vx = msg->linear.x;
@@ -321,10 +318,8 @@ void McuSubsystemSimulator::cmdVelCallback(
                "cmd_vel: vx=%.2f, omega=%.2f", vx, omega);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// Main update loop — mirrors RobotDriveBase::update(yaw, dt)
-// ════════════════════════════════════════════════════════════════════════════
 
+// Main update loop, mirrors RobotDriveBase::update(yaw, dt)
 void McuSubsystemSimulator::updateTimerCallback() {
   rclcpp::Time current_time = this->now();
   float dt = static_cast<float>((current_time - last_update_time_).seconds());
@@ -332,15 +327,15 @@ void McuSubsystemSimulator::updateTimerCallback() {
 
   if (dt < 0.001f) return;
 
-  // 1. Simulate physics: motor PWM → wheel velocity → encoder ticks
+  // First we simulate physics, motor PWM -> wheel velocity -> encoder ticks
   simulatePhysics(dt);
 
-  // 2. Read simulated encoders (cast accumulator to long, same as real encoder read)
+  // Then we read simulated encoders (cast accumulator to long, same as real encoder read)
   long left_ticks = static_cast<long>(left_encoder_accum_);
   long right_ticks = static_cast<long>(right_encoder_accum_);
 
-  // 3. Compute current velocity from encoder tick deltas
-  //    (same as RobotDriveBase::getCurrentVelocity)
+  // Then compute current velocity from encoder tick deltas
+  // Which should be the same as RobotDriveBase::getCurrentVelocity
   long d_left = left_ticks - prev_left_ticks_;
   long d_right = right_ticks - prev_right_ticks_;
 
@@ -354,15 +349,15 @@ void McuSubsystemSimulator::updateTimerCallback() {
 
   current_velocity_ = Vector2D(vx, 0.0f, omega);
 
-  // 4. Integrate yaw from wheel angular velocity (simulated IMU)
+  // Then integrate yaw from wheel angular velocity (simulated IMU)
   sim_yaw_ += omega * dt;
   while (sim_yaw_ > static_cast<float>(M_PI)) sim_yaw_ -= 2.0f * static_cast<float>(M_PI);
   while (sim_yaw_ < -static_cast<float>(M_PI)) sim_yaw_ += 2.0f * static_cast<float>(M_PI);
 
-  // 5. Update localization (same call as real MCU)
+  // Then we update localization (same call as real MCU)
   localization_->update(left_ticks, right_ticks, sim_yaw_);
 
-  // 6. Dispatch control mode (same switch as RobotDriveBase::update)
+  // Then we dispatch control mode (same switch as RobotDriveBase::update)
   switch (current_mode_) {
     case DriveMode::MANUAL:
       break;
@@ -377,20 +372,18 @@ void McuSubsystemSimulator::updateTimerCallback() {
       break;
   }
 
-  // 7. Save previous state (same as real MCU)
+  // THEN WE FINALLY SAVE PREVIOUS STATE (same as real MCU)
   prev_pose_ = localization_->getPose();
   prev_left_ticks_ = left_ticks;
   prev_right_ticks_ = right_ticks;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// velocityControl — mirrors RobotDriveBase::velocityControl exactly
-// ════════════════════════════════════════════════════════════════════════════
 
+// velocityControl, mirrors RobotDriveBase::velocityControl exactly
 void McuSubsystemSimulator::velocityControl(float dt) {
   if (dt < 0.001f) return;
 
-  // S-curve motion profiles → smooth ramped velocities
+  // S-curve motion profiles -> smooth ramped velocities
   MotionState linear_state = linear_profile_.update(dt);
   MotionState angular_state = angular_profile_.update(dt);
 
@@ -416,10 +409,8 @@ void McuSubsystemSimulator::velocityControl(float dt) {
   writeMotorSpeeds(static_cast<int>(left_output), static_cast<int>(right_output));
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// setPointControl — mirrors RobotDriveBase::setPointControl exactly
-// ════════════════════════════════════════════════════════════════════════════
 
+// setPointControl, mirrors RobotDriveBase::setPointControl exactly
 void McuSubsystemSimulator::setPointControl(float dt) {
   Pose2D current_pose = localization_->getPose();
 
@@ -457,10 +448,8 @@ void McuSubsystemSimulator::setPointControl(float dt) {
   velocityControl(dt);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// trajectoryControl — mirrors RobotDriveBase::trajectoryControl exactly
-// ════════════════════════════════════════════════════════════════════════════
 
+// trajectoryControl, mirrors RobotDriveBase::trajectoryControl exactly
 void McuSubsystemSimulator::trajectoryControl(float dt) {
   if (dt < 0.001f) return;
 
@@ -479,7 +468,7 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
     return;
   }
 
-  // Chassis (v, w) → wheel velocities via real MCU utility
+  // Chassis (v, w) -> wheel velocities via real MCU utility
   float target_left_vel = 0.0f;
   float target_right_vel = 0.0f;
   TrajectoryController::chassisToWheelSpeeds(
@@ -499,19 +488,15 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
   writeMotorSpeeds(static_cast<int>(left_output), static_cast<int>(right_output));
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// writeMotorSpeeds — stores PWM for physics simulation
-// ════════════════════════════════════════════════════════════════════════════
 
+// writeMotorSpeeds, stores PWM for physics simulation
 void McuSubsystemSimulator::writeMotorSpeeds(int left_pwm, int right_pwm) {
   left_motor_pwm_ = std::clamp(left_pwm, -255, 255);
   right_motor_pwm_ = std::clamp(right_pwm, -255, 255);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// simulatePhysics — motor PWM → wheel velocity → encoder tick accumulation
-// ════════════════════════════════════════════════════════════════════════════
 
+// simulatePhysics, motor PWM -> wheel velocity -> encoder tick accumulation
 void McuSubsystemSimulator::simulatePhysics(float dt) {
   // Simple motor model: PWM → wheel velocity (in/s)
   // At PWM=255 the wheel spins at max_wheel_velocity_
@@ -525,10 +510,8 @@ void McuSubsystemSimulator::simulatePhysics(float dt) {
   right_encoder_accum_ += static_cast<double>(right_wheel_vel) * dt / inches_per_tick_;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// Drive publish — mirrors DriveSubsystem::publishData
-// ════════════════════════════════════════════════════════════════════════════
 
+// Drive publish, mirrors DriveSubsystem::publishData
 void McuSubsystemSimulator::drivePublishCallback() {
   auto msg = mcu_msgs::msg::DriveBase();
 
@@ -568,10 +551,8 @@ void McuSubsystemSimulator::drivePublishCallback() {
                current_velocity_.getX(), current_velocity_.getTheta());
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// IMU publish
-// ════════════════════════════════════════════════════════════════════════════
 
+// IMU publish
 void McuSubsystemSimulator::imuPublishCallback() {
   auto msg = sensor_msgs::msg::Imu();
 
@@ -613,20 +594,15 @@ void McuSubsystemSimulator::imuPublishCallback() {
   imu_pub_->publish(msg);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// TOF publish
-// ════════════════════════════════════════════════════════════════════════════
 
+// TOF publish
 void McuSubsystemSimulator::tofPublishCallback() {
   auto msg = std_msgs::msg::Float32MultiArray();
   msg.data.resize(num_tof_sensors_, 1.0f);
   tof_pub_->publish(msg);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 // RC publish
-// ════════════════════════════════════════════════════════════════════════════
-
 void McuSubsystemSimulator::rcPublishCallback() {
   auto msg = mcu_msgs::msg::RC();
 
@@ -651,10 +627,7 @@ void McuSubsystemSimulator::rcPublishCallback() {
   rc_pub_->publish(msg);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 // Intake publish
-// ════════════════════════════════════════════════════════════════════════════
-
 void McuSubsystemSimulator::intakePublishCallback() {
   auto msg = mcu_msgs::msg::IntakeState();
 
@@ -671,10 +644,7 @@ void McuSubsystemSimulator::intakePublishCallback() {
   intake_pub_->publish(msg);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 // MiniRobot publish
-// ════════════════════════════════════════════════════════════════════════════
-
 void McuSubsystemSimulator::miniRobotPublishCallback() {
   auto msg = mcu_msgs::msg::MiniRobotState();
 
@@ -687,10 +657,7 @@ void McuSubsystemSimulator::miniRobotPublishCallback() {
   mini_robot_pub_->publish(msg);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 // Battery publish
-// ════════════════════════════════════════════════════════════════════════════
-
 void McuSubsystemSimulator::batteryPublishCallback() {
   auto msg = mcu_msgs::msg::BatteryHealth();
 
@@ -710,10 +677,8 @@ void McuSubsystemSimulator::batteryPublishCallback() {
   RCLCPP_DEBUG(this->get_logger(), "Battery health published");
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// Heartbeat publish
-// ════════════════════════════════════════════════════════════════════════════
 
+// Heartbeat publish
 void McuSubsystemSimulator::heartbeatPublishCallback() {
   auto msg = std_msgs::msg::String();
   msg.data = "HEARTBEAT";
@@ -723,10 +688,8 @@ void McuSubsystemSimulator::heartbeatPublishCallback() {
   RCLCPP_DEBUG(this->get_logger(), "Heartbeat published");
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// MCU State publish — always RUNNING in sim
-// ════════════════════════════════════════════════════════════════════════════
 
+// MCU State publish, always RUNNING in sim
 void McuSubsystemSimulator::mcuStatePublishCallback() {
   auto msg = mcu_msgs::msg::McuState();
 

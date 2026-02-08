@@ -33,6 +33,10 @@ pkill -f ros_gz_bridge/parameter_bridge 2>/dev/null || true
 pkill -f "gz sim" 2>/dev/null || true
 pkill -f "gz-gui" 2>/dev/null || true
 
+# ---- Clean stale msg build artifacts (symlink vs directory conflict) ----
+rm -rf build/mcu_msgs install/mcu_msgs
+rm -rf build/secbot_msgs install/secbot_msgs
+
 # ---- Build ----
 colcon build --packages-select mcu_msgs secbot_msgs secbot_sim secbot_navigation secbot_fusion secbot_vision
 # set +u

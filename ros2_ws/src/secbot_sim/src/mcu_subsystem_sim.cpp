@@ -672,7 +672,7 @@ void McuSubsystemSimulator::drivePublishCallback() {
 
   RCLCPP_DEBUG(this->get_logger(),
                "Drive status: x=%.4f m, y=%.4f m, theta=%.2f, vx=%.4f m/s, omega=%.2f",
-               pose.getX() * IN_TO_M, pose.getY() * IN_TO_M, yaw,
+               pub_x, pub_y, yaw,
                current_velocity_.getX() * IN_TO_M, current_velocity_.getTheta());
 
   // TF broadcast so "odom" exists in /tf

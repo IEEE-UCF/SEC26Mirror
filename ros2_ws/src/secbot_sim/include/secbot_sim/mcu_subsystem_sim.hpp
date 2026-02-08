@@ -18,6 +18,7 @@
 #include <mcu_msgs/msg/mini_robot_state.hpp>
 #include <mcu_msgs/msg/mcu_state.hpp>
 #include <nav_msgs/msg/path.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
@@ -110,6 +111,13 @@ private:
   rclcpp::Subscription<mcu_msgs::msg::DriveBase>::SharedPtr drive_command_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr trajectory_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr gz_odom_sub_;
+
+  // ── Gazebo ground-truth odom (for sim trajectory tracking) ──
+  double gz_odom_x_ = 0.0;
+  double gz_odom_y_ = 0.0;
+  double gz_odom_yaw_ = 0.0;
+  bool gz_odom_received_ = false;
 
 
   std::vector<TrajectoryController::Waypoint> active_traj_;
@@ -147,6 +155,7 @@ private:
   void miniRobotPublishCallback();
   void mcuStatePublishCallback();
   void trajectoryCallback(const nav_msgs::msg::Path::SharedPtr msg);
+  void gzOdomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 };
 
 }  // namespace secbot_sim

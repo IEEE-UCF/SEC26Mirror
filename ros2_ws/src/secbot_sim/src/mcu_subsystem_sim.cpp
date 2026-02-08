@@ -14,7 +14,7 @@
  *         simulatePhysics() (motor PWM -> wheel vel -> encoder ticks)
  *         getCurrentVelocity() (encoder tick deltas)
  *         localization_.update(ticks, yaw)
- *         velocityControl(): S-curve -> inverse kinematics → PID → motor PWM
+ *         velocityControl(): S-curve -> inverse kinematics -> PID -> motor PWM
  */
 
 #include "secbot_sim/mcu_subsystem_sim.hpp"
@@ -172,8 +172,13 @@ McuSubsystemSimulator::McuSubsystemSimulator()
     std::bind(&McuSubsystemSimulator::trajectoryCallback, this, std::placeholders::_1));
 
   cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-    "/cmd_vel_in", 10, 
+    "/cmd_vel_in", 10,
     std::bind(&McuSubsystemSimulator::cmdVelCallback, this, std::placeholders::_1));
+
+  // Gazebo ground-truth odometry — used for trajectory tracking in sim
+  gz_odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+    "/odom", 10,
+    std::bind(&McuSubsystemSimulator::gzOdomCallback, this, std::placeholders::_1));
 
   // Timers
   // Physics + control update @ 100 Hz (10 ms)
@@ -383,6 +388,21 @@ void McuSubsystemSimulator::cmdVelCallback(
 }
 
 
+// Gazebo ground-truth odom callback - gives us the real robot position in sim
+void McuSubsystemSimulator::gzOdomCallback(
+    const nav_msgs::msg::Odometry::SharedPtr msg) {
+  gz_odom_x_ = msg->pose.pose.position.x;
+  gz_odom_y_ = msg->pose.pose.position.y;
+
+  // Extract yaw from quaternion
+  double qz = msg->pose.pose.orientation.z;
+  double qw = msg->pose.pose.orientation.w;
+  gz_odom_yaw_ = 2.0 * std::atan2(qz, qw);
+
+  gz_odom_received_ = true;
+}
+
+
 // Main update loop, mirrors RobotDriveBase::update(yaw, dt)
 void McuSubsystemSimulator::updateTimerCallback() {
   rclcpp::Time current_time = this->now();
@@ -462,7 +482,7 @@ void McuSubsystemSimulator::velocityControl(float dt) {
   float ramped_v = linear_state.vel;
   float ramped_omega = angular_state.vel;
 
-  // Inverse kinematics: chassis (v, omega) → wheel velocities
+  // Inverse kinematics: chassis (v, omega) -> wheel velocities
   float target_left_vel = ramped_v - (ramped_omega * track_width_) * 0.5f;
   float target_right_vel = ramped_v + (ramped_omega * track_width_) * 0.5f;
 
@@ -525,17 +545,24 @@ void McuSubsystemSimulator::setPointControl(float dt) {
 void McuSubsystemSimulator::trajectoryControl(float dt) {
   if (dt < 0.001f) return;
 
-  static constexpr float IN_TO_M = 0.0254f;
   static constexpr float M_TO_IN = 39.37007874f;
 
-  Pose2D current_pose = localization_->getPose();
-
-  // Convert localization pose from inches to meters for TrajectoryController
-  // (TrajectoryController config — lookahead, tolerances — is in meters)
+  // In simulation, use Gazebo's ground-truth odom so the trajectory controller
+  // knows where the robot ACTUALLY is (not where the simulated encoders think).
+  // This prevents the robot from overshooting the goal.
   TrajectoryController::Pose2D traj_pose;
-  traj_pose.x = current_pose.getX() * IN_TO_M;
-  traj_pose.y = current_pose.getY() * IN_TO_M;
-  traj_pose.theta = current_pose.getTheta();
+  if (gz_odom_received_) {
+    traj_pose.x = static_cast<float>(gz_odom_x_);
+    traj_pose.y = static_cast<float>(gz_odom_y_);
+    traj_pose.theta = static_cast<float>(gz_odom_yaw_);
+  } else {
+    // Fallback to internal localization (inches -> meters) if no odom yet
+    static constexpr float IN_TO_M = 0.0254f;
+    Pose2D current_pose = localization_->getPose();
+    traj_pose.x = current_pose.getX() * IN_TO_M;
+    traj_pose.y = current_pose.getY() * IN_TO_M;
+    traj_pose.theta = current_pose.getTheta();
+  }
 
   TrajectoryController::Command cmd = traj_controller_.update(traj_pose, dt);
 
@@ -552,7 +579,7 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
   float v_inches = cmd.v * M_TO_IN;
 
   // Chassis (v, w) -> wheel velocities via real MCU utility
-  // v in in/s, w in rad/s, track_width in inches → wheel velocities in in/s
+  // v in in/s, w in rad/s, track_width in inches -> wheel velocities in in/s
   float target_left_vel = 0.0f;
   float target_right_vel = 0.0f;
   TrajectoryController::chassisToWheelSpeeds(
@@ -582,7 +609,7 @@ void McuSubsystemSimulator::writeMotorSpeeds(int left_pwm, int right_pwm) {
 
 // simulatePhysics, motor PWM -> wheel velocity -> encoder tick accumulation
 void McuSubsystemSimulator::simulatePhysics(float dt) {
-  // Simple motor model: PWM → wheel velocity (in/s)
+  // Simple motor model: PWM -> wheel velocity (in/s)
   // At PWM=255 the wheel spins at max_wheel_velocity_
   float left_wheel_vel =
       (static_cast<float>(left_motor_pwm_) / 255.0f) * max_wheel_velocity_;
@@ -601,20 +628,31 @@ void McuSubsystemSimulator::drivePublishCallback() {
 
   auto msg = mcu_msgs::msg::DriveBase();
 
-  Pose2D pose = localization_->getPose();
-
   msg.header.stamp = this->now();
   msg.header.frame_id = "odom";
 
-  // Transform (pose) — localization is in inches, TF/ROS expects meters
+  // Transform (pose) — use Gazebo odom in sim for accurate TF
   msg.transform.header.stamp = msg.header.stamp;
   msg.transform.header.frame_id = "odom";
   msg.transform.child_frame_id = "base_link";
-  msg.transform.transform.translation.x = pose.getX() * IN_TO_M;
-  msg.transform.transform.translation.y = pose.getY() * IN_TO_M;
+
+  double pub_x, pub_y;
+  float yaw;
+  if (gz_odom_received_) {
+    pub_x = gz_odom_x_;
+    pub_y = gz_odom_y_;
+    yaw = static_cast<float>(gz_odom_yaw_);
+  } else {
+    Pose2D pose = localization_->getPose();
+    pub_x = pose.getX() * IN_TO_M;
+    pub_y = pose.getY() * IN_TO_M;
+    yaw = pose.getTheta();
+  }
+
+  msg.transform.transform.translation.x = pub_x;
+  msg.transform.transform.translation.y = pub_y;
   msg.transform.transform.translation.z = 0.0;
 
-  float yaw = pose.getTheta();
   msg.transform.transform.rotation.x = 0.0;
   msg.transform.transform.rotation.y = 0.0;
   msg.transform.transform.rotation.z = std::sin(yaw / 2.0);

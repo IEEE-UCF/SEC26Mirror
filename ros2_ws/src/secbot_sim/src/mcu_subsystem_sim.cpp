@@ -468,6 +468,11 @@ void McuSubsystemSimulator::updateTimerCallback() {
   out.linear.x  = current_velocity_.getX() * IN_TO_M;
   out.angular.z = current_velocity_.getTheta(); // omega is already 1/s (rad/s)
   cmd_vel_pub_->publish(out);
+
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+      "[CMD_VEL] mode=%d  cmd_vel_out v=%.4f m/s w=%.3f rad/s  pwm L=%d R=%d",
+      static_cast<int>(current_mode_), out.linear.x, out.angular.z,
+      left_motor_pwm_, right_motor_pwm_);
 }
 
 
@@ -566,7 +571,15 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
 
   TrajectoryController::Command cmd = traj_controller_.update(traj_pose, dt);
 
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+      "[TRAJ] src=%s pose=(%.3f,%.3f,%.2f) cmd v=%.3f m/s w=%.3f rad/s finished=%d",
+      gz_odom_received_ ? "gz_odom" : "FALLBACK",
+      traj_pose.x, traj_pose.y, traj_pose.theta,
+      cmd.v, cmd.w, cmd.finished);
+
   if (cmd.finished) {
+    RCLCPP_INFO(this->get_logger(), "[TRAJ] Trajectory FINISHED at pose=(%.3f,%.3f,%.2f)",
+        traj_pose.x, traj_pose.y, traj_pose.theta);
     writeMotorSpeeds(0, 0);
     active_traj_.clear();
     traj_controller_.clearTrajectory();   // if available in your API

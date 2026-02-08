@@ -33,7 +33,7 @@ class ConvertVisionToGoal(Node):
         self.declare_parameter("goal_standoff", 0.50)
         self.declare_parameter("min_confidence", 60.0)
         self.declare_parameter("use_largest_area", True)
-        self.declare_parameter("visited_radius", 1.0)
+        self.declare_parameter("visited_radius", 0.4)
 
         # camera info =================================
         self.camera_height = float(self.get_parameter("camera_height").value)

@@ -166,7 +166,7 @@ namespace secbot_navigation
 
     // visited goal tracking — reject re-navigation to already-reached positions
     std::vector<std::pair<double,double>> visited_goals_;
-    double visited_goal_radius_ = 1.0;
+    double visited_goal_radius_ = 0.4;
 
     double v_cmd_max_ = 0.8;
     double w_cmd_max_ = 1.0;
@@ -517,8 +517,6 @@ namespace secbot_navigation
       printed_waiting_for_odom_ = false;
 
       if(!planned_once_){
-        has_goal_ = true;
-        goal_reached_ = false;
         init_planner();
         compute_plan();
         planned_once_ = true;

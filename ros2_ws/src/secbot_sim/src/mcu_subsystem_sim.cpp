@@ -630,8 +630,8 @@ void McuSubsystemSimulator::drivePublishCallback() {
   // TF broadcast so "odom" exists in /tf
   geometry_msgs::msg::TransformStamped t;
   t.header.stamp = msg.header.stamp;
-  t.header.frame_id = "mcu_odom";
-  t.child_frame_id = "mcu_base_link";
+  t.header.frame_id = "odom";
+  t.child_frame_id = "base_link";
   t.transform = msg.transform.transform;
   tf_broadcaster_->sendTransform(t);
 }

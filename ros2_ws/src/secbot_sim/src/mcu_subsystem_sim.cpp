@@ -252,6 +252,8 @@ void McuSubsystemSimulator::trajectoryCallback(const nav_msgs::msg::Path::Shared
   if (active_traj_.empty()) {
     traj_controller_.clearTrajectory();
     writeMotorSpeeds(0, 0);
+    gz_cmd_v_ = 0.0;
+    gz_cmd_w_ = 0.0;
     current_mode_ = DriveMode::VELOCITY_DRIVE;
     target_velocity_ = Vector2D(0, 0, 0);
     return;
@@ -339,6 +341,8 @@ void McuSubsystemSimulator::driveCommandCallback(
       // Stop (same as real MCU default case)
       current_mode_ = DriveMode::VELOCITY_DRIVE;
       target_velocity_ = Vector2D(0, 0, 0);
+      gz_cmd_v_ = 0.0;
+      gz_cmd_w_ = 0.0;
 
       linear_profile_.reset(
           {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
@@ -444,6 +448,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
   // Then we dispatch control mode (same switch as RobotDriveBase::update)
   switch (current_mode_) {
     case DriveMode::MANUAL:
+      gz_cmd_v_ = 0.0;
+      gz_cmd_w_ = 0.0;
       break;
     case DriveMode::VELOCITY_DRIVE:
       velocityControl(dt);
@@ -464,15 +470,15 @@ void McuSubsystemSimulator::updateTimerCallback() {
   // Convert inches/s -> m/s if you're running inches internally
   static constexpr double IN_TO_M = 0.0254;
 
+  // Publish commanded velocity directly to Gazebo (not internal encoder velocity)
   geometry_msgs::msg::Twist out;
-  out.linear.x  = current_velocity_.getX() * IN_TO_M;
-  out.angular.z = current_velocity_.getTheta(); // omega is already 1/s (rad/s)
+  out.linear.x  = gz_cmd_v_;
+  out.angular.z = gz_cmd_w_;
   cmd_vel_pub_->publish(out);
 
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-      "[CMD_VEL] mode=%d  cmd_vel_out v=%.4f m/s w=%.3f rad/s  pwm L=%d R=%d",
-      static_cast<int>(current_mode_), out.linear.x, out.angular.z,
-      left_motor_pwm_, right_motor_pwm_);
+      "[CMD_VEL] mode=%d  cmd_vel_out v=%.4f m/s w=%.3f rad/s",
+      static_cast<int>(current_mode_), out.linear.x, out.angular.z);
 }
 
 
@@ -486,6 +492,11 @@ void McuSubsystemSimulator::velocityControl(float dt) {
 
   float ramped_v = linear_state.vel;
   float ramped_omega = angular_state.vel;
+
+  // Send S-curve profiled velocity directly to Gazebo (bypass internal PID)
+  static constexpr float IN_TO_M_VEL = 0.0254f;
+  gz_cmd_v_ = ramped_v * IN_TO_M_VEL;
+  gz_cmd_w_ = ramped_omega;
 
   // Inverse kinematics: chassis (v, omega) -> wheel velocities
   float target_left_vel = ramped_v - (ramped_omega * track_width_) * 0.5f;
@@ -581,35 +592,18 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
     RCLCPP_INFO(this->get_logger(), "[TRAJ] Trajectory FINISHED at pose=(%.3f,%.3f,%.2f)",
         traj_pose.x, traj_pose.y, traj_pose.theta);
     writeMotorSpeeds(0, 0);
+    gz_cmd_v_ = 0.0;
+    gz_cmd_w_ = 0.0;
     active_traj_.clear();
-    traj_controller_.clearTrajectory();   // if available in your API
+    traj_controller_.clearTrajectory();
     current_mode_ = DriveMode::VELOCITY_DRIVE;
     target_velocity_ = Vector2D(0, 0, 0);
     return;
   }
 
-  // cmd.v is in m/s, convert to in/s for wheel-level PID (which operates in inches)
-  float v_inches = cmd.v * M_TO_IN;
-
-  // Chassis (v, w) -> wheel velocities via real MCU utility
-  // v in in/s, w in rad/s, track_width in inches -> wheel velocities in in/s
-  float target_left_vel = 0.0f;
-  float target_right_vel = 0.0f;
-  TrajectoryController::chassisToWheelSpeeds(
-      v_inches, cmd.w, track_width_, &target_left_vel, &target_right_vel);
-
-  // Actual wheel velocities from encoder deltas (in/s)
-  float actual_left_vel =
-      (static_cast<float>(static_cast<long>(left_encoder_accum_) - prev_left_ticks_) *
-       inches_per_tick_) / dt;
-  float actual_right_vel =
-      (static_cast<float>(static_cast<long>(right_encoder_accum_) - prev_right_ticks_) *
-       inches_per_tick_) / dt;
-
-  float left_output = left_pid_.update(target_left_vel, actual_left_vel, dt);
-  float right_output = right_pid_.update(target_right_vel, actual_right_vel, dt);
-
-  writeMotorSpeeds(static_cast<int>(left_output), static_cast<int>(right_output));
+  // Send trajectory controller output directly to Gazebo (bypass internal PID)
+  gz_cmd_v_ = cmd.v;
+  gz_cmd_w_ = cmd.w;
 }
 
 

@@ -122,6 +122,10 @@ private:
 
   std::vector<TrajectoryController::Waypoint> active_traj_;
 
+  // ── Commanded velocity for Gazebo (bypasses internal PID/physics) ──
+  double gz_cmd_v_ = 0.0;   // m/s
+  double gz_cmd_w_ = 0.0;   // rad/s
+
   // ── Timers ──
   rclcpp::TimerBase::SharedPtr update_timer_;
   rclcpp::TimerBase::SharedPtr drive_publish_timer_;

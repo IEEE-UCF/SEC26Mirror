@@ -235,12 +235,12 @@ void McuSubsystemSimulator::trajectoryCallback(const nav_msgs::msg::Path::Shared
   active_traj_.clear();
   active_traj_.reserve(msg->poses.size());
 
-  static constexpr float M_TO_IN = 39.37007874f;
-
+  // Keep waypoints in meters — TrajectoryController config (lookahead, tolerances)
+  // is in meters, so the pose and waypoints must also be in meters.
   for (const auto& ps : msg->poses) {
     TrajectoryController::Waypoint wp{};
-    wp.x = static_cast<float>(ps.pose.position.x) * M_TO_IN;
-    wp.y = static_cast<float>(ps.pose.position.y) * M_TO_IN;
+    wp.x = static_cast<float>(ps.pose.position.x);
+    wp.y = static_cast<float>(ps.pose.position.y);
     active_traj_.push_back(wp);
   }
 
@@ -525,12 +525,16 @@ void McuSubsystemSimulator::setPointControl(float dt) {
 void McuSubsystemSimulator::trajectoryControl(float dt) {
   if (dt < 0.001f) return;
 
+  static constexpr float IN_TO_M = 0.0254f;
+  static constexpr float M_TO_IN = 39.37007874f;
+
   Pose2D current_pose = localization_->getPose();
 
-  // Convert to TrajectoryController::Pose2D
+  // Convert localization pose from inches to meters for TrajectoryController
+  // (TrajectoryController config — lookahead, tolerances — is in meters)
   TrajectoryController::Pose2D traj_pose;
-  traj_pose.x = current_pose.getX();
-  traj_pose.y = current_pose.getY();
+  traj_pose.x = current_pose.getX() * IN_TO_M;
+  traj_pose.y = current_pose.getY() * IN_TO_M;
   traj_pose.theta = current_pose.getTheta();
 
   TrajectoryController::Command cmd = traj_controller_.update(traj_pose, dt);
@@ -544,13 +548,17 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
     return;
   }
 
+  // cmd.v is in m/s, convert to in/s for wheel-level PID (which operates in inches)
+  float v_inches = cmd.v * M_TO_IN;
+
   // Chassis (v, w) -> wheel velocities via real MCU utility
+  // v in in/s, w in rad/s, track_width in inches → wheel velocities in in/s
   float target_left_vel = 0.0f;
   float target_right_vel = 0.0f;
   TrajectoryController::chassisToWheelSpeeds(
-      cmd.v, cmd.w, track_width_, &target_left_vel, &target_right_vel);
+      v_inches, cmd.w, track_width_, &target_left_vel, &target_right_vel);
 
-  // Actual wheel velocities from encoder deltas
+  // Actual wheel velocities from encoder deltas (in/s)
   float actual_left_vel =
       (static_cast<float>(static_cast<long>(left_encoder_accum_) - prev_left_ticks_) *
        inches_per_tick_) / dt;
@@ -589,6 +597,8 @@ void McuSubsystemSimulator::simulatePhysics(float dt) {
 
 // Drive publish, mirrors DriveSubsystem::publishData
 void McuSubsystemSimulator::drivePublishCallback() {
+  static constexpr double IN_TO_M = 0.0254;
+
   auto msg = mcu_msgs::msg::DriveBase();
 
   Pose2D pose = localization_->getPose();
@@ -596,12 +606,12 @@ void McuSubsystemSimulator::drivePublishCallback() {
   msg.header.stamp = this->now();
   msg.header.frame_id = "odom";
 
-  // Transform (pose)
+  // Transform (pose) — localization is in inches, TF/ROS expects meters
   msg.transform.header.stamp = msg.header.stamp;
   msg.transform.header.frame_id = "odom";
   msg.transform.child_frame_id = "base_link";
-  msg.transform.transform.translation.x = pose.getX();
-  msg.transform.transform.translation.y = pose.getY();
+  msg.transform.transform.translation.x = pose.getX() * IN_TO_M;
+  msg.transform.transform.translation.y = pose.getY() * IN_TO_M;
   msg.transform.transform.translation.z = 0.0;
 
   float yaw = pose.getTheta();
@@ -610,9 +620,9 @@ void McuSubsystemSimulator::drivePublishCallback() {
   msg.transform.transform.rotation.z = std::sin(yaw / 2.0);
   msg.transform.transform.rotation.w = std::cos(yaw / 2.0);
 
-  // Twist (velocity)
-  msg.twist.linear.x = current_velocity_.getX();
-  msg.twist.linear.y = current_velocity_.getY();
+  // Twist (velocity) — convert in/s to m/s for ROS convention
+  msg.twist.linear.x = current_velocity_.getX() * IN_TO_M;
+  msg.twist.linear.y = current_velocity_.getY() * IN_TO_M;
   msg.twist.linear.z = 0.0;
   msg.twist.angular.x = 0.0;
   msg.twist.angular.y = 0.0;
@@ -623,9 +633,9 @@ void McuSubsystemSimulator::drivePublishCallback() {
   drive_status_pub_->publish(msg);
 
   RCLCPP_DEBUG(this->get_logger(),
-               "Drive status: x=%.2f, y=%.2f, theta=%.2f, vx=%.2f, omega=%.2f",
-               pose.getX(), pose.getY(), yaw,
-               current_velocity_.getX(), current_velocity_.getTheta());
+               "Drive status: x=%.4f m, y=%.4f m, theta=%.2f, vx=%.4f m/s, omega=%.2f",
+               pose.getX() * IN_TO_M, pose.getY() * IN_TO_M, yaw,
+               current_velocity_.getX() * IN_TO_M, current_velocity_.getTheta());
 
   // TF broadcast so "odom" exists in /tf
   geometry_msgs::msg::TransformStamped t;

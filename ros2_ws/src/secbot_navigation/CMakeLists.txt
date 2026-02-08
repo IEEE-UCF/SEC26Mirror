@@ -16,6 +16,7 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(mcu_msgs REQUIRED)
 
 
 # find_package(std_msgs REQUIRED)
@@ -26,7 +27,6 @@ add_executable(pathing_node
   src/dstar_lite.cpp
   src/path_smoother.cpp
   src/trajectory.cpp
-  src/control/traj_controller.cpp
 )
 
 
@@ -47,6 +47,7 @@ ament_target_dependencies(pathing_node
   ament_index_cpp
   yaml-cpp
   std_msgs
+  mcu_msgs
 )
 
 target_link_libraries(pathing_node yaml-cpp)

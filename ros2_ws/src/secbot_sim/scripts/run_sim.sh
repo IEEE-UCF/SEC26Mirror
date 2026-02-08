@@ -34,15 +34,11 @@ pkill -f "gz sim" 2>/dev/null || true
 pkill -f "gz-gui" 2>/dev/null || true
 
 # ---- Build ----
-colcon build --packages-select secbot_msgs
-colcon build --packages-select secbot_sim
-colcon build --packages-select secbot_navigation
-colcon build --packages-select secbot_fusion
-colcon build --packages-select secbot_vision
-set +u
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-set -u
+colcon build --packages-select mcu_msgs secbot_msgs secbot_sim secbot_navigation secbot_fusion secbot_vision --symlink-install
+# set +u
+# source /opt/ros/jazzy/setup.bash
+# source install/setup.bash
+# set -u
 
 # ---- Start sim in background, but in its OWN session ----
 # setsid makes PID == PGID so kill -PGID reliably kills everything under it

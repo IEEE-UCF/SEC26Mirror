@@ -122,7 +122,7 @@
       </link>
     </model>
 
-    <model name="obstacle_0">
+    <!-- <model name="obstacle_0">
       <static>true</static>
       <pose>3.0 -1.0 0.15 0 0 0</pose>
       <link name="link">
@@ -133,7 +133,7 @@
           <geometry><box><size>1.0 1.0 0.3</size></box></geometry>
         </visual>
       </link>
-    </model>
+    </model> -->
 
 
 

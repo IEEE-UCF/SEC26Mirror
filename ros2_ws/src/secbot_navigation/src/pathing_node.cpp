@@ -1,5 +1,6 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "mcu_msgs/msg/drive_base.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -7,7 +8,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "secbot_navigation/grid_map.hpp"
 #include "secbot_navigation/planner_server.hpp"
-#include "secbot_navigation/control/traj_controller.h"
 #include "secbot_navigation/trajectory.hpp"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2/LinearMath/Quaternion.h"
@@ -17,6 +17,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+// #include <traj_controller.h>
 
 #include <chrono>
 #include <cmath>
@@ -50,13 +51,18 @@ namespace secbot_navigation
       this->declare_parameter<std::string>("config_file", "");
       this->declare_parameter<std::string>("arena_file", "");
       this->declare_parameter<std::string>("planning_frame", "odom");
+      this->declare_parameter<std::string>("control_output", "cmd_vel");
+      control_output_ = this->get_parameter("control_output").as_string();
 
 
       // Load configs
       load_config();
 
       // Ros interfaces publish and subscriber nodes
-      publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10); // output motion commands
+      cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10); // output motion commands
+      drive_cmd_pub_ = this->create_publisher<mcu_msgs::msg::DriveBase>("drive_base/command", 10);
+      auto traj_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
+      traj_to_mcu_pub_ = this->create_publisher<nav_msgs::msg::Path>("drive_base/trajectory", traj_qos);
       subscription_ = this->create_subscription<nav_msgs::msg::Odometry>("/odom", 10, std::bind(&PathingNode::odom_callback, this, _1)); // input robot pose
       timer_ = this->create_wall_timer(100ms, std::bind(&PathingNode::control_loop, this)); // timer at 10 Hz, controls output
       path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/global_path", 1); // publish planned path for RViz
@@ -70,7 +76,8 @@ namespace secbot_navigation
 
   private:
     // ROS Interfaces
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
+    rclcpp::Publisher<mcu_msgs::msg::DriveBase>::SharedPtr drive_cmd_pub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr raw_odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vision_sub_;
@@ -78,10 +85,12 @@ namespace secbot_navigation
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr goal_reached_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::TimerBase::SharedPtr tf_print_timer_;
-    
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr traj_to_mcu_pub_;
     // TF HELPERS ====================================
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    std::string control_output_ = "drive_base";
+
 
 
     // variables ====================================
@@ -169,10 +178,9 @@ namespace secbot_navigation
     double k_yaw_ = 1.0;
     bool enable_front_lookahead_guard_ = true;
 
-    // TRAJECTORY HELPERS =============================
-    ::TrajectoryController traj_controller_;
-    std::vector<::TrajectoryController::Waypoint> waypoints_;
     rclcpp::Time last_time_;
+
+    
 
 
     // Components =======================
@@ -235,29 +243,6 @@ namespace secbot_navigation
         if (nav_cfg["smoothing"]["max_skip"]) max_skip_ = nav_cfg["smoothing"]["max_skip"].as<int>(); // add max skip
 
 
-        // PURE PURSUIT =======================================================
-        ::TrajectoryController::Config tc{};
-        tc.lookahead_dist = static_cast<float>(lookahead);
-        tc.cruise_v       = static_cast<float>(speed_);
-
-        tc.max_v = std::max(tc.cruise_v, max_v_);
-        tc.max_w = max_w_;
-        tc.slowdown_dist = slowdown_dist_;
-        tc.pos_tol = pos_tol_;
-        tc.advance_tol = advance_tol_;
-        tc.preserve_curvature_on_w_saturation = preserve_curvature_on_w_saturation_;
-        tc.min_v_near_goal = min_v_near_goal_;
-        
-        if (nav_cfg["pure_pursuit"]["max_v"]) tc.max_v = std::max(tc.cruise_v, nav_cfg["pure_pursuit"]["max_v"].as<float>()); // add speed
-        if (nav_cfg["pure_pursuit"]["max_w"]) tc.max_w = nav_cfg["pure_pursuit"]["max_w"].as<float>(); // add lookahead distance
-        if (nav_cfg["pure_pursuit"]["slowdown_dist"]) tc.slowdown_dist = nav_cfg["pure_pursuit"]["slowdown_dist"].as<float>(); // add max skip
-        if (nav_cfg["pure_pursuit"]["pos_tol"]) tc.pos_tol = nav_cfg["pure_pursuit"]["pos_tol"].as<float>(); // add speed
-        if (nav_cfg["pure_pursuit"]["advance_tol"]) tc.advance_tol = nav_cfg["pure_pursuit"]["advance_tol"].as<float>(); // add lookahead distance
-        if (nav_cfg["pure_pursuit"]["preserve_curvature_on_w_saturation"]) tc.preserve_curvature_on_w_saturation = nav_cfg["pure_pursuit"]["preserve_curvature_on_w_saturation"].as<bool>(); // add max skip
-        if (nav_cfg["pure_pursuit"]["min_v_near_goal"]) tc.min_v_near_goal = nav_cfg["pure_pursuit"]["min_v_near_goal"].as<float>(); // add max skip
-        tc.cruise_v = std::min(tc.cruise_v, tc.max_v);
-        traj_controller_.configure(tc);
-
         // LOADED GRID ============================================
         std::vector<std::vector<int>> grid_data(height, std::vector<int>(width, 0));
         grid_map_ = std::make_unique<GridMap>(grid_data);
@@ -283,51 +268,14 @@ namespace secbot_navigation
       }
     }
 
-    // HELPERS ==============================================================
-    // SIMIPLIFY GRID PATH, LEAVING CORNERS -----------------
-    void compress_collinear(std::vector<::TrajectoryController::Waypoint>& wps, float eps = 1e-4f)
-    {
-      // Fewer than 3 nothing to compress
-      if (wps.size() < 3) return;
-
-      std::vector<::TrajectoryController::Waypoint> out;
-      out.reserve(wps.size());
-      
-      // Kepp first point 
-      out.push_back(wps.front());
-
-
-      // compute for middle points
-      for (size_t i = 1; i + 1 < wps.size(); ++i) {
-        const auto& p0 = out.back();
-        const auto& p1 = wps[i];
-        const auto& p2 = wps[i + 1];
-
-        const float ax = p1.x - p0.x;
-        const float ay = p1.y - p0.y;
-        const float bx = p2.x - p1.x;
-        const float by = p2.y - p1.y;
-
-        // cross = detect non colinear turn | dot = make sure same direction
-        // if 3 points pass both tests >>> skip p1
-        if (std::abs(ax * by - ay * bx) < eps && (ax * bx + ay * by) > 0.0f) continue;
-
-        // keep last
-        out.push_back(p1);
-      }
-
-      out.push_back(wps.back());
-      wps.swap(out);
-    }
-
 
     // safety for TF failure ------------------ 
     void stop_robot()
     {
-      geometry_msgs::msg::Twist z;
-      z.linear.x = 0.0;
-      z.angular.z = 0.0;
-      publisher_->publish(z);
+      nav_msgs::msg::Path empty;
+      empty.header.stamp = this->get_clock()->now();
+      empty.header.frame_id = planning_frame_;
+      traj_to_mcu_pub_->publish(empty);
     }
 
     void goal_reached()
@@ -405,7 +353,7 @@ namespace secbot_navigation
       auto trajectory_plan = planner_->compute_plan(GridMap::Cell{start_cell.first, start_cell.second});
 
 
-      if (! trajectory_plan) {RCLCPP_ERROR(this->get_logger(), "Failed to compute initial path");}
+      if (!trajectory_plan) {RCLCPP_ERROR(this->get_logger(), "Failed to compute initial path"); return;}
 
       current_trajectory_ = std::make_unique<Trajectory>();
 
@@ -415,30 +363,13 @@ namespace secbot_navigation
         auto [wx, wy] = cell_to_world(cell.x, cell.y);
         current_trajectory_->add_point(wx, wy, speed_);
       }
-      waypoints_.clear();
-
-
-      // Build waypoints
-      for (const auto& p : *current_trajectory_) {
-        ::TrajectoryController::Waypoint wp{};
-        wp.x = static_cast<float>(p.x);
-        wp.y = static_cast<float>(p.y);
-        waypoints_.push_back(wp);
-      }
-
-      // remove unnecessary waypoints
-      compress_collinear(waypoints_);
-
-      // load waypoints
-      if (waypoints_.empty()) {
-        traj_controller_.clearTrajectory();
-      } else {
-        traj_controller_.setTrajectory(waypoints_.data(), waypoints_.size());
-      }
 
       // reset so dt not old
       have_last_time_ = false;
 
+      auto path_msg = to_path_msg(*current_trajectory_);
+      path_pub_->publish(path_msg);
+      traj_to_mcu_pub_->publish(path_msg);
 
       this->publish_and_print_path(*current_trajectory_); // (TO REMOVE): CAN REMOVE LATER JUST VISUALIZES PATH
       print_grid_with_path(*current_trajectory_);  // (TO REMOVE): CAN REMOVE LATER JUST VISUALIZES PATH
@@ -523,10 +454,7 @@ namespace secbot_navigation
       pending_replan_ = true;
 
       RCLCPP_INFO(this->get_logger(), "NEW GOAL: (%.2f, %.2f)", pending_goal_x_, pending_goal_y_);
-      init_planner();
-      compute_plan();
-     
-      
+      return;
     }
 
 
@@ -561,40 +489,23 @@ namespace secbot_navigation
 
 
       // NO ODOM NO TRAJECTORY -> STOP
-      if (!state_received_ || !current_trajectory_) {
-        if (!state_received_) {
-          if (!printed_waiting_for_odom_) {
-            RCLCPP_WARN(this->get_logger(), "Waiting for /odom... (control loop paused)");
-            printed_waiting_for_odom_ = true;
-          } else {
-            RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Still waiting for /odom...");
-          }
-        }
-
-        if (!current_trajectory_) {
-          if (!printed_waiting_for_traj_) {
-            RCLCPP_WARN(this->get_logger(), "No trajectory available yet (plan not computed)");
-            printed_waiting_for_traj_ = true;
-          } else {
-            RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Still no trajectory...");
-          }
-        }
+      if (!state_received_) {
+        if (!printed_waiting_for_odom_) {
+          RCLCPP_WARN(this->get_logger(), "Waiting for /odom... (control loop paused)");
+          printed_waiting_for_odom_ = true;
+        } 
         return;
       }
-
-      // // 
-      // if (require_tf_for_control_) {
-      //   if (!tf_buffer_->canTransform(planning_frame_, base_frame_, tf2::TimePointZero,
-      //                                 tf2::durationFromSec(tf_timeout_sec_))) {
-      //     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "TF missing %s->%s, stopping", planning_frame_.c_str(), base_frame_.c_str());
-      //     stop_robot();
-      //     return;
-      //   }
-      // }
-      
-      // no need to check again
       printed_waiting_for_odom_ = false;
-      printed_waiting_for_traj_ = false;
+
+      if(!planned_once_){
+        has_goal_ = true;
+        goal_reached_ = false;
+        init_planner();
+        compute_plan();
+        planned_once_ = true;
+      }
+
 
       // replan throttle ++++++++++++++++++++++++++++++++++++
       if (pending_replan_) {
@@ -616,100 +527,27 @@ namespace secbot_navigation
         }
       }
 
-      // dt computation ++++++++++++++++++++++++
-      auto now = this->now();
-      float dt = 0.1f; // fallback
-      // compute dt from last loop 
-      if (have_last_time_) dt = static_cast<float>((now - last_time_).seconds());
-      last_time_ = now;
-      have_last_time_ = true;
-
-      // RAFEED PURE PURSUIT +++++++++++++++++++++++++++
-      ::TrajectoryController::Pose2D pose{};
-      pose.x = static_cast<float>(robot_x_);
-      pose.y = static_cast<float>(robot_y_);
-      pose.theta = static_cast<float>(robot_theta_);
-
-      // if dt is bad or too big -> stop
-      if (!std::isfinite(dt) || dt <= 0.0f || dt > 0.25f) {
-        publisher_->publish(geometry_msgs::msg::Twist()); // STOP
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,"Bad dt=%.3f, stopping", dt);
+      if (!current_trajectory_) {
+        if (!printed_waiting_for_traj_) {
+          RCLCPP_WARN(this->get_logger(), "No trajectory available yet");
+          printed_waiting_for_traj_ = true;
+        } 
         return;
       }
+      
+      // no need to check again
+      printed_waiting_for_traj_ = false;
 
 
-      // CALL TRAJECTORY +++++++++++++++++++++++++++
-      ::TrajectoryController::Command cmd = traj_controller_.update(pose, dt);
-
-
-      // CHECK TRAJECOTRY STATUS ++++++++++++++++++++++++
-      if (cmd.finished){
-        publisher_->publish(geometry_msgs::msg::Twist());
-        // if goal is reached
-        goal_reached();
-        return;
-      }
-
-
-      // CHECK IF GOAL HAS BEEN UPDATED ++++++++++++++++++++++++++
-      if (has_goal_) {
+      if (has_goal_ && !goal_reached_){
         const double d_goal = std::hypot(goal_x_ - robot_x_, goal_y_ - robot_y_);
-        const double desired_bearing = std::atan2(goal_y_ - robot_y_, goal_x_ - robot_x_);
-        const double yaw_err = oscolate_around_pi(desired_bearing - robot_theta_);
-
-        // CHECK ARRIVE DISTANCE && YAW
-        if (d_goal < arrive_dist_ && std::abs(yaw_err) < degrees_to_radians(arrive_yaw_deg_)) {
-          stop_robot(); // stop if reached
+        if (d_goal < arrive_dist_){
+          stop_robot();
           goal_reached();
+          RCLCPP_INFO(this->get_logger(), "GOAL REACHED -> (d=%.3f)", d_goal);
           return;
         }
       }
-
-      // SETUP v && w ++++++++++++++++++++++
-      double v = cmd.v;
-      double w = cmd.w;
-
-      // CLAMP ++++++++++++++++++
-      w = std::clamp(w, -w_cmd_max_, w_cmd_max_); // clamp to [-w_max, +w_max]
-      v = std::clamp(v, 0.0, v_cmd_max_); // clamp to [0, v_max]
-
-      // SLOW ON TURNS ++++++++++++++++++++++++++++++
-      if (enable_turn_slowdown_) {
-        const double turn_ratio = std::min(1.0, std::abs(w) / w_cmd_max_);
-        const double v_scaled = v_cmd_max_ * (1.0 - 0.7 * turn_ratio);
-        v = std::min(v, v_scaled);
-        v = std::max(v, 0.0);
-      }
-
-      // Front lookahead gaurd +++++++++++++++++++++++++++
-      if (enable_front_lookahead_guard_) {
-        // compute lookahead
-        const double dx = static_cast<double>(cmd.lookahead_x) - robot_x_;
-        const double dy = static_cast<double>(cmd.lookahead_y) - robot_y_;
-
-        // find where robot is facing
-        const double ct = std::cos(robot_theta_);
-        const double st = std::sin(robot_theta_);
-        const double x_bl =  ct * dx + st * dy;
-        const double y_bl = -st * dx + ct * dy;
-
-
-        // if behind robot pretty much turn around
-        if (x_bl < lookahead_front_min_x_) {
-          v = 0.0;
-          const double yaw_err = std::atan2(y_bl, x_bl);
-          w = std::clamp(k_yaw_ * yaw_err, -w_cmd_max_, w_cmd_max_);
-        }
-      }
-
-      // PUBLISH to /cmd_vel ++++++++++++++++++++++++++++
-      geometry_msgs::msg::Twist out;
-      out.linear.x = v;
-      out.angular.z = w;
-      publisher_->publish(out);
-
-      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500, "traj_cmd v=%.3f w=%.3f lookahead=(%.2f,%.2f)",cmd.v, cmd.w, cmd.lookahead_x, cmd.lookahead_y);
-
     }
 
 
@@ -757,9 +595,6 @@ namespace secbot_navigation
     // PURLY FOR PRINTING THE PATH ============================
     void publish_and_print_path(const Trajectory &traj)
     {
-      // 1) Publish for RViz
-      auto path_msg = to_path_msg(traj);
-      path_pub_->publish(path_msg);
 
       // 2) Print a compact summary + first/last points
       const auto &pts = traj.get_points();

@@ -34,7 +34,7 @@ pkill -f "gz sim" 2>/dev/null || true
 pkill -f "gz-gui" 2>/dev/null || true
 
 # ---- Build ----
-colcon build --packages-select mcu_msgs secbot_msgs secbot_sim secbot_navigation secbot_fusion secbot_vision --symlink-install
+colcon build --packages-select mcu_msgs secbot_msgs secbot_sim secbot_navigation secbot_fusion secbot_vision
 # set +u
 # source /opt/ros/jazzy/setup.bash
 # source install/setup.bash

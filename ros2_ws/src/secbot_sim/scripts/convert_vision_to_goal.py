@@ -8,6 +8,7 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CameraInfo
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Bool
 from secbot_msgs.msg import DuckDetections
 
 class ConvertVisionToGoal(Node):
@@ -32,6 +33,7 @@ class ConvertVisionToGoal(Node):
         self.declare_parameter("goal_standoff", 0.50)
         self.declare_parameter("min_confidence", 60.0)
         self.declare_parameter("use_largest_area", True)
+        self.declare_parameter("visited_radius", 1.0)
 
         # camera info =================================
         self.camera_height = float(self.get_parameter("camera_height").value)
@@ -39,6 +41,7 @@ class ConvertVisionToGoal(Node):
         self.goal_standoff = float(self.get_parameter("goal_standoff").value)
         self.min_confidence = float(self.get_parameter("min_confidence").value)
         self.use_largest_area = bool(self.get_parameter("use_largest_area").value)
+        self.visited_radius = float(self.get_parameter("visited_radius").value)
         self.tilt_rad = math.radians(self.camera_tilt_deg)
 
         # used to convert math to gazebo points ============================================
@@ -58,6 +61,8 @@ class ConvertVisionToGoal(Node):
         self.robot_x = None
         self.robot_y = None
         self.robot_yaw = None
+
+        self.visited_positions = []  # list of (x, y) where goals were reached
         
 
 
@@ -69,6 +74,7 @@ class ConvertVisionToGoal(Node):
         self.create_subscription(CameraInfo, self.camera_info_topic, self.on_camera_info, reliable_qos)
         self.create_subscription(Odometry, self.odom_topic, self.on_odom, reliable_qos)
         self.create_subscription(DuckDetections, self.detection_topic, self.on_detections, reliable_qos)
+        self.create_subscription(Bool, "/nav/goal_reached", self.on_goal_reached, reliable_qos)
 
         # publisher ===============================
         self.goal_publish = self.create_publisher(PoseStamped, self.goal_topic, 10)
@@ -101,17 +107,48 @@ class ConvertVisionToGoal(Node):
         self.robot_yaw = convert_yaw(msg.pose.pose.orientation)
 
 
-    # simple enough, pick which duck to detect ==============================
-    def pick_detection(self, detections_msg: DuckDetections):
-        candidates = [d for d in detections_msg.detections if float(d.confidence) >= self.min_confidence]
-        if not candidates:
+    # when pathing_node says we reached a goal, record robot position as visited ====
+    def on_goal_reached(self, msg: Bool):
+        if msg.data and self.robot_x is not None:
+            self.visited_positions.append((self.robot_x, self.robot_y))
+            self.get_logger().info(f"GOAL REACHED — marked visited at ({self.robot_x:.2f}, {self.robot_y:.2f}), total visited: {len(self.visited_positions)}")
+
+    def is_near_visited(self, gx, gy):
+        for vx, vy in self.visited_positions:
+            if math.hypot(gx - vx, gy - vy) < self.visited_radius:
+                return True
+        return False
+
+    def compute_goal(self, detection):
+        """Compute world-frame goal (x, y) for a detection. Returns (goal_x, goal_y, dist_forward, bearing) or None."""
+        u = float(detection.x + detection.w * 0.5)
+        v = float(detection.y + detection.h)
+
+        bearing = -math.atan2((u - self.cx), self.fx)
+        vertical_ray_angle = math.atan2((v - self.cy), self.fy)
+        tot_down_angle = self.tilt_rad + vertical_ray_angle
+
+        if tot_down_angle <= math.radians(1.0):
             return None
 
-        if self.use_largest_area:
-            return max(candidates, key=lambda d: float(d.area))
-        else:
-            return max(candidates, key=lambda d: float(d.confidence))
-        
+        dist_forward = self.camera_height / math.tan(tot_down_angle)
+
+        if (not math.isfinite(dist_forward)) or dist_forward <= 0.0 or dist_forward > 12.0:
+            return None
+
+        d_goal = max(0.0, dist_forward - self.goal_standoff)
+        if d_goal <= 0.0:
+            return None
+
+        cyaw = math.cos(self.robot_yaw)
+        syaw = math.sin(self.robot_yaw)
+        x_rel = d_goal * math.cos(bearing)
+        y_rel = d_goal * math.sin(bearing)
+        goal_x = self.robot_x + (cyaw * x_rel - syaw * y_rel)
+        goal_y = self.robot_y + (syaw * x_rel + cyaw * y_rel)
+
+        return (goal_x, goal_y, dist_forward, bearing)
+
     # convert the world value to cell value for pathing_node to understand the grid coordinates ============================
     def world_to_cell(self, xw, yw):
         ox = float(self.get_parameter("grid_origin_x").value)
@@ -138,66 +175,45 @@ class ConvertVisionToGoal(Node):
             self.get_logger().warn("No /odom yet.")
             return
 
-        detection = self.pick_detection(msg)
-        if detection is None: # check if any ducks
-            return
-        
-
-        # u = dx + dw * 0.5             center of duck
-        u = float(detection.x + detection.w * 0.5)
-        # v = dy + dh                   top of duck
-        v = float(detection.y + detection.h)
-
-
-        # phi = -arctan((u - center_camera_x) / camera x)
-        bearing = -math.atan2((u - self.cx), self.fx)
-        # theta = arctan((v - center_camera_y) / camera y)
-        vertical_ray_angle = math.atan2((v-  self.cy), self.fy)
-
-        # alpha = tilt + theta
-        tot_down_angle = self.tilt_rad + vertical_ray_angle
-
-        if tot_down_angle <= math.radians(1.0): # looking too far down
-            self.get_logger().warn(f"tot_down_angle too small {math.degrees(tot_down_angle):.2f}")
+        # get all valid candidates sorted by area (largest first)
+        candidates = [d for d in msg.detections if float(d.confidence) >= self.min_confidence]
+        if not candidates:
             return
 
-        # dist = cam_height / tan(alpha)
-        dist_forward = self.camera_height / math.tan(tot_down_angle)
+        if self.use_largest_area:
+            candidates.sort(key=lambda d: float(d.area), reverse=True)
+        else:
+            candidates.sort(key=lambda d: float(d.confidence), reverse=True)
 
-        if (not math.isfinite(dist_forward)) or dist_forward <= 0.0 or dist_forward > 12.0: # return if distance forward is non existent or too far
-            return
+        # try each candidate, skip ones whose goal lands near a visited position
+        for detection in candidates:
+            result = self.compute_goal(detection)
+            if result is None:
+                continue
 
-        # goal = max(0.0, dist - amount away from goal)
-        d_goal = max(0.0, dist_forward - self.goal_standoff)
+            goal_x, goal_y, dist_forward, bearing = result
 
-        if d_goal <= 0.0: # return if robot is basically on top of object
-            self.get_logger().info("too close, not publishing")
-            return
+            if self.is_near_visited(goal_x, goal_y):
+                self.get_logger().info(f"Skipping detection id={detection.id} — goal ({goal_x:.2f}, {goal_y:.2f}) near visited position")
+                continue
 
-        # rotate into odom/world
-        cyaw = math.cos(self.robot_yaw)
-        syaw = math.sin(self.robot_yaw)
+            # publish goal
+            out = PoseStamped()
+            out.header = msg.header
+            out.header.frame_id = "odom"
+            out.pose.position.x = float(goal_x)
+            out.pose.position.y = float(goal_y)
+            out.pose.position.z = 0.0
+            out.pose.orientation.w = 1.0
 
-        # rotate gazebo
-        x_rel = d_goal * math.cos(bearing)
-        y_rel = d_goal * math.sin(bearing)
+            self.goal_publish.publish(out)
 
-        # compute (goal_x, goal_y) -> /goal_pose
-        goal_x = self.robot_x + (cyaw * x_rel - syaw * y_rel)
-        goal_y = self.robot_y + (syaw * x_rel + cyaw * y_rel)
+            u = float(detection.x + detection.w * 0.5)
+            v = float(detection.y + detection.h)
+            self.get_logger().info(f"detection id = {detection.id} confidence={detection.confidence:.1f}% u={u:.1f} v={v:.1f} bearing={math.degrees(bearing):.1f}deg d={dist_forward:.2f}m -> goal=(x={goal_x:.2f}, y{goal_y:.2f})")
+            return  # published first valid non-visited candidate
 
-
-        out = PoseStamped()
-        out.header = msg.header
-        out.header.frame_id = "odom"
-        out.pose.position.x = float(goal_x)
-        out.pose.position.y = float(goal_y)
-        out.pose.position.z = 0.0
-        out.pose.orientation.w = 1.0
-
-        self.goal_publish.publish(out)
-
-        self.get_logger().info(f"detection id = {detection.id} confidence={detection.confidence:.1f}% u={u:.1f} v={v:.1f} bearing={math.degrees(bearing):.1f}deg d={dist_forward:.2f}m -> goal=(x={goal_x:.2f}, y{goal_y:.2f})")
+        self.get_logger().info("All visible detections are near visited positions — no goal published")
 
 
 

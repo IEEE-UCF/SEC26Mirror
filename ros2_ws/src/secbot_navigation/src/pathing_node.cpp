@@ -164,6 +164,10 @@ namespace secbot_navigation
     double arrive_dist_ = 0.15;
     double arrive_yaw_deg_ = 10.0;
 
+    // visited goal tracking — reject re-navigation to already-reached positions
+    std::vector<std::pair<double,double>> visited_goals_;
+    double visited_goal_radius_ = 1.0;
+
     double v_cmd_max_ = 0.8;
     double w_cmd_max_ = 1.0;
     bool enable_turn_slowdown_ = true;
@@ -282,6 +286,8 @@ namespace secbot_navigation
     {
       if (!goal_reached_) {
         goal_reached_ = true;
+        visited_goals_.emplace_back(goal_x_, goal_y_);
+        RCLCPP_INFO(this->get_logger(), "Marked visited goal at (%.2f, %.2f), total visited: %zu", goal_x_, goal_y_, visited_goals_.size());
         std_msgs::msg::Bool reached;
         reached.data = true;
         goal_reached_pub_->publish(reached); // if goal is reached -> publish
@@ -313,6 +319,14 @@ namespace secbot_navigation
 
     // convert degrees -> radians
     static double degrees_to_radians(double d) { return d * M_PI / 180.0; }
+
+    // check if a goal is near any previously-reached position
+    bool is_near_visited_goal(double x, double y) const {
+      for (const auto& [vx, vy] : visited_goals_) {
+        if (std::hypot(x - vx, y - vy) < visited_goal_radius_) return true;
+      }
+      return false;
+    }
 
 
     // PLAN ======================================================
@@ -428,6 +442,10 @@ namespace secbot_navigation
       // check how close robot is
       const double d_robot = std::hypot(goal_meters.first - robot_x_, goal_meters.second - robot_y_);
       if (d_robot < min_goal_dist_) {RCLCPP_WARN(this->get_logger(), "Ignoring /goal_pose: too close (d=%.2f < %.2f). goal=(%.2f,%.2f) robot=(%.2f,%.2f)", d_robot, min_goal_dist_, goal_meters.first, goal_meters.second, robot_x_, robot_y_); return;}
+
+      // reject goals near already-reached positions
+      if (is_near_visited_goal(goal_meters.first, goal_meters.second)) {RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Ignoring /goal_pose: near visited goal (%.2f, %.2f)", goal_meters.first, goal_meters.second); return;}
+
       // Initialize filter if first goal
       if (!have_goal_filt_) {
         goal_filt_x_ = goal_meters.first;

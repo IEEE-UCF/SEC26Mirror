@@ -133,7 +133,7 @@ class ConvertVisionToGoal(Node):
 
         dist_forward = self.camera_height / math.tan(tot_down_angle)
 
-        if (not math.isfinite(dist_forward)) or dist_forward <= 0.0 or dist_forward > 12.0:
+        if (not math.isfinite(dist_forward)) or dist_forward <= 0.0 or dist_forward > 8.0:
             return None
 
         d_goal = max(0.0, dist_forward - self.goal_standoff)
@@ -146,6 +146,15 @@ class ConvertVisionToGoal(Node):
         y_rel = d_goal * math.sin(bearing)
         goal_x = self.robot_x + (cyaw * x_rel - syaw * y_rel)
         goal_y = self.robot_y + (syaw * x_rel + cyaw * y_rel)
+
+        # reject goals outside the field
+        ox = float(self.get_parameter("grid_origin_x").value)
+        oy = float(self.get_parameter("grid_origin_y").value)
+        res = float(self.get_parameter("grid_res").value)
+        field_max_x = ox + int(self.get_parameter("grid_width").value) * res
+        field_max_y = oy + int(self.get_parameter("grid_height").value) * res
+        if goal_x < ox or goal_x > field_max_x or goal_y < oy or goal_y > field_max_y:
+            return None
 
         return (goal_x, goal_y, dist_forward, bearing)
 

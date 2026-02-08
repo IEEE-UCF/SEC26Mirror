@@ -438,6 +438,8 @@ namespace secbot_navigation
       auto goal_cell = world_to_cell(goal_raw.first, goal_raw.second);
       auto goal_meters = cell_to_world(goal_cell.first, goal_cell.second);
 
+      // reject goals outside the field grid
+      if (!cell_in_bounds(goal_cell.first, goal_cell.second)) {RCLCPP_WARN(this->get_logger(), "Ignoring /goal_pose: out of bounds (%.2f, %.2f) -> cell(%d,%d)", goal_raw.first, goal_raw.second, goal_cell.first, goal_cell.second); return;}
 
       // check how close robot is
       const double d_robot = std::hypot(goal_meters.first - robot_x_, goal_meters.second - robot_y_);
@@ -452,18 +454,17 @@ namespace secbot_navigation
         goal_filt_y_ = goal_meters.second;
         have_goal_filt_ = true;
       } else {
-        // Only change if goal changed meaningfully
         const double d_change = std::hypot(goal_meters.first - goal_filt_x_, goal_meters.second - goal_filt_y_);
         if (d_change < accept_goal_change_dist_) {
-          // update EMA
+          // small change = same target, EMA smooth
           goal_filt_x_ = goal_ema_alpha_ * goal_meters.first + (1.0 - goal_ema_alpha_) * goal_filt_x_;
           goal_filt_y_ = goal_ema_alpha_ * goal_meters.second + (1.0 - goal_ema_alpha_) * goal_filt_y_;
           return;
         }
 
-        // EMA smoothing
-        goal_filt_x_ = goal_ema_alpha_ * goal_meters.first + (1.0 - goal_ema_alpha_) * goal_filt_x_;
-        goal_filt_y_ = goal_ema_alpha_ * goal_meters.second + (1.0 - goal_ema_alpha_) * goal_filt_y_;
+        // large change = different target, hard reset filter
+        goal_filt_x_ = goal_meters.first;
+        goal_filt_y_ = goal_meters.second;
       }
 
       // Mark a replan

@@ -1,0 +1,45 @@
+Architecture Constraints:
+
+    Inheritance: Must inherit from Subsystem::TimedSubsystem (for 500Hz timing) and IMicroRosParticipant (for ROS 2 comms).
+
+    Dependencies: Must accept a pointer to Drivers::BNO085Driver in its Setup struct to read orientation directly.
+
+Functional Requirements:
+
+    Inputs (The "Ears"):
+
+        ROS 2 Command: Subscribe to /drone/cmd_vel (geometry_msgs/Twist).
+
+            Mapping: Linear X = Target Pitch, Linear Y = Target Roll, Angular Z = Yaw Rate, Linear Z = Throttle.
+
+        RC Command: Subscribe to /mcu/rc (mcu_msgs/RC).
+
+            Mapping: Right Stick Y = Pitch, Right Stick X = Roll, Left Stick X = Yaw, Left Stick Y = Throttle.
+
+        Sensors: Read Pitch, Roll, and Yaw rates directly from the BNO085Driver.
+
+    Safety Logic (The "Brainstem"):
+
+        Mode Switch: Use RC.swa (Switch A) to toggle between MANUAL (RC control) and AUTONOMOUS (ROS 2 control).
+
+        Kill Switch: Use RC.swb (Switch B) to ARM/DISARM.
+
+            Logic: If Disarmed, all motor outputs must be 0.0, regardless of other inputs.
+
+    Control Loop (The "Reflexes"):
+
+        Frequency: Run the update() loop every 2ms (500Hz).
+
+        Stabilization: Implement a simple P-Controller (Proportional).
+
+            Error = Target_Angle - Current_Angle
+
+            Correction = Error * Kp (Use a default Kp of 0.01 for now).
+
+        Mixing: Combine Throttle, Pitch, Roll, and Yaw corrections into 4 motor outputs (Quad-X configuration).
+
+    Outputs (The "Muscles"):
+
+        Simulation: Publish to /mcu/motor_command (mcu_msgs/MotorCommand).
+
+            Populate front_left, front_right, back_left, back_right (values 0.0 to 1.0) and the armed boolean.

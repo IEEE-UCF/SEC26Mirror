@@ -41,3 +41,4 @@ def generate_launch_description():
         gz_sim_launch
         # spawn_field
     ])
+# for now the world file appears to not work!s

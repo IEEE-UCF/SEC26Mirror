@@ -25,9 +25,7 @@ namespace Subsystem{
         drone_control_node = nullptr;
     }
     bool DroneControlSubsystem::init(){
-        PIDController  yaw_value = PIDController();
-        PIDController  pitch_value = PIDController();
-        PIDController  roll_value = PIDController();
+
         //will probably need to initialize motors..maybe even IR state....maybe..need to think more on this
     }
     void DroneControlSubsystem::update(){
@@ -36,8 +34,9 @@ namespace Subsystem{
     void DroneControlSubsystem::begin(){
         update();
     }
-    static void drone_control_callback(const void * msvin, void *context){//check the Dronestate.msg
+    static void DroneControlSubsystem::drone_control_callback(const void * msvin, void *context){//check the Dronestate.msg
         DroneControlSubsystem *instance = (DroneControlSubsystem*)context;
-        mcu_msgs_msg__DroneControl 
+        const mcu_msgs_msg__DroneControl *msg_receive = (const mcu_msgs_msg__DroneControl*) msvin;
+         
     }
 }

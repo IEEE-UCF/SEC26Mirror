@@ -1,0 +1,630 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot name="Drone">
+    <link name="Drone-Frame-v6">
+        <inertial>
+            <origin xyz="2.8121182043028534e-05 8.672398144989683e-05 2.7871630540183842e-05" rpy="0.0 0.0 0.0" />
+            <mass value="0.2655404455254543" />
+            <inertia ixx="0.00034254015810302824" iyy="0.0006581997246540601" izz="0.0003420699609649862" ixy="4.489129397152076e-08" iyz="4.394036056382537e-08" ixz="-3.1457575788303896e-07" />
+        </inertial>
+        <visual name="Drone-Frame-v6_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Drone-Frame-v6.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Drone-Frame-v6_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Drone-Frame-v6.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="motor-example-v5">
+        <inertial>
+            <origin xyz="-1.0438446000277101e-10 0.00798486451198844 -4.955660390538837e-11" rpy="0.0 0.0 0.0" />
+            <mass value="0.00360134635075838" />
+            <inertia ixx="8.892584536035415e-08" iyy="1.612908538857392e-08" izz="8.906846163384499e-08" ixy="-4.622685761678713e-15" iyz="-1.7929210500536597e-15" ixz="1.4790505513150368e-17" />
+        </inertial>
+        <visual name="motor-example-v5_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="motor-example-v5_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step">
+        <inertial>
+            <origin xyz="1.704070181375451e-13 -5.60053363238927e-19 -0.0007999999999829999" rpy="0.0 0.0 0.0" />
+            <mass value="2.663442251660046e-06" />
+            <inertia ixx="1.2405352464880407e-12" iyy="1.2405351442983546e-12" izz="7.91264251165235e-13" ixy="-9.57262580687509e-36" iyz="-3.233949555000623e-27" ixz="-3.233246050408318e-27" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step">
+        <inertial>
+            <origin xyz="1.704075732490574e-13 -5.60053363238927e-19 -0.0007999999999829999" rpy="0.0 0.0 0.0" />
+            <mass value="2.663442251660046e-06" />
+            <inertia ixx="1.2405352464880407e-12" iyy="1.2405351442983546e-12" izz="7.912642511652608e-13" ixy="-6.462348545143155e-27" iyz="-3.233949555000623e-27" ixz="-2.0717826230530913e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step">
+        <inertial>
+            <origin xyz="1.7040674058178894e-13 -5.600533632389269e-19 -0.0007999999999829999" rpy="0.0 0.0 0.0" />
+            <mass value="2.663442251660046e-06" />
+            <inertia ixx="1.24053524648806e-12" iyy="1.2405351442983482e-12" izz="7.912642511652608e-13" ixy="-9.572628183477286e-36" iyz="-1.6183624211079906e-27" ixz="-2.0717826230530696e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step">
+        <inertial>
+            <origin xyz="1.704070181375451e-13 -5.60053363238927e-19 -0.0007999999999829999" rpy="0.0 0.0 0.0" />
+            <mass value="2.663442251660046e-06" />
+            <inertia ixx="1.24053524648806e-12" iyy="1.2405351442983465e-12" izz="7.912642511652738e-13" ixy="-1.6155871434652605e-27" iyz="-1.6183624211079906e-27" ixz="-2.0717826230530002e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step">
+        <inertial>
+            <origin xyz="1.704070181375451e-13 -5.60053363238927e-19 -0.0007999999999829999" rpy="0.0 0.0 0.0" />
+            <mass value="2.663442251660046e-06" />
+            <inertia ixx="1.2405352464880536e-12" iyy="1.2405351442983482e-12" izz="7.912642511652608e-13" ixy="-6.462348545143157e-27" iyz="-4.849536688893255e-27" ixz="-2.071782623053303e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step">
+        <inertial>
+            <origin xyz="1.704070181375451e-13 -5.60053363238927e-19 -0.0007999999999829999" rpy="0.0 0.0 0.0" />
+            <mass value="2.663442251660046e-06" />
+            <inertia ixx="1.2405352464880536e-12" iyy="1.2405351442983288e-12" izz="7.912642511652608e-13" ixy="-2.584939415185474e-26" iyz="-4.849536688893255e-27" ixz="-2.071782623053183e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Trous.step_Trou1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_PCB_pink.step">
+        <inertial>
+            <origin xyz="3.1697781100614504e-11 0.00012474304503918334 -0.0008000000000000004" rpy="0.0 0.0 0.0" />
+            <mass value="0.002470838764288441" />
+            <inertia ixx="2.1382023786640792e-08" iyy="8.493138064759075e-08" izz="1.0525917989480178e-07" ixy="-7.903871117901807e-13" iyz="-3.5967379201496125e-24" ixz="-1.2675625448955264e-24" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_PCB_pink.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_PCB_pink.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_PCB_pink.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_PCB_pink.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_TrouFix01.step">
+        <inertial>
+            <origin xyz="8.626987643935224e-14 -4.5409509225552554e-18 -0.0008000000000243379" rpy="0.0 0.0 0.0" />
+            <mass value="9.371370885926643e-06" />
+            <inertia ixx="1.547975799179927e-11" iyy="1.547975741371962e-11" izz="2.3825107190881138e-11" ixy="1.0638733813842808e-26" iyz="-6.702402304930256e-26" ixz="6.669661061431731e-22" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_TrouFix01.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_TrouFix01.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_TrouFix01.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_TrouFix01.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Text_VIN.step">
+        <inertial>
+            <origin xyz="-0.0004755251723199793 0.001168932671850073 2.5000000000000018e-05" rpy="0.0 0.0 0.0" />
+            <mass value="2.6262494206330723e-07" />
+            <inertia ixx="9.843521620093025e-14" iyy="1.7933194685425487e-14" izz="1.1625898382715932e-13" ixy="-2.8886366301378264e-15" iyz="-2.0132768174708087e-28" ixz="4.039968205791501e-28" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Text_VIN.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_VIN.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Text_VIN.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_VIN.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Text_GND.step">
+        <inertial>
+            <origin xyz="-0.00046123350621930385 0.001463803401994167 2.4999999999999737e-05" rpy="0.0 0.0 0.0" />
+            <mass value="3.794598608157915e-07" />
+            <inertia ixx="2.497963381883697e-13" iyy="3.152591458242036e-14" izz="2.81164144495447e-13" ixy="4.4404011871430744e-16" iyz="2.034884377180237e-28" ixz="4.040386910023535e-28" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Text_GND.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_GND.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Text_GND.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_GND.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Text_SCL.step">
+        <inertial>
+            <origin xyz="-0.000432738323472346 0.0011229435763458512 2.5000000000000296e-05" rpy="0.0 0.0 0.0" />
+            <mass value="2.793618765037941e-07" />
+            <inertia ixx="1.2703956402910312e-13" iyy="2.710591609185807e-14" izz="1.5402907933908513e-13" ixy="-9.731842919757813e-15" iyz="8.289219187141004e-31" ixz="1.8457695926852198e-31" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Text_SCL.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_SCL.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Text_SCL.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_SCL.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Text_SDA.step">
+        <inertial>
+            <origin xyz="-0.00045337079923618356 0.0013011284773802566 2.5000000000000018e-05" rpy="0.0 0.0 0.0" />
+            <mass value="3.4087796497676424e-07" />
+            <inertia ixx="1.9593048059340482e-13" iyy="2.856792518524581e-14" izz="2.2435637329324366e-13" ixy="-3.9388071625716774e-15" iyz="2.031760019284649e-28" ixz="-2.0179297641950835e-28" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Text_SDA.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_SDA.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Text_SDA.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_SDA.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Text_GPIO1.step">
+        <inertial>
+            <origin xyz="-0.000493765038552316 0.00184484362601831 2.5000000000000293e-05" rpy="0.0 0.0 0.0" />
+            <mass value="4.4688332625595915e-07" />
+            <inertia ixx="5.417939424869355e-13" iyy="3.636307583143346e-14" izz="5.77970816932431e-13" ixy="3.915599668448083e-15" iyz="-4.0056915910897036e-28" ixz="4.040394227806754e-28" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Text_GPIO1.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_GPIO1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Text_GPIO1.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_GPIO1.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Text_XSHUT.step">
+        <inertial>
+            <origin xyz="-0.0004776009723550365 0.0020933330812799317 2.4999999999999734e-05" rpy="0.0 0.0 0.0" />
+            <mass value="5.015240344539303e-07" />
+            <inertia ixx="7.60844065592282e-13" iyy="4.124913454860499e-14" izz="8.018842317931895e-13" ixy="1.6964696661821538e-14" iyz="2.0656884175216936e-28" ixz="-2.4232962431572588e-27" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Text_XSHUT.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_XSHUT.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Text_XSHUT.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_XSHUT.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_Text_VL53L0X-V2.step">
+        <inertial>
+            <origin xyz="-0.00044240822969351246 0.003686630928955865 2.5e-05" rpy="0.0 0.0 0.0" />
+            <mass value="7.884829268376855e-07" />
+            <inertia ixx="3.562013731053294e-12" iyy="6.691850289479714e-14" izz="3.6286036993952403e-12" ixy="6.0786802447946425e-15" iyz="1.1743621470168284e-28" ixz="-8.082329454862247e-28" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_Text_VL53L0X-V2.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_VL53L0X-V2.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_Text_VL53L0X-V2.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_Text_VL53L0X-V2.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_VL53L0X.step">
+        <inertial>
+            <origin xyz="-0.0022942673896469644 0.0029647032875250007 0.0004991384491743079" rpy="0.0 0.0 0.0" />
+            <mass value="8.273759412768956e-05" />
+            <inertia ixx="4.666407968808715e-11" iyy="1.402876744268613e-10" izz="1.732002953302588e-10" ixy="-3.2080995501284887e-25" iyz="-5.14897707372541e-26" ixz="-6.091231613103687e-14" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_VL53L0X.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_VL53L0X.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_VL53L0X.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_VL53L0X.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric.step">
+        <inertial>
+            <origin xyz="-1.844572780901983e-21 2.8002668161153455e-19 0.0004000000000000002" rpy="0.0 0.0 0.0" />
+            <mass value="7.30335656335618e-06" />
+            <inertia ixx="7.11133131034406e-13" iyy="2.0079101656998866e-12" izz="2.0079101656998607e-12" ixy="6.340872859052872e-27" iyz="1.961817850054744e-44" ixz="1.6096071348400255e-27" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_R_Array_Convex_4x0603.step">
+        <inertial>
+            <origin xyz="1.3753805462309691e-19 5.5677233663287945e-19 0.0002688586686053925" rpy="0.0 0.0 0.0" />
+            <mass value="1.6483666291856457e-05" />
+            <inertia ixx="1.5143694685305882e-11" iyy="3.385583328967801e-12" izz="1.7954086149907034e-11" ixy="1.4026138948502474e-26" iyz="2.5133749120016315e-27" ixz="-8.207534959445224e-28" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_R_Array_Convex_4x0603.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_R_Array_Convex_4x0603.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_R_Array_Convex_4x0603.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_R_Array_Convex_4x0603.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_SOT_23.step">
+        <inertial>
+            <origin xyz="-1.2355342445367759e-05 1.744517267534673e-21 0.0006292849678018475" rpy="0.0 0.0 0.0" />
+            <mass value="3.461139823149478e-05" />
+            <inertia ixx="2.781279273968221e-11" iyy="9.468172182840803e-12" izz="3.044152287026275e-11" ixy="1.717745292575604e-27" iyz="8.273569119360443e-29" ixz="-1.4925517168118473e-13" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_SOT_23.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_SOT_23.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_SOT_23.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_SOT_23.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric001.step">
+        <inertial>
+            <origin xyz="-2.470925455245433e-21 2.757111833753872e-19 0.0004000000000000002" rpy="0.0 0.0 0.0" />
+            <mass value="7.30335656335618e-06" />
+            <inertia ixx="7.11133131034406e-13" iyy="2.007910165699835e-12" izz="2.007910165699835e-12" ixy="-6.583824212088181e-27" iyz="1.6155871338926322e-27" ixz="-8.010598461831338e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric001.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric001.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric001.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric001.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric002.step">
+        <inertial>
+            <origin xyz="5.526405868573329e-19 1.5428054005701072e-19 0.0004000000000000002" rpy="0.0 0.0 0.0" />
+            <mass value="7.30335656335618e-06" />
+            <inertia ixx="7.111331310344068e-13" iyy="2.007910165699809e-12" izz="2.007910165699835e-12" ixy="6.863178904286663e-28" iyz="4.0389678347315804e-28" ixz="1.607576535430801e-27" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric002.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric002.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric002.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_C_0603_1608Metric002.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric.step">
+        <inertial>
+            <origin xyz="2.790294771973878e-19 1.1001488180399806e-21 0.0002385698909645638" rpy="0.0 0.0 0.0" />
+            <mass value="4.217167267551404e-06" />
+            <inertia ixx="2.8779468673533474e-13" iyy="9.942836088269975e-13" izz="1.1563200972971915e-12" ixy="-6.618039760817767e-29" iyz="7.472202403626344e-31" ixz="5.365153863711898e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric001.step">
+        <inertial>
+            <origin xyz="2.790294771973878e-19 1.1001488180399806e-21 0.0002385698909645638" rpy="0.0 0.0 0.0" />
+            <mass value="4.217167267551404e-06" />
+            <inertia ixx="2.877946867353218e-13" iyy="9.942836088269967e-13" izz="1.1563200972971915e-12" ixy="-6.61803976081788e-29" iyz="-8.0704634670595345e-28" ixz="5.365153863712053e-30" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric001.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric001.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric001.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_R_0603_1608Metric001.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_SOT_363_SC_70_6.step">
+        <inertial>
+            <origin xyz="-4.129576033854896e-19 -8.301470246475786e-19 0.0005465208740760983" rpy="0.0 0.0 0.0" />
+            <mass value="1.848160737839661e-05" />
+            <inertia ixx="7.033179069768116e-12" iyy="4.329912237208753e-12" izz="8.655112147446852e-12" ixy="-6.2091198320119384e-27" iyz="-1.2904751706075097e-26" ixz="-9.68350361403494e-27" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_SOT_363_SC_70_6.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_SOT_363_SC_70_6.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_SOT_363_SC_70_6.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_SOT_363_SC_70_6.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Distance-Sensor_Distance-Sensor.step_TrouFix01.step">
+        <inertial>
+            <origin xyz="8.62687662163276e-14 -4.540950922555255e-18 -0.0008000000000243379" rpy="0.0 0.0 0.0" />
+            <mass value="9.371370885926643e-06" />
+            <inertia ixx="1.547975799179927e-11" iyy="1.5479757413719724e-11" izz="2.382510719088124e-11" ixy="1.063873381384277e-26" iyz="-6.702402304930256e-26" ixz="6.669661061431731e-22" />
+        </inertial>
+        <visual name="Distance-Sensor_Distance-Sensor.step_TrouFix01.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_TrouFix01.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Distance-Sensor_Distance-Sensor.step_TrouFix01.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Distance-Sensor_Distance-Sensor.step_TrouFix01.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="PCB-Board-v1_PCB-Board.step_drone_PCB.step">
+        <inertial>
+            <origin xyz="0.12393809657177209 -0.04762854820718873 0.0007550000000000068" rpy="0.0 0.0 0.0" />
+            <mass value="0.007740644671320176" />
+            <inertia ixx="4.3391901979294984e-07" iyy="4.342233796902554e-07" izz="8.652008254973368e-07" ixy="1.1206827788813533e-09" iyz="6.39462312291775e-22" ixz="4.1262418517044604e-22" />
+        </inertial>
+        <visual name="PCB-Board-v1_PCB-Board.step_drone_PCB.step_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/PCB-Board-v1_PCB-Board.step_drone_PCB.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="PCB-Board-v1_PCB-Board.step_drone_PCB.step_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/PCB-Board-v1_PCB-Board.step_drone_PCB.step.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="LED-Vishay-TSAL6200">
+        <inertial>
+            <origin xyz="0.0025364731896544757 -1.2876611125297035e-05 1.3841720508117604e-05" rpy="0.0 0.0 0.0" />
+            <mass value="0.0012902012245418443" />
+            <inertia ixx="4.057552632543094e-09" iyy="1.0531130320229592e-08" izz="1.0503960038246833e-08" ixy="5.255699716616025e-11" iyz="-2.299583085888721e-13" ixz="-1.4912392945047696e-10" />
+        </inertial>
+        <visual name="LED-Vishay-TSAL6200_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/LED-Vishay-TSAL6200.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="LED-Vishay-TSAL6200_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/LED-Vishay-TSAL6200.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="Battery">
+        <inertial>
+            <origin xyz="0.008938583521481459 -0.004185913727128454 -0.013012678915949146" rpy="0.0 0.0 0.0" />
+            <mass value="0.030803627054784646" />
+            <inertia ixx="1.8917263874198955e-06" iyy="2.5480123130663677e-06" izz="1.0188874993440285e-06" ixy="4.798690122985428e-09" iyz="9.906504832181182e-10" ixz="-4.05944728151521e-09" />
+        </inertial>
+        <visual name="Battery_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Battery.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="Battery_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/Battery.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="motor-example-v5">
+        <inertial>
+            <origin xyz="-1.043844578145266e-10 0.00798486451198844 -4.955660776972767e-11" rpy="0.0 0.0 0.0" />
+            <mass value="0.00360134635075838" />
+            <inertia ixx="8.892584536035804e-08" iyy="1.6129085388575612e-08" izz="8.906846163384279e-08" ixy="-4.6226857647313465e-15" iyz="-1.7929209909442477e-15" ixz="1.4790651096938177e-17" />
+        </inertial>
+        <visual name="motor-example-v5_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="motor-example-v5_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="motor-example-v5">
+        <inertial>
+            <origin xyz="-1.0438446081484746e-10 0.00798486451198844 -4.9556602377339165e-11" rpy="0.0 0.0 0.0" />
+            <mass value="0.00360134635075838" />
+            <inertia ixx="8.892584536035601e-08" iyy="1.612908538857392e-08" izz="8.906846163384311e-08" ixy="-4.622685713814181e-15" iyz="-1.792921045821211e-15" ixz="1.478977759421132e-17" />
+        </inertial>
+        <visual name="motor-example-v5_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="motor-example-v5_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="motor-example-v5">
+        <inertial>
+            <origin xyz="-1.0438446000277101e-10 0.00798486451198844 -4.955660390538837e-11" rpy="0.0 0.0 0.0" />
+            <mass value="0.00360134635075838" />
+            <inertia ixx="8.89258453603541e-08" iyy="1.6129085388572224e-08" izz="8.90684616338425e-08" ixy="-4.6226857647313615e-15" iyz="-1.7929209909442063e-15" ixz="1.478927466839889e-17" />
+        </inertial>
+        <visual name="motor-example-v5_visual">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </visual>
+        <collision name="motor-example-v5_collision">
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+            <geometry>
+                <mesh filename="meshes/motor-example-v5.stl" scale="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+</robot>

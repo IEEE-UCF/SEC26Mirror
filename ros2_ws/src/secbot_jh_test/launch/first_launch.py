@@ -35,11 +35,12 @@ from launch.actions import SetEnvironmentVariable
 def generate_launch_description():
     pkg_share = get_package_share_directory('secbot_jh_test')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
-    # Path to your uploaded world file
+
     """
     I mean just look at that wozaa!
     pkg_share is like the parent directory housing the worlds folder holding the empty_world.sdf...
     """
+    # Path to your uploaded world file
     world_path = os.path.join(pkg_share,'worlds','empty_world.sdf')
     
     #launch action for the "empty_world" file
@@ -50,7 +51,6 @@ def generate_launch_description():
             #-r runs the simulation immediately on startup
             launch_arguments={'gz_args': f'-r {world_path}'}.items(),
         )
-
 
     #spawner Node for coke can
     spawn_model = Node(
@@ -65,11 +65,12 @@ def generate_launch_description():
         ],
         output='screen',
     )
+   
+   #talker node!
+
+    enviornemnt_set = SetEnvironmentVariable(name = 'GZ_SIM_RESOURCE_PATH',value=pkg_share)# pkg_share points to .../share/secbot_jh_test, which contains 'Coke)
     return LaunchDescription([
-        SetEnvironmentVariable(
-            name = 'GZ_SIM_RESOURCE_PATH',
-            value=pkg_share# pkg_share points to .../share/secbot_jh_test, which contains 'Coke
-            ),
+        enviornemnt_set,
         gz_sim_launch,
         spawn_model
     ])

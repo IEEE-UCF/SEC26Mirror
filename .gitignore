@@ -73,7 +73,11 @@ mcu_ws/.vscode/*
 ros2_ws/src/build/
 ros2_ws/src/install/
 ros2_ws/src/log
+<<<<<<< HEAD
 #general safety net for ant ROS folder depth
+=======
+#general safety net for any ROS folder depth
+>>>>>>> 483df76753580e8f55ec702e10059802933bf67b
 **/build/
 **/install/
 **/log/

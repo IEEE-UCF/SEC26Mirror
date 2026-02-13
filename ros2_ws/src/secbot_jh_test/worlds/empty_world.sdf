@@ -4,6 +4,7 @@
         <physics name="1ms" type="ignored">
             <max_step_size>0.001</max_step_size>
             <real_time_factor>1.0</real_time_factor>
+            <gravity>0.0</gravity>
         </physics>
         <plugin
             filename="gz-sim-physics-system"
@@ -149,4 +150,11 @@ but if you do well enough I think the bridge alone is suffice....
 
 EITHER WAY!!
 this is the basic enviornment with physics(gravity/collision), light(the sun), and a ground plane
+***********************LINK***************************
+This is considerded as a physical link of the piece of the object
+so for example if you wanted to make a frame link(rigid body) then you'd have the
+    ..Inertial properties(<inertial>): How heavy the part is(mass) and how that weight is distributed(inertia)
+    ..Visual(<visual>): This is the "graphics" layer . . This is for the mesh files which you may or may NOT have
+    ..Collision(<collision>): This is the "hitbox". It tells the simulator when your object has bumped into another object(make the same as the frame???)
+    
 -->

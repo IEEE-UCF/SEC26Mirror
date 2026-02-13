@@ -3,12 +3,14 @@ Subsystem to dictate movement for drone(commands from pi to MCU)
 no intellisense?
 msg: UWB, IMU SENSOR, IR_COMMAND,
 */
-#include <BNO085.h>
+
 #include <BaseSubsystem.h>
-#include <microros_manager_robot.h>  //any node intialized in any other subsytem will have the "same" ID as the robot..
+// #include <microros_manager_robot.h>  //any node intialized in any other subsytem will have the "same" ID as the robot..
+#include <microros_manager_robot.h>
 #include <pid_controller.h>
 #include <src/robot/subsystems/ImuSubsystem.h>
 
+#include <lib/robot/BNO085.h>
 #include "TimedSubsystem.h"
 namespace Subsystem {
 // Setup based on BaseSetup
@@ -87,6 +89,7 @@ rclc_executor_t* drone_control_executor =
 rcl_subscription_t
     drone_control_subscriber;  // if we are to execute with a callback function
                                // we need to subscribe to the pi
-mcu_msgs_msg__DroneControl drone_control_msg;  // the message struct??
+mcu_msgs_msg__DroneControl send_drone_control_msg;  // figure where these msg files are coming from..how come I can't see them???
+
 }
 }

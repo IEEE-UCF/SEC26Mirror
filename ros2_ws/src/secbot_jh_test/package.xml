@@ -10,6 +10,11 @@
 	<buildtool_depend>ament_cmake</buildtool_depend>
 	<exec_depend>ros_gz_sim</exec_depend>
 	<exec_depend>ros2launch</exec_depend>
+	<depend>rclcpp</depend>
+	<depend>std_msgs</depend>
+	<depend>geometry_msgs</depend>
+	<depend>mcu_msgs</depend>
+	<depend>sensor_msgs</depend>
 	<export>
 		<build_type>ament_cmake</build_type>
 		<gazebo_model_path>${prefix}/..</gazebo_model_path>
@@ -22,4 +27,8 @@ In ROS2, a package is just a folder UNTIL you define it in the package.xml
 	By deafult, Gazebo only looks in its own internal folders for models. The line tells the build system to append your package's directory(jh_testing)
 	to the GZ_SIM_RESOURCE_PATH(which if you wanted to know how to you'd have to say this EVERYTIME on the terminal "ros2 launch ros_gz_sim gz_server.launch.py world_sdf_file:=empty.sdf"
 	which sucks) so to just point your resource you include that export line
+
+	now as for the weird <depend>, <exec_depend> just think of it for two things
+		..For dependecies only used when running the code(I think for saying the words ros2 <command>) use the exec_depend
+		..For mixed purposes, use <depend>, which covers vuild, export, and execution time dependencies(basically those header files we placed in the .cpp files)
 -->

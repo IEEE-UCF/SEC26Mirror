@@ -15,8 +15,6 @@ find_package(sensor_msgs REQUIRED)
 
 add_executable(fusion_node 
 	src/fusion_node.cpp
-	src/range_fuser.cpp
-	src/sim_sensor_mux.cpp
 )
 
 ament_target_dependencies(fusion_node

@@ -36,12 +36,14 @@ ament_target_dependencies(beacon_config
 add_library(positioning_node_lib
   src/positioning_node.cpp
 )
+
 ament_target_dependencies(positioning_node_lib
   rclcpp
   geometry_msgs
   std_msgs
   mcu_msgs
 )
+
 target_link_libraries(positioning_node_lib
   beacon_config
   Eigen3::Eigen
@@ -49,7 +51,7 @@ target_link_libraries(positioning_node_lib
 
 # Positioning node executable
 add_executable(positioning_node
-  src/positioning_node_main.cpp
+  src/positioning_node.cpp
 )
 ament_target_dependencies(positioning_node
   rclcpp

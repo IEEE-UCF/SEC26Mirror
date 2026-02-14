@@ -17,6 +17,7 @@ def generate_launch_description():
     sdf_file = os.path.join(
         get_package_share_directory('secbot_vision'),
         'worlds',
+        'default',
         'my_bot_harmonic.sdf'
     )
     

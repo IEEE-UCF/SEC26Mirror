@@ -24,10 +24,10 @@ using namespace Subsystem;
 #define UWB_IRQ_PIN 17  // Interrupt pin (not used in polling mode)
 
 // Device IDs - must be unique across all UWB devices
-#define ROBOTCOMMS_TAG_ID 1  // Main robot tag ID
-static const uint8_t ANCHOR_IDS[] = {10, 11, 12,
+#define ROBOTCOMMS_TAG_ID 12  // Main robot tag ID
+static const uint8_t ANCHOR_IDS[] = {10, 11,
                                      13};  // IDs of stationary beacons
-static const uint8_t NUM_ANCHORS = 4;
+static const uint8_t NUM_ANCHORS = 3;
 
 // --- micro-ROS manager ---
 static MicrorosManagerSetup g_mr_setup("microros_manager");

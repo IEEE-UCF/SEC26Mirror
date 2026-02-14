@@ -196,6 +196,8 @@ jobs:
         run: |
           set -euxo pipefail
           tar cz -C ros2_ws/src . | docker run --rm -i -v ros2_src:/volume alpine sh -c "cd /volume && rm -rf ./* && tar xz"
+          # Seed MCU pure-C++ libs (control, math, drive) for secbot_sim compilation
+          tar cz -C mcu_ws/lib control math drive | docker run --rm -i -v ros2_src:/volume alpine sh -c "mkdir -p /volume/_mcu_lib && cd /volume/_mcu_lib && tar xz"
 
       - name: Start devcontainer (CI override)
         run: |

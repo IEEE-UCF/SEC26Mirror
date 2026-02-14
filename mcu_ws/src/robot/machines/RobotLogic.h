@@ -17,8 +17,10 @@
 #include "robot/machines/HeartbeatSubsystem.h"
 #include "robot/machines/McuSubsystem.h"
 #include "robot/machines/RobotManager.h"
+#include "BNO085.h"
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
+#include "robot/subsystems/ImuSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 
@@ -46,6 +48,12 @@ static Drivers::TOFDriver g_tof_driver(g_tof_setup);
 static std::vector<Drivers::TOFDriver*> g_tof_drivers = {&g_tof_driver};
 static SensorSubsystemSetup g_sensor_setup("sensor_subsystem", g_tof_drivers);
 static SensorSubsystem g_sensor(g_sensor_setup);
+
+// --- IMU subsystem (BNO085) ---
+static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver");
+static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
+static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
+static ImuSubsystem g_imu(g_imu_setup);
 
 // --- MCU subsystem wired with callbacks ---
 // Forward-declare callbacks so we can construct the subsystem first
@@ -89,7 +97,7 @@ static bool mcu_init_cb() {
   ok = ok && g_hb.init();
   ok = ok && g_battery.init();
   ok = ok && g_sensor.init();
-  ok = ok && g_sensor.init();
+  ok = ok && g_imu.init();
   ok = ok && g_pca_mgr.init();
   ok = ok && g_arm_encoder.init();
   ok = ok && g_arm.init();
@@ -109,6 +117,7 @@ static bool mcu_begin_cb() {
   g_mr.registerParticipant(&g_hb);
   g_mr.registerParticipant(&g_battery);
   g_mr.registerParticipant(&g_sensor);
+  g_mr.registerParticipant(&g_imu);
   g_mr.registerParticipant(&g_arm);
   g_mr.registerParticipant(&g_rc);
   g_mr.begin();
@@ -124,6 +133,8 @@ static void mcu_update_cb() {
   g_battery.update();
   // Update sensor subsystem
   g_sensor.update();
+  // Update IMU subsystem
+  g_imu.update();
   // Update arm subsystem
   g_arm.update();
   // Update RC subsystem

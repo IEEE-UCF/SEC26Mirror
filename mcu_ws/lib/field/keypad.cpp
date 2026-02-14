@@ -3,11 +3,21 @@
 
 namespace Field {
 
-bool KeypadDriver::init() { return true; }
+bool KeypadDriver::init() {
+  // Reinitialize pins (constructor runs before Serial.begin)
+  for (int col = 0; col < _num_cols; col++) {
+    pinMode(_column_pins[col], OUTPUT);
+    digitalWrite(_column_pins[col], HIGH);
+  }
+  for (int row = 0; row < _num_rows; row++) {
+    pinMode(_row_pins[row], INPUT_PULLUP);
+  }
+
+  Serial.println("Keypad initialized");
+  return true;
+}
 
 void KeypadDriver::update() {
-  static int count = 0;
-  //------------------------------------------------------
   for (int col = 0; col < _num_cols; col++) {
     digitalWrite(_column_pins[col], LOW);
     for (int row = 0; row < _num_rows; row++) {
@@ -18,27 +28,34 @@ void KeypadDriver::update() {
             (_prev_key == key && (millis() - _prev_time) > _debounce_time)) {
           _prev_key = key;
           _prev_time = millis();
-          count++;
-          password += key;
           Serial.println(key);
+
+          if (key == '#') {
+            // Enter key pressed - check password
+            if (password == actualPassword) {
+              Serial.println("PASSWORD CORRECT!");
+              task = COMPLETE;
+            } else {
+              Serial.println("PASSWORD INCORRECT!");
+              task = NOTCOMPLETE;
+            }
+            password = "";
+          } else {
+            // Add character to password
+            password += key;
+
+            // Reset if more than 5 characters entered
+            if (password.length() > sizepassword) {
+              Serial.println("TOO MANY CHARS - RESET");
+              password = "";
+            }
+          }
+
           digitalWrite(_column_pins[col], HIGH);
-          // return key;
         }
       }
     }
     digitalWrite(_column_pins[col], HIGH);
-  }
-  //----------------------------------------------------
-  if (count == sizepassword) {
-    if (password == actualPassword) {
-      Serial.println("HOORAY!");
-      task = COMPLETE;
-    } else {
-      password = "";
-      Serial.println("NOPE!");
-      task = NOTCOMPLETE;
-      count = 0;
-    }
   }
 }
 

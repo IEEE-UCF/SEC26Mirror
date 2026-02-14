@@ -18,7 +18,7 @@ find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 
 # MCU workspace pure-C++ sources (PID, motion profiles, trajectory, localization, math)
-set(MCU_WS_DIR "/home/ubuntu/mcu_workspaces/sec26mcu" CACHE PATH
+set(MCU_WS_DIR "$ENV{HOME}/mcu_workspaces/sec26mcu" CACHE PATH
 	"MCU workspace root inside Docker")
 if(NOT EXISTS "${MCU_WS_DIR}/lib/control")
 	# Repo-relative path (host builds without Docker)

@@ -184,6 +184,14 @@ jobs:
             colcon-shared-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
             colcon-shared-${{ steps.sanitize_cache_platform.outputs.slug }}-
 
+      - name: Seed MCU libs for secbot_sim (CI needs _mcu_lib)
+        run: |
+          set -euxo pipefail
+          mkdir -p ros2_ws/src/_mcu_lib
+          cp -r mcu_ws/lib/control ros2_ws/src/_mcu_lib/
+          cp -r mcu_ws/lib/math    ros2_ws/src/_mcu_lib/
+          cp -r mcu_ws/lib/drive   ros2_ws/src/_mcu_lib/
+
       - name: Seed ros2_src volume from repo (no bind mount)
         run: |
           set -euxo pipefail

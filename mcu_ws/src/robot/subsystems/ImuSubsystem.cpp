@@ -120,7 +120,8 @@ void ImuSubsystem::publishData() {
   msg_.header.frame_id.size = strlen(frame_id);
   msg_.header.frame_id.capacity = strlen(frame_id) + 1;
 
-  // Orientation quaternion (Looking at the documentation and I think the BNO085 provides this directly)
+  // Orientation quaternion (Looking at the documentation and I think the BNO085
+  // provides this directly)
   msg_.orientation.x = data.qx;
   msg_.orientation.y = data.qy;
   msg_.orientation.z = data.qz;

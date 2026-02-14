@@ -3,7 +3,8 @@
 #include <pressure.h>
 #include <raw-rgb-analog-led.h>
 
-const uint8_t forcePin = 34;  // Must use ADC1 pin (32-39) - ADC2 blocked by WiFi/ESP-NOW
+const uint8_t forcePin =
+    34;  // Must use ADC1 pin (32-39) - ADC2 blocked by WiFi/ESP-NOW
 
 const uint8_t r = 18;
 const uint8_t g = 5;
@@ -24,11 +25,11 @@ Field::PressureDriver Pressure1 = Field::PressureDriver(setupPressure);
 Field::FieldElement fieldElement(Field::ElementId::PRESSURE);
 
 // Color options
-RawDrivers::RGBColor* colorOptions[] = {
-    &Field::colorRed, &Field::colorGreen, &Field::colorBlue, &Field::colorPurple};
+RawDrivers::RGBColor* colorOptions[] = {&Field::colorRed, &Field::colorGreen,
+                                        &Field::colorBlue, &Field::colorPurple};
 Field::FieldColor fieldColorOptions[] = {
-    Field::FieldColor::RED, Field::FieldColor::GREEN,
-    Field::FieldColor::BLUE, Field::FieldColor::PURPLE};
+    Field::FieldColor::RED, Field::FieldColor::GREEN, Field::FieldColor::BLUE,
+    Field::FieldColor::PURPLE};
 
 int randomNum;
 bool cycleDisplayActive = false;
@@ -37,13 +38,14 @@ unsigned long lastCycleUpdate = 0;
 unsigned long lastStatusUpdate = 0;
 unsigned long lastBlinkUpdate = 0;
 bool blinkState = false;
-bool gameStarted = false;  // True after START command received
+bool gameStarted = false;    // True after START command received
 bool taskCompleted = false;  // True when duck removed after being placed
 const unsigned long STATUS_UPDATE_INTERVAL = 1000;
 const unsigned long BLINK_INTERVAL = 100;  // Fast blink (100ms on/off)
 
 // HSV to RGB conversion for smooth cycling
-void hsvToRgb(uint8_t h, uint8_t s, uint8_t v, uint8_t& rOut, uint8_t& gOut, uint8_t& bOut) {
+void hsvToRgb(uint8_t h, uint8_t s, uint8_t v, uint8_t& rOut, uint8_t& gOut,
+              uint8_t& bOut) {
   uint8_t region = h / 43;
   uint8_t remainder = (h - (region * 43)) * 6;
   uint8_t p = (v * (255 - s)) >> 8;
@@ -51,12 +53,36 @@ void hsvToRgb(uint8_t h, uint8_t s, uint8_t v, uint8_t& rOut, uint8_t& gOut, uin
   uint8_t t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
 
   switch (region) {
-    case 0: rOut = v; gOut = t; bOut = p; break;
-    case 1: rOut = q; gOut = v; bOut = p; break;
-    case 2: rOut = p; gOut = v; bOut = t; break;
-    case 3: rOut = p; gOut = q; bOut = v; break;
-    case 4: rOut = t; gOut = p; bOut = v; break;
-    default: rOut = v; gOut = p; bOut = q; break;
+    case 0:
+      rOut = v;
+      gOut = t;
+      bOut = p;
+      break;
+    case 1:
+      rOut = q;
+      gOut = v;
+      bOut = p;
+      break;
+    case 2:
+      rOut = p;
+      gOut = v;
+      bOut = t;
+      break;
+    case 3:
+      rOut = p;
+      gOut = q;
+      bOut = v;
+      break;
+    case 4:
+      rOut = t;
+      gOut = p;
+      bOut = v;
+      break;
+    default:
+      rOut = v;
+      gOut = p;
+      bOut = q;
+      break;
   }
 }
 

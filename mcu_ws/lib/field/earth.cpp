@@ -1,4 +1,5 @@
 #include "earth.h"
+
 #include <IRremote.hpp>
 
 namespace Field {
@@ -165,27 +166,24 @@ const char* EarthDriver::colorToString(AntennaColor color) {
 
 const char* EarthDriver::getInfo() {
   static char buffer[256];
-  snprintf(buffer, sizeof(buffer),
-           "\nID: %s\n"
-           "Ant1: %s (%s) exp:%s %s\n"
-           "Ant2: %s (%s) exp:%s %s\n"
-           "Ant3: %s (%s) exp:%s %s\n"
-           "Ant4: %s (%s) exp:%s %s\n"
-           "Correct: %d, Wrong: %d",
-           setup_.getId(),
-           _antennaReceived[0] ? "ON" : "OFF", colorToString(_antennaColors[0]),
-           Field::colorToString(_expectedColors[0]),
-           isColorCorrect(0) ? "OK" : "",
-           _antennaReceived[1] ? "ON" : "OFF", colorToString(_antennaColors[1]),
-           Field::colorToString(_expectedColors[1]),
-           isColorCorrect(1) ? "OK" : "",
-           _antennaReceived[2] ? "ON" : "OFF", colorToString(_antennaColors[2]),
-           Field::colorToString(_expectedColors[2]),
-           isColorCorrect(2) ? "OK" : "",
-           _antennaReceived[3] ? "ON" : "OFF", colorToString(_antennaColors[3]),
-           Field::colorToString(_expectedColors[3]),
-           isColorCorrect(3) ? "OK" : "",
-           getCorrectCount(), _wrongColorCount);
+  snprintf(
+      buffer, sizeof(buffer),
+      "\nID: %s\n"
+      "Ant1: %s (%s) exp:%s %s\n"
+      "Ant2: %s (%s) exp:%s %s\n"
+      "Ant3: %s (%s) exp:%s %s\n"
+      "Ant4: %s (%s) exp:%s %s\n"
+      "Correct: %d, Wrong: %d",
+      setup_.getId(), _antennaReceived[0] ? "ON" : "OFF",
+      colorToString(_antennaColors[0]),
+      Field::colorToString(_expectedColors[0]), isColorCorrect(0) ? "OK" : "",
+      _antennaReceived[1] ? "ON" : "OFF", colorToString(_antennaColors[1]),
+      Field::colorToString(_expectedColors[1]), isColorCorrect(1) ? "OK" : "",
+      _antennaReceived[2] ? "ON" : "OFF", colorToString(_antennaColors[2]),
+      Field::colorToString(_expectedColors[2]), isColorCorrect(2) ? "OK" : "",
+      _antennaReceived[3] ? "ON" : "OFF", colorToString(_antennaColors[3]),
+      Field::colorToString(_expectedColors[3]), isColorCorrect(3) ? "OK" : "",
+      getCorrectCount(), _wrongColorCount);
   return buffer;
 }
 

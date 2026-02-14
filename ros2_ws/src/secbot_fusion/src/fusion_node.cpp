@@ -13,7 +13,7 @@
 
 namespace secbot_fusion {
 class FusionNode : public rclcpp::Node {
-public:
+ public:
   FusionNode() : Node("fusion_node") {
     drive_base_sub_ = create_subscription<mcu_msgs::msg::DriveBase>(
         "/drive_base/status", rclcpp::QoS(10),
@@ -23,7 +23,7 @@ public:
                                                           rclcpp::QoS(10));
   }
 
-private:
+ private:
   rclcpp::Subscription<mcu_msgs::msg::DriveBase>::SharedPtr drive_base_sub_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
 
@@ -32,8 +32,8 @@ private:
     odom_pub_->publish(odom);
   };
 
-  nav_msgs::msg::Odometry
-  convert_to_odom(const mcu_msgs::msg::DriveBase::SharedPtr msg) {
+  nav_msgs::msg::Odometry convert_to_odom(
+      const mcu_msgs::msg::DriveBase::SharedPtr msg) {
     nav_msgs::msg::Odometry odom;
 
     odom.header.stamp = msg->header.stamp;
@@ -48,18 +48,18 @@ private:
 
     odom.twist.twist = msg->twist;
 
-    odom.twist.covariance[0] = 0.01;  // vx
-    odom.twist.covariance[7] = 0.01;  // vy
-    odom.twist.covariance[35] = 0.01; // v_yaw
+    odom.twist.covariance[0] = 0.01;   // vx
+    odom.twist.covariance[7] = 0.01;   // vy
+    odom.twist.covariance[35] = 0.01;  // v_yaw
 
-    odom.pose.covariance[0] = 0.1;  // x
-    odom.pose.covariance[7] = 0.1;  // y
-    odom.pose.covariance[35] = 0.1; // z
+    odom.pose.covariance[0] = 0.1;   // x
+    odom.pose.covariance[7] = 0.1;   // y
+    odom.pose.covariance[35] = 0.1;  // z
 
     return odom;
   };
 };
-} // namespace secbot_fusion
+}  // namespace secbot_fusion
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);

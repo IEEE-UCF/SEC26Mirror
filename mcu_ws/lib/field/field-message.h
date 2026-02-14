@@ -49,10 +49,10 @@ enum class FieldColor : uint8_t {
 
 /// @brief Message type identifier
 enum class MessageType : uint8_t {
-  STATUS_UPDATE = 0,   // Element -> Controller: status update
-  COMMAND = 1,         // Controller -> Elements: command
-  COLOR_REPORT = 2,    // Antenna -> Earth: color report
-  COLOR_RESULT = 3     // Earth -> Controller: color verification result
+  STATUS_UPDATE = 0,  // Element -> Controller: status update
+  COMMAND = 1,        // Controller -> Elements: command
+  COLOR_REPORT = 2,   // Antenna -> Earth: color report
+  COLOR_RESULT = 3    // Earth -> Controller: color verification result
 };
 
 /// @brief Base message header

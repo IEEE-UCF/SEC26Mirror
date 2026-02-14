@@ -14,9 +14,11 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(mcu_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 # MCU workspace pure-C++ sources (PID, motion profiles, trajectory, localization, math)
-set(MCU_WS_DIR "/home/ubuntu/mcu_workspaces/sec26mcu" CACHE PATH
+set(MCU_WS_DIR "$ENV{HOME}/mcu_workspaces/sec26mcu" CACHE PATH
 	"MCU workspace root inside Docker")
 if(NOT EXISTS "${MCU_WS_DIR}/lib/control")
 	# Repo-relative path (host builds without Docker)
@@ -63,6 +65,8 @@ ament_target_dependencies(mcu_subsystem_sim
 	geometry_msgs
 	sensor_msgs
 	mcu_msgs
+	nav_msgs
+	tf2_ros
 )
 
 # Install executable
@@ -75,6 +79,23 @@ install(TARGETS
 install(DIRECTORY
 	launch
 	DESTINATION share/${PROJECT_NAME}/
+)
+
+# Install config files
+install(DIRECTORY
+  controllers
+  DESTINATION share/${PROJECT_NAME}/
+)
+
+install(PROGRAMS
+  scripts/convert_vision_to_goal.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install Gazebo resources (worlds, models, sdf)
+install(DIRECTORY
+  worlds
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 ament_package()

@@ -26,11 +26,11 @@ Field::CrankDriver Crank1 = Field::CrankDriver(setupCrank);
 Field::FieldElement fieldElement(Field::ElementId::CRANK);
 
 // Color options
-RawDrivers::RGBColor* colorOptions[] = {
-    &Field::colorRed, &Field::colorGreen, &Field::colorBlue, &Field::colorPurple};
+RawDrivers::RGBColor* colorOptions[] = {&Field::colorRed, &Field::colorGreen,
+                                        &Field::colorBlue, &Field::colorPurple};
 Field::FieldColor fieldColorOptions[] = {
-    Field::FieldColor::RED, Field::FieldColor::GREEN,
-    Field::FieldColor::BLUE, Field::FieldColor::PURPLE};
+    Field::FieldColor::RED, Field::FieldColor::GREEN, Field::FieldColor::BLUE,
+    Field::FieldColor::PURPLE};
 
 int randomNum;
 bool taskCompleted = false;
@@ -41,7 +41,8 @@ unsigned long lastStatusUpdate = 0;
 const unsigned long STATUS_UPDATE_INTERVAL = 1000;
 
 // HSV to RGB conversion for smooth cycling
-void hsvToRgb(uint8_t h, uint8_t s, uint8_t v, uint8_t& rOut, uint8_t& gOut, uint8_t& bOut) {
+void hsvToRgb(uint8_t h, uint8_t s, uint8_t v, uint8_t& rOut, uint8_t& gOut,
+              uint8_t& bOut) {
   uint8_t region = h / 43;
   uint8_t remainder = (h - (region * 43)) * 6;
   uint8_t p = (v * (255 - s)) >> 8;
@@ -49,12 +50,36 @@ void hsvToRgb(uint8_t h, uint8_t s, uint8_t v, uint8_t& rOut, uint8_t& gOut, uin
   uint8_t t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
 
   switch (region) {
-    case 0: rOut = v; gOut = t; bOut = p; break;
-    case 1: rOut = q; gOut = v; bOut = p; break;
-    case 2: rOut = p; gOut = v; bOut = t; break;
-    case 3: rOut = p; gOut = q; bOut = v; break;
-    case 4: rOut = t; gOut = p; bOut = v; break;
-    default: rOut = v; gOut = p; bOut = q; break;
+    case 0:
+      rOut = v;
+      gOut = t;
+      bOut = p;
+      break;
+    case 1:
+      rOut = q;
+      gOut = v;
+      bOut = p;
+      break;
+    case 2:
+      rOut = p;
+      gOut = v;
+      bOut = t;
+      break;
+    case 3:
+      rOut = p;
+      gOut = q;
+      bOut = v;
+      break;
+    case 4:
+      rOut = t;
+      gOut = p;
+      bOut = v;
+      break;
+    default:
+      rOut = v;
+      gOut = p;
+      bOut = q;
+      break;
   }
 }
 
@@ -130,7 +155,8 @@ void loop() {
   // Send periodic status updates
   if (now - lastStatusUpdate > STATUS_UPDATE_INTERVAL) {
     lastStatusUpdate = now;
-    if (!taskCompleted && fieldElement.getStatus() != Field::ElementStatus::ACTIVATED) {
+    if (!taskCompleted &&
+        fieldElement.getStatus() != Field::ElementStatus::ACTIVATED) {
       fieldElement.setStatus(Field::ElementStatus::NOT_ACTIVATED);
     }
     fieldElement.sendStatus();

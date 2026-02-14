@@ -14,14 +14,12 @@ const uint8_t BTN_A_PIN = 33;
 const uint8_t BTN_B_PIN = 25;
 
 // Controller setup
-Field::ControllerSetup setupController = {
-    .lcdAddress = LCD_ADDRESS,
-    .joystickXPin = JOY_X_PIN,
-    .joystickYPin = JOY_Y_PIN,
-    .joystickButtonPin = JOY_BTN_PIN,
-    .buttonAPin = BTN_A_PIN,
-    .buttonBPin = BTN_B_PIN
-};
+Field::ControllerSetup setupController = {.lcdAddress = LCD_ADDRESS,
+                                          .joystickXPin = JOY_X_PIN,
+                                          .joystickYPin = JOY_Y_PIN,
+                                          .joystickButtonPin = JOY_BTN_PIN,
+                                          .buttonAPin = BTN_A_PIN,
+                                          .buttonBPin = BTN_B_PIN};
 
 Field::ControllerDriver controller(setupController);
 
@@ -39,6 +37,4 @@ void setup() {
   Serial.println("Controller ready");
 }
 
-void loop() {
-  controller.update();
-}
+void loop() { controller.update(); }

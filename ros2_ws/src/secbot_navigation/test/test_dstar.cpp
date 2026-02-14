@@ -1,5 +1,6 @@
-#include "secbot_navigation/dstar_lite.hpp"
 #include <gtest/gtest.h>
+
+#include "secbot_navigation/dstar_lite.hpp"
 
 TEST(DStarLiteTest, BasicPath) {
   // Simple test to ensure it compiles and links

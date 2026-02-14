@@ -11,13 +11,13 @@
 #include <microros_manager_robot.h>
 
 #include "../RobotConstants.h"
+#include "BNO085.h"
 #include "I2CPowerDriver.h"
 #include "PCA9685Manager.h"
 #include "TOF.h"
 #include "robot/machines/HeartbeatSubsystem.h"
 #include "robot/machines/McuSubsystem.h"
 #include "robot/machines/RobotManager.h"
-#include "BNO085.h"
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"

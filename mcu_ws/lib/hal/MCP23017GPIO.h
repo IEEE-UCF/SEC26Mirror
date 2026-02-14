@@ -51,14 +51,13 @@ class MCP23017GPIO : public HALPin {
 
   void digitalWrite(DigitalState state) override {
     if (!driver_) return;
-    driver_->digitalWrite(pin_,
-                          state == DigitalState::STATE_HIGH ? HIGH : LOW);
+    driver_->digitalWrite(pin_, state == DigitalState::STATE_HIGH ? HIGH : LOW);
   }
 
   DigitalState digitalRead() override {
     if (!driver_) return DigitalState::STATE_LOW;
     return driver_->digitalRead(pin_) == HIGH ? DigitalState::STATE_HIGH
-                                               : DigitalState::STATE_LOW;
+                                              : DigitalState::STATE_LOW;
   }
 
   void analogWrite(uint16_t value) override {

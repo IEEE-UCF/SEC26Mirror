@@ -1,50 +1,51 @@
 /**
  * @file mcu_subsystem_sim.hpp
- * @brief MCU Subsystem Simulator — acts like the real Teensy with full control pipeline
+ * @brief MCU Subsystem Simulator — acts like the real Teensy with full control
+ * pipeline
  * @date 2025-12-25
  */
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/string.hpp>
-#include <std_msgs/msg/float32_multi_array.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <sensor_msgs/msg/imu.hpp>
-#include <mcu_msgs/msg/drive_base.hpp>
-#include <mcu_msgs/msg/battery_health.hpp>
-#include <mcu_msgs/msg/rc.hpp>
-#include <mcu_msgs/msg/intake_state.hpp>
-#include <mcu_msgs/msg/mini_robot_state.hpp>
-#include <mcu_msgs/msg/mcu_state.hpp>
-#include <nav_msgs/msg/path.hpp>
-#include <nav_msgs/msg/odometry.hpp>
 #include <tf2_ros/transform_broadcaster.h>
-#include <geometry_msgs/msg/transform_stamped.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <mcu_msgs/msg/battery_health.hpp>
+#include <mcu_msgs/msg/drive_base.hpp>
+#include <mcu_msgs/msg/intake_state.hpp>
+#include <mcu_msgs/msg/mcu_state.hpp>
+#include <mcu_msgs/msg/mini_robot_state.hpp>
+#include <mcu_msgs/msg/rc.hpp>
 #include <memory>
-#include <algorithm>
+#include <nav_msgs/msg/odometry.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+#include <std_msgs/msg/float32_multi_array.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <vector>
 
 // Real MCU control classes (compiled from mcu_ws, no Arduino deps)
-#include <pid_controller.h>
-#include <motion_profile.h>
-#include <traj_controller.h>
-#include <TankDriveLocalization.h>
 #include <Pose2D.h>
+#include <TankDriveLocalization.h>
 #include <Vector2D.h>
+#include <motion_profile.h>
+#include <pid_controller.h>
+#include <traj_controller.h>
 
 namespace secbot_sim {
 
 enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE, TRAJECTORY_DRIVE };
 
 class McuSubsystemSimulator : public rclcpp::Node {
-public:
+ public:
   McuSubsystemSimulator();
 
-private:
+ private:
   // ── Real MCU control objects (same as RobotDriveBase members) ──
   PIDController left_pid_;
   PIDController right_pid_;
@@ -52,7 +53,8 @@ private:
   SCurveMotionProfile angular_profile_;
   TrajectoryController traj_controller_;
 
-  // Localization (unique_ptr: setup has no default ctor, localization holds a ref)
+  // Localization (unique_ptr: setup has no default ctor, localization holds a
+  // ref)
   std::unique_ptr<Drive::TankDriveLocalizationSetup> loc_setup_;
   std::unique_ptr<Drive::TankDriveLocalization> localization_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
@@ -69,14 +71,14 @@ private:
   int right_motor_pwm_;
 
   // ── Simulated encoder state ──
-  double left_encoder_accum_;   // fractional tick accumulator (precision)
+  double left_encoder_accum_;  // fractional tick accumulator (precision)
   double right_encoder_accum_;
   long prev_left_ticks_;
   long prev_right_ticks_;
 
   // ── Simulated IMU state ──
   float sim_yaw_;
-  double prev_vel_x_;   // for IMU linear acceleration
+  double prev_vel_x_;  // for IMU linear acceleration
 
   // ── Config (from ROS params, matching DriveBaseConfig.example.h) ──
   float track_width_;
@@ -85,8 +87,8 @@ private:
   int gear_ratio_;
   float max_velocity_;
   float max_angular_velocity_;
-  float max_wheel_velocity_;   // max single-wheel vel at PWM=255
-  float inches_per_tick_;      // derived
+  float max_wheel_velocity_;  // max single-wheel vel at PWM=255
+  float inches_per_tick_;     // derived
 
   // Parameters
   int num_tof_sensors_;
@@ -119,12 +121,11 @@ private:
   double gz_odom_yaw_ = 0.0;
   bool gz_odom_received_ = false;
 
-
   std::vector<TrajectoryController::Waypoint> active_traj_;
 
   // ── Commanded velocity for Gazebo (bypasses internal PID/physics) ──
-  double gz_cmd_v_ = 0.0;   // m/s
-  double gz_cmd_w_ = 0.0;   // rad/s
+  double gz_cmd_v_ = 0.0;  // m/s
+  double gz_cmd_w_ = 0.0;  // rad/s
 
   // ── Timers ──
   rclcpp::TimerBase::SharedPtr update_timer_;

@@ -2,25 +2,23 @@
 // Test trilateration algorithms
 
 #include <gtest/gtest.h>
+
 #include <Eigen/Dense>
+#include <array>
 #include <cmath>
 #include <map>
-#include <array>
 
 // Simple trilateration function for testing
-bool trilaterate2D(
-  const std::map<int, std::array<double, 3>> & beacon_positions,
-  const std::map<int, double> & ranges,
-  std::array<double, 3> & position,
-  double & residual)
-{
+bool trilaterate2D(const std::map<int, std::array<double, 3>>& beacon_positions,
+                   const std::map<int, double>& ranges,
+                   std::array<double, 3>& position, double& residual) {
   if (ranges.size() < 3) {
     return false;
   }
 
   // Get beacon IDs
   std::vector<int> beacon_ids;
-  for (const auto & [id, dist] : ranges) {
+  for (const auto& [id, dist] : ranges) {
     beacon_ids.push_back(id);
   }
 
@@ -47,9 +45,10 @@ bool trilaterate2D(
 
     // Right-hand side
     double ref_norm_sq = ref_pos[0] * ref_pos[0] + ref_pos[1] * ref_pos[1] +
-      ref_pos[2] * ref_pos[2];
-    double beacon_norm_sq = beacon_pos[0] * beacon_pos[0] + beacon_pos[1] * beacon_pos[1] +
-      beacon_pos[2] * beacon_pos[2];
+                         ref_pos[2] * ref_pos[2];
+    double beacon_norm_sq = beacon_pos[0] * beacon_pos[0] +
+                            beacon_pos[1] * beacon_pos[1] +
+                            beacon_pos[2] * beacon_pos[2];
 
     b(row) = ref_norm_sq - beacon_norm_sq + dist * dist - ref_dist * ref_dist;
 
@@ -65,7 +64,7 @@ bool trilaterate2D(
 
   // Calculate residual
   double error_sum = 0.0;
-  for (const auto & beacon_id : beacon_ids) {
+  for (const auto& beacon_id : beacon_ids) {
     auto beacon_pos = beacon_positions.at(beacon_id);
     double dx = position[0] - beacon_pos[0];
     double dy = position[1] - beacon_pos[1];
@@ -91,7 +90,7 @@ TEST(TrilaterationTest, PerfectMeasurements) {
 
   // Calculate perfect ranges
   std::map<int, double> ranges;
-  for (const auto & [id, pos] : beacons) {
+  for (const auto& [id, pos] : beacons) {
     double dx = true_position[0] - pos[0];
     double dy = true_position[1] - pos[1];
     double dz = true_position[2] - pos[2];
@@ -121,7 +120,7 @@ TEST(TrilaterationTest, FourBeacons) {
   std::array<double, 3> true_position = {2.0, 2.0, 0.0};
 
   std::map<int, double> ranges;
-  for (const auto & [id, pos] : beacons) {
+  for (const auto& [id, pos] : beacons) {
     double dx = true_position[0] - pos[0];
     double dy = true_position[1] - pos[1];
     double dz = true_position[2] - pos[2];
@@ -178,8 +177,7 @@ TEST(DistanceTest, EuclideanDistance3D) {
   EXPECT_NEAR(distance, std::sqrt(3.0), 1e-6);
 }
 
-int main(int argc, char ** argv)
-{
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

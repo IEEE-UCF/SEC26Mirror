@@ -47,17 +47,17 @@ static HAL::NativeGPIO right_motor2_dir(10);
 
 // Motor driver setups using HAL pins
 static Drivers::MotorDriverSetup left_motor1_setup("left_motor_1",
-                                                    &left_motor1_pwm,
-                                                    &left_motor1_dir);
+                                                   &left_motor1_pwm,
+                                                   &left_motor1_dir);
 static Drivers::MotorDriverSetup left_motor2_setup("left_motor_2",
-                                                    &left_motor2_pwm,
-                                                    &left_motor2_dir);
+                                                   &left_motor2_pwm,
+                                                   &left_motor2_dir);
 static Drivers::MotorDriverSetup right_motor1_setup("right_motor_1",
-                                                     &right_motor1_pwm,
-                                                     &right_motor1_dir);
+                                                    &right_motor1_pwm,
+                                                    &right_motor1_dir);
 static Drivers::MotorDriverSetup right_motor2_setup("right_motor_2",
-                                                     &right_motor2_pwm,
-                                                     &right_motor2_dir);
+                                                    &right_motor2_pwm,
+                                                    &right_motor2_dir);
 
 }  // namespace Example1_AllNative
 
@@ -85,17 +85,17 @@ static HAL::NativeGPIO right_motor2_dir(7);
 
 // Motor driver setups
 static Drivers::MotorDriverSetup left_motor1_setup("left_motor_1",
-                                                    &left_motor1_pwm,
-                                                    &left_motor1_dir);
+                                                   &left_motor1_pwm,
+                                                   &left_motor1_dir);
 static Drivers::MotorDriverSetup left_motor2_setup("left_motor_2",
-                                                    &left_motor2_pwm,
-                                                    &left_motor2_dir);
+                                                   &left_motor2_pwm,
+                                                   &left_motor2_dir);
 static Drivers::MotorDriverSetup right_motor1_setup("right_motor_1",
-                                                     &right_motor1_pwm,
-                                                     &right_motor1_dir);
+                                                    &right_motor1_pwm,
+                                                    &right_motor1_dir);
 static Drivers::MotorDriverSetup right_motor2_setup("right_motor_2",
-                                                     &right_motor2_pwm,
-                                                     &right_motor2_dir);
+                                                    &right_motor2_pwm,
+                                                    &right_motor2_dir);
 
 // Don't forget to initialize the PCA9685 driver in your setup:
 // pca_driver.init();
@@ -126,17 +126,17 @@ static HAL::MCP23017GPIO right_motor2_dir(&mcp_driver, 3);
 
 // Motor driver setups
 static Drivers::MotorDriverSetup left_motor1_setup("left_motor_1",
-                                                    &left_motor1_pwm,
-                                                    &left_motor1_dir);
+                                                   &left_motor1_pwm,
+                                                   &left_motor1_dir);
 static Drivers::MotorDriverSetup left_motor2_setup("left_motor_2",
-                                                    &left_motor2_pwm,
-                                                    &left_motor2_dir);
+                                                   &left_motor2_pwm,
+                                                   &left_motor2_dir);
 static Drivers::MotorDriverSetup right_motor1_setup("right_motor_1",
-                                                     &right_motor1_pwm,
-                                                     &right_motor1_dir);
+                                                    &right_motor1_pwm,
+                                                    &right_motor1_dir);
 static Drivers::MotorDriverSetup right_motor2_setup("right_motor_2",
-                                                     &right_motor2_pwm,
-                                                     &right_motor2_dir);
+                                                    &right_motor2_pwm,
+                                                    &right_motor2_dir);
 
 // Don't forget to initialize the MCP23017 driver in your setup:
 // mcp_driver.init();
@@ -171,17 +171,17 @@ static HAL::MCP23017GPIO right_motor2_dir(&mcp_driver, 3);
 
 // Motor driver setups
 static Drivers::MotorDriverSetup left_motor1_setup("left_motor_1",
-                                                    &left_motor1_pwm,
-                                                    &left_motor1_dir);
+                                                   &left_motor1_pwm,
+                                                   &left_motor1_dir);
 static Drivers::MotorDriverSetup left_motor2_setup("left_motor_2",
-                                                    &left_motor2_pwm,
-                                                    &left_motor2_dir);
+                                                   &left_motor2_pwm,
+                                                   &left_motor2_dir);
 static Drivers::MotorDriverSetup right_motor1_setup("right_motor_1",
-                                                     &right_motor1_pwm,
-                                                     &right_motor1_dir);
+                                                    &right_motor1_pwm,
+                                                    &right_motor1_dir);
 static Drivers::MotorDriverSetup right_motor2_setup("right_motor_2",
-                                                     &right_motor2_pwm,
-                                                     &right_motor2_dir);
+                                                    &right_motor2_pwm,
+                                                    &right_motor2_dir);
 
 // Initialize both drivers in your setup:
 // pca_driver.init();

@@ -9,8 +9,8 @@
 #ifndef IMUSUBSYSTEM_H
 #define IMUSUBSYSTEM_H
 
-#include <BaseSubsystem.h>
 #include <BNO085.h>
+#include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
 
@@ -64,9 +64,11 @@ class ImuSubsystem : public IMicroRosParticipant,
   // Covariance values based on BNO085 typical specs
   // Orientation: around 2 degrees accuracy -> variance around 0.001 rad^2
   static constexpr double kOrientationVariance = 0.001;
-  // Angular velocity: around 0.1 deg/s noise -> variance around 0.00003 rad^2/s^2
+  // Angular velocity: around 0.1 deg/s noise -> variance around 0.00003
+  // rad^2/s^2
   static constexpr double kAngularVelocityVariance = 0.00003;
-  // Linear acceleration: around 0.01 m/s^2 noise -> variance around 0.0001 m^2/s^4
+  // Linear acceleration: around 0.01 m/s^2 noise -> variance around 0.0001
+  // m^2/s^4
   static constexpr double kLinearAccelerationVariance = 0.0001;
 
   static constexpr int kCalibrationSamples = 40;

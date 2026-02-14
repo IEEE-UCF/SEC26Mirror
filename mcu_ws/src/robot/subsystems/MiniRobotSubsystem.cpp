@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+
 #include <cmath>
 
 namespace Subsystem {
@@ -100,9 +101,7 @@ void MiniRobotSubsystem::startMission(const Pose2D& target) {
   startMission(target.x, target.y);
 }
 
-void MiniRobotSubsystem::stop() {
-  pending_command_ = MiniRobotCommand::STOP;
-}
+void MiniRobotSubsystem::stop() { pending_command_ = MiniRobotCommand::STOP; }
 
 void MiniRobotSubsystem::returnHome() {
   pending_command_ = MiniRobotCommand::RETURN_HOME;
@@ -283,7 +282,7 @@ bool MiniRobotSubsystem::pollEsp32Status() {
 // Distance Calculations
 
 float MiniRobotSubsystem::calculateDistance(const Pose2D& a,
-                                             const Pose2D& b) const {
+                                            const Pose2D& b) const {
   float dx = b.x - a.x;
   float dy = b.y - a.y;
   return sqrtf(dx * dx + dy * dy);
@@ -314,7 +313,8 @@ void MiniRobotSubsystem::publishState() {
       state_msg_.state = mcu_msgs__msg__MiniRobotState__ARMED;
       break;
     case MiniRobotMissionState::DRIVING_TO_TARGET:
-      state_msg_.current_task = mcu_msgs__msg__MiniRobotState__TASK_ENTER_CRATER;
+      state_msg_.current_task =
+          mcu_msgs__msg__MiniRobotState__TASK_ENTER_CRATER;
       state_msg_.state = mcu_msgs__msg__MiniRobotState__RUNNING;
       break;
     case MiniRobotMissionState::AT_TARGET:

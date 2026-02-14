@@ -21,9 +21,12 @@ typedef void (*CommandCallback)(FieldCommand cmd);
 /// @brief Base class for field elements with ESP-NOW communication
 class FieldElement {
  public:
-  FieldElement(ElementId id) : _elementId(id), _status(ElementStatus::NOT_ONLINE),
-                                _sequenceNum(0), _commandCallback(nullptr),
-                                _cycleDisplayActive(false) {}
+  FieldElement(ElementId id)
+      : _elementId(id),
+        _status(ElementStatus::NOT_ONLINE),
+        _sequenceNum(0),
+        _commandCallback(nullptr),
+        _cycleDisplayActive(false) {}
 
   virtual ~FieldElement() = default;
 
@@ -112,8 +115,8 @@ class FieldElement {
   void printMac() {
     uint8_t mac[6];
     WiFi.macAddress(mac);
-    Serial.printf("MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    Serial.printf("MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1],
+                  mac[2], mac[3], mac[4], mac[5]);
   }
 
   /// @brief Process incoming messages (call in loop)

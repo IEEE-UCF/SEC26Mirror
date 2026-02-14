@@ -14,17 +14,16 @@
 #include "mcu_msgs/msg/uwb_range.hpp"
 #include "mcu_msgs/msg/uwb_ranging.hpp"
 #include "rclcpp/rclcpp.hpp"
-
 #include "secbot_uwb/beacon_config.hpp"
 
 namespace secbot_uwb {
 
 class UWBPositioningNode : public rclcpp::Node {
-public:
+ public:
   UWBPositioningNode();
   ~UWBPositioningNode() = default;
 
-private:
+ private:
   // Configuration
   void declareParameters();
   void loadConfiguration();
@@ -70,6 +69,6 @@ private:
   // Data storage
   std::map<int, std::map<int, double>> tag_ranges_;
 };
-} // namespace secbot_uwb
+}  // namespace secbot_uwb
 
-#endif // SECBOT_UWB__POSITIONING_NODE_HPP_
+#endif  // SECBOT_UWB__POSITIONING_NODE_HPP_

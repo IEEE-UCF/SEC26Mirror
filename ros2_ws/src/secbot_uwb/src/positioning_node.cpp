@@ -121,10 +121,10 @@ void UWBPositioningNode::loadConfiguration() {
       }
 
       // Create beacon config
-      beacons_.emplace(beacon_id,
-                       BeaconConfig(beacon_id, type, position, known_axes,
-                                    odometry_topic, use_odometry_fusion,
-                                    description));
+      beacons_.emplace(
+          beacon_id,
+          BeaconConfig(beacon_id, type, position, known_axes, odometry_topic,
+                       use_odometry_fusion, description));
 
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "Error loading beacon %d: %s", beacon_id,
@@ -191,8 +191,8 @@ void UWBPositioningNode::logConfiguration() {
   RCLCPP_INFO(this->get_logger(), "========================");
 }
 
-std::array<double, 3>
-UWBPositioningNode::getBeaconPosition(int beacon_id) const {
+std::array<double, 3> UWBPositioningNode::getBeaconPosition(
+    int beacon_id) const {
   auto it = beacons_.find(beacon_id);
   if (it == beacons_.end()) {
     return {0.0, 0.0, 0.0};
@@ -219,7 +219,7 @@ void UWBPositioningNode::rangingCallback(
   for (const auto &range_msg : msg->ranges) {
     if (range_msg.valid) {
       int beacon_id = range_msg.anchor_id;
-      double distance_m = range_msg.distance / 100.0; // Convert cm to meters
+      double distance_m = range_msg.distance / 100.0;  // Convert cm to meters
       ranges[beacon_id] = distance_m;
     }
   }
@@ -261,9 +261,10 @@ void UWBPositioningNode::rangingCallback(
       }
 
       if (worst_error > outlier_threshold_ && worst_id >= 0) {
-        RCLCPP_WARN(this->get_logger(),
-                    "Tag %d: Rejecting beacon %d (error=%.3fm > %.3fm threshold)",
-                    tag_id, worst_id, worst_error, outlier_threshold_);
+        RCLCPP_WARN(
+            this->get_logger(),
+            "Tag %d: Rejecting beacon %d (error=%.3fm > %.3fm threshold)",
+            tag_id, worst_id, worst_error, outlier_threshold_);
         ranges.erase(worst_id);
         if (!trilaterate(ranges, tag_config.enable3D(), position, residual)) {
           return;
@@ -329,8 +330,7 @@ bool UWBPositioningNode::trilaterate(const std::map<int, double> &ranges,
     A(row, 0) = 2.0 * (ref_pos[0] - beacon_pos[0]);
     A(row, 1) = 2.0 * (ref_pos[1] - beacon_pos[1]);
 
-    if (enable_3d)
-      A(row, 2) = 2.0 * (ref_pos[2] - beacon_pos[2]);
+    if (enable_3d) A(row, 2) = 2.0 * (ref_pos[2] - beacon_pos[2]);
 
     // Right-hand side
     double ref_norm_sq = ref_pos[0] * ref_pos[0] + ref_pos[1] * ref_pos[1] +
@@ -422,14 +422,14 @@ void UWBPositioningNode::publishPose(
 
   std::fill(pose_msg.pose.covariance.begin(), pose_msg.pose.covariance.end(),
             0.0);
-  pose_msg.pose.covariance[0] = xy_var; // var(x)
-  pose_msg.pose.covariance[7] = xy_var; // var(y)
-  pose_msg.pose.covariance[14] = z_var; // var(z)
+  pose_msg.pose.covariance[0] = xy_var;  // var(x)
+  pose_msg.pose.covariance[7] = xy_var;  // var(y)
+  pose_msg.pose.covariance[14] = z_var;  // var(z)
 
   // Publish
   pose_publishers_[tag_id]->publish(pose_msg);
 }
-} // namespace secbot_uwb
+}  // namespace secbot_uwb
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);

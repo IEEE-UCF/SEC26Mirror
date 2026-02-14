@@ -14,7 +14,8 @@ bool IntakeSubsystem::init() {
   // Configure IR sensor pin (INPUT_PULLUP for active-low breakbeam)
   pinMode(setup_.ir_sensor_pin_, INPUT_PULLUP);
 
-  // Set PWM frequency for Teensy (this is optional but it improves motor smoothness)
+  // Set PWM frequency for Teensy (this is optional but it improves motor
+  // smoothness)
   analogWriteFrequency(setup_.motor_pwm_pin_, 18310.55);
 
   // Ensure motor is off at init
@@ -109,13 +110,9 @@ void IntakeSubsystem::startIntake() {
   }
 }
 
-void IntakeSubsystem::stopIntake() {
-  pending_command_ = IntakeCommand::STOP;
-}
+void IntakeSubsystem::stopIntake() { pending_command_ = IntakeCommand::STOP; }
 
-void IntakeSubsystem::eject() {
-  pending_command_ = IntakeCommand::EJECT;
-}
+void IntakeSubsystem::eject() { pending_command_ = IntakeCommand::EJECT; }
 
 // State Machine Logic
 
@@ -217,17 +214,11 @@ void IntakeSubsystem::transitionTo(IntakeState new_state) {
 
 // Motor Control
 
-void IntakeSubsystem::setMotorForward() {
-  motor_state_ = MotorState::FORWARD;
-}
+void IntakeSubsystem::setMotorForward() { motor_state_ = MotorState::FORWARD; }
 
-void IntakeSubsystem::setMotorReverse() {
-  motor_state_ = MotorState::REVERSE;
-}
+void IntakeSubsystem::setMotorReverse() { motor_state_ = MotorState::REVERSE; }
 
-void IntakeSubsystem::setMotorOff() {
-  motor_state_ = MotorState::OFF;
-}
+void IntakeSubsystem::setMotorOff() { motor_state_ = MotorState::OFF; }
 
 void IntakeSubsystem::applyMotorState() {
   switch (motor_state_) {

@@ -45,16 +45,16 @@ struct WifiCredentials {
 /**
  * @brief Setup configuration for ESP32WifiSubsystem
  *
- * Supports single AP or multiple APs. For multi-AP mode, we populate the ap_list array with credentials and set ap_count accordingly.
- * The subsystem will scan and connect to the AP with strongest signal.
+ * Supports single AP or multiple APs. For multi-AP mode, we populate the
+ * ap_list array with credentials and set ap_count accordingly. The subsystem
+ * will scan and connect to the AP with strongest signal.
  */
 class ESP32WifiSubsystemSetup : public Classes::BaseSetup {
  public:
   /**
    * @brief Construct setup for single AP mode
    */
-  ESP32WifiSubsystemSetup(const char* _id,
-                          const char* ssid,
+  ESP32WifiSubsystemSetup(const char* _id, const char* ssid,
                           const char* password,
                           uint32_t connection_timeout_ms = 10000,
                           uint32_t reconnect_interval_ms = 5000,
@@ -72,8 +72,7 @@ class ESP32WifiSubsystemSetup : public Classes::BaseSetup {
    * @param ap_list Array of WifiCredentials (max 4 ofc)
    * @param ap_count Number of APs in the list
    */
-  ESP32WifiSubsystemSetup(const char* _id,
-                          const WifiCredentials* ap_list,
+  ESP32WifiSubsystemSetup(const char* _id, const WifiCredentials* ap_list,
                           uint8_t ap_count,
                           uint32_t connection_timeout_ms = 10000,
                           uint32_t reconnect_interval_ms = 5000,
@@ -90,19 +89,20 @@ class ESP32WifiSubsystemSetup : public Classes::BaseSetup {
 
   static constexpr uint8_t kMaxAPs = 4;
 
-  uint32_t connection_timeout_ms_;   // Timeout for initial connection attempt
-  uint32_t reconnect_interval_ms_;   // Delay between reconnection attempts
-  uint8_t max_retries_;              // Max consecutive failed attempts before FAILED state
-  uint8_t ap_count_;                 // Number of configured APs
+  uint32_t connection_timeout_ms_;  // Timeout for initial connection attempt
+  uint32_t reconnect_interval_ms_;  // Delay between reconnection attempts
+  uint8_t max_retries_;  // Max consecutive failed attempts before FAILED state
+  uint8_t ap_count_;     // Number of configured APs
   WifiCredentials ap_list_[kMaxAPs] = {};  // List of AP credentials
 };
 
 /**
  * @brief ESP32 WiFi Subsystem for micro-ROS connectivity
  *
- * Manages the WiFi connection lifecycle using ESP32's event system for that strongdisconnect detection and reconnection.
- *  Works alongside MicrorosManager. T
- * This subsystem handles WiFi layer, MicrorosManager handles the micro-ROS agent connection.
+ * Manages the WiFi connection lifecycle using ESP32's event system for that
+ * strongdisconnect detection and reconnection. Works alongside MicrorosManager.
+ * T This subsystem handles WiFi layer, MicrorosManager handles the micro-ROS
+ * agent connection.
  *
  * Usage:
  * 1. Create setup with WiFi credentials
@@ -127,8 +127,7 @@ class ESP32WifiSubsystem : public Subsystem::TimedSubsystem {
   WifiState getState() const { return state_; }
   bool isConnected() const { return state_ == WifiState::CONNECTED; }
   bool isConnecting() const {
-    return state_ == WifiState::CONNECTING ||
-           state_ == WifiState::RECONNECTING;
+    return state_ == WifiState::CONNECTING || state_ == WifiState::RECONNECTING;
   }
   bool hasFailed() const { return state_ == WifiState::FAILED; }
 
@@ -161,8 +160,8 @@ class ESP32WifiSubsystem : public Subsystem::TimedSubsystem {
 
   // State machine
   WifiState state_ = WifiState::DISCONNECTED;
-  uint8_t current_ap_index_ = 0;    // Which AP we're connected/connecting to
-  uint8_t retry_count_ = 0;         // Consecutive failed connection attempts
+  uint8_t current_ap_index_ = 0;  // Which AP we're connected/connecting to
+  uint8_t retry_count_ = 0;       // Consecutive failed connection attempts
   uint32_t state_entry_time_ms_ = 0;
   uint32_t last_attempt_time_ms_ = 0;
 

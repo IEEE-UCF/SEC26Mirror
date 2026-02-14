@@ -9,38 +9,44 @@ volatile bool ControllerDriver::_hasNewMessage = false;
 
 // Menu structure definitions
 MenuItem ControllerDriver::_statusItems[NUM_STATUS_ITEMS] = {
-    {"button.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::BUTTON},
-    {"crank.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::CRANK},
-    {"pressure.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::PRESSURE},
-    {"keypad.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::KEYPAD},
-    {"earth.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::EARTH},
-    {"timeleft.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr, ElementId::CONTROLLER}
-};
+    {"button.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr,
+     ElementId::BUTTON},
+    {"crank.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr,
+     ElementId::CRANK},
+    {"pressure.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr,
+     ElementId::PRESSURE},
+    {"keypad.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr,
+     ElementId::KEYPAD},
+    {"earth.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr,
+     ElementId::EARTH},
+    {"timeleft.disp", MenuItemType::MENU_DISPLAY, nullptr, nullptr, 0, nullptr,
+     ElementId::CONTROLLER}};
 
 MenuItem ControllerDriver::_fieldActions[2] = {
-    {"reset.action", MenuItemType::MENU_ACTION, nullptr, nullptr, 0, menuActionReset, ElementId::CONTROLLER},
-    {"start.action", MenuItemType::MENU_ACTION, nullptr, nullptr, 0, menuActionStart, ElementId::CONTROLLER}
-};
+    {"reset.action", MenuItemType::MENU_ACTION, nullptr, nullptr, 0,
+     menuActionReset, ElementId::CONTROLLER},
+    {"start.action", MenuItemType::MENU_ACTION, nullptr, nullptr, 0,
+     menuActionStart, ElementId::CONTROLLER}};
 
 MenuItem ControllerDriver::_controlActions[1] = {
-    {"cycledisplay.action", MenuItemType::MENU_ACTION, nullptr, nullptr, 0, menuActionCycleDisplay, ElementId::CONTROLLER}
-};
+    {"cycledisplay.action", MenuItemType::MENU_ACTION, nullptr, nullptr, 0,
+     menuActionCycleDisplay, ElementId::CONTROLLER}};
 
 MenuItem ControllerDriver::_menuFieldStatus = {
-    "status", MenuItemType::MENU_FOLDER, nullptr, _statusItems, NUM_ELEMENTS, nullptr, ElementId::CONTROLLER
-};
+    "status", MenuItemType::MENU_FOLDER, nullptr, _statusItems, NUM_ELEMENTS,
+    nullptr,  ElementId::CONTROLLER};
 
 MenuItem ControllerDriver::_menuField = {
-    "field", MenuItemType::MENU_FOLDER, nullptr, nullptr, 0, nullptr, ElementId::CONTROLLER
-};
+    "field", MenuItemType::MENU_FOLDER, nullptr, nullptr, 0,
+    nullptr, ElementId::CONTROLLER};
 
 MenuItem ControllerDriver::_menuControl = {
-    "control", MenuItemType::MENU_FOLDER, nullptr, _controlActions, 1, nullptr, ElementId::CONTROLLER
-};
+    "control", MenuItemType::MENU_FOLDER, nullptr, _controlActions, 1,
+    nullptr,   ElementId::CONTROLLER};
 
 MenuItem ControllerDriver::_menuRoot = {
-    "/", MenuItemType::MENU_FOLDER, nullptr, nullptr, 0, nullptr, ElementId::CONTROLLER
-};
+    "/",     MenuItemType::MENU_FOLDER, nullptr, nullptr, 0,
+    nullptr, ElementId::CONTROLLER};
 
 ControllerDriver::ControllerDriver(const ControllerSetup& setup)
     : _setup(setup),
@@ -113,7 +119,8 @@ void ControllerDriver::initMenu() {
   }
 
   // Field folder contains: status, reset.action, start.action
-  static MenuItem* fieldChildPtrs[3] = {&_menuFieldStatus, &_fieldActions[0], &_fieldActions[1]};
+  static MenuItem* fieldChildPtrs[3] = {&_menuFieldStatus, &_fieldActions[0],
+                                        &_fieldActions[1]};
   static MenuItem fieldChildren[3];
   fieldChildren[0] = _menuFieldStatus;
   fieldChildren[1] = _fieldActions[0];
@@ -182,8 +189,8 @@ void ControllerDriver::initEspNow() {
   // Print MAC
   uint8_t mac[6];
   WiFi.macAddress(mac);
-  Serial.printf("Controller MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  Serial.printf("Controller MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0],
+                mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 void ControllerDriver::update() {
@@ -204,7 +211,8 @@ void ControllerDriver::update() {
   }
 
   // Only update display when needed and throttled
-  if (_displayNeedsUpdate && (now - _lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL)) {
+  if (_displayNeedsUpdate &&
+      (now - _lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL)) {
     _lastDisplayUpdate = now;
     _displayNeedsUpdate = false;
     updateDisplay();
@@ -254,7 +262,8 @@ void ControllerDriver::handleNavigation() {
   }
 
   // Button A or Joystick button: select/enter
-  if ((_buttonA && !_prevButtonA) || (_joystickButton && !_prevJoystickButton)) {
+  if ((_buttonA && !_prevButtonA) ||
+      (_joystickButton && !_prevJoystickButton)) {
     if (_currentMenu->childCount > 0) {
       MenuItem* selected = &_currentMenu->children[_menuIndex];
 
@@ -263,7 +272,8 @@ void ControllerDriver::handleNavigation() {
         _menuIndex = 0;
         _menuScroll = 0;
         inputHandled = true;
-      } else if (selected->type == MenuItemType::MENU_ACTION && selected->action) {
+      } else if (selected->type == MenuItemType::MENU_ACTION &&
+                 selected->action) {
         selected->action(this);
         inputHandled = true;
       } else if (selected->type == MenuItemType::MENU_DISPLAY) {
@@ -319,12 +329,14 @@ void ControllerDriver::updateDisplay() {
   for (int row = 0; row < 2; row++) {
     uint8_t itemIdx = _menuScroll + row;
     if (itemIdx < _currentMenu->childCount) {
-      displayMenuItem(row, &_currentMenu->children[itemIdx], itemIdx == _menuIndex);
+      displayMenuItem(row, &_currentMenu->children[itemIdx],
+                      itemIdx == _menuIndex);
     }
   }
 }
 
-void ControllerDriver::displayMenuItem(uint8_t row, MenuItem* item, bool selected) {
+void ControllerDriver::displayMenuItem(uint8_t row, MenuItem* item,
+                                       bool selected) {
   _lcd.setCursor(0, row);
   _lcd.print(selected ? ">" : " ");
   _lcd.print(item->name);
@@ -438,8 +450,7 @@ void ControllerDriver::printStatusToSerial() {
   Serial.printf("CRANK:    %s\n", statusToString(_elementStatus[1]));
   Serial.printf("PRESSURE: %s\n", statusToString(_elementStatus[2]));
   Serial.printf("KEYPAD:   %s\n", statusToString(_elementStatus[3]));
-  Serial.printf("EARTH:    %s (C:%d W:%d)\n",
-                statusToString(_elementStatus[4]),
+  Serial.printf("EARTH:    %s (C:%d W:%d)\n", statusToString(_elementStatus[4]),
                 _earthData.correctCount, _earthData.wrongCount);
   Serial.println("====================");
 }
@@ -463,7 +474,8 @@ void ControllerDriver::sendCommand(FieldCommand cmd, ElementId target) {
   msg.targetId = target;
 
   esp_now_send(BROADCAST_MAC, (uint8_t*)&msg, sizeof(msg));
-  Serial.printf("Sent command: %d to %d\n", static_cast<int>(cmd), static_cast<int>(target));
+  Serial.printf("Sent command: %d to %d\n", static_cast<int>(cmd),
+                static_cast<int>(target));
 }
 
 void ControllerDriver::actionReset() {
@@ -499,14 +511,16 @@ void ControllerDriver::menuActionCycleDisplay(ControllerDriver* ctrl) {
 }
 
 // ESP-NOW callbacks
-void ControllerDriver::onDataRecv(const uint8_t* mac, const uint8_t* data, int len) {
+void ControllerDriver::onDataRecv(const uint8_t* mac, const uint8_t* data,
+                                  int len) {
   if (s_instance && len <= sizeof(FieldMessage)) {
     memcpy((void*)&_receivedMessage, data, len);
     _hasNewMessage = true;
   }
 }
 
-void ControllerDriver::onDataSent(const uint8_t* mac, esp_now_send_status_t status) {
+void ControllerDriver::onDataSent(const uint8_t* mac,
+                                  esp_now_send_status_t status) {
   // Optional logging
 }
 

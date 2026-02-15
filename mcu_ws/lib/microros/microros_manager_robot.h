@@ -16,6 +16,12 @@
 #include <rmw_microros/rmw_microros.h>
 #include <stdio.h>
 
+#include <mutex>
+
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
+
 #include "microros_setup.h"
 
 #define RCCHECK(fn)                \
@@ -70,6 +76,17 @@ class MicrorosManager : public Classes::BaseSubsystem {
   // Register a participant; it will be created/destroyed with the manager
   void registerParticipant(IMicroRosParticipant* participant);
 
+#ifdef USE_FREERTOS
+  // FreeRTOS task entry point — pass `this` as pvParams
+  static void taskFunction(void* pvParams);
+#endif
+
+  // Mutex for thread-safe access to the executor (use with std::lock_guard)
+  std::mutex& getMutex();
+
+  // Query agent connection state
+  bool isConnected() const;
+
  private:
   const MicrorosManagerSetup setup_;
   rclc_support_t support_;
@@ -90,6 +107,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
   } state_;
 
   static MicrorosManager* s_instance_;
+  std::mutex mutex_;
   bool create_entities();
   void destroy_entities();
 

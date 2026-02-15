@@ -3,6 +3,10 @@
 #include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
 
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
+
 #include "Pose2D.h"
 #include "TimedSubsystem.h"
 #include "mcu_msgs/msg/mini_robot_state.h"
@@ -121,6 +125,25 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   Pose2D getCurrentPosition() const { return current_position_; }
   Pose2D getTargetPosition() const { return target_position_; }
   float getDistanceToTarget() const;
+
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 100) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<MiniRobotSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 100;
+#endif
 
  private:
   // Internal State Machine Logic

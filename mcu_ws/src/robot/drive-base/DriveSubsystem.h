@@ -14,6 +14,10 @@
 #include <micro_ros_utilities/type_utilities.h>
 #include <microros_manager_robot.h>
 
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
+
 #include "TimedSubsystem.h"
 #include "robot/drive-base/RobotDriveBase.h"
 
@@ -47,6 +51,25 @@ class DriveSubsystem : public IMicroRosParticipant,
   void onDestroy() override;
 
   void publishData();
+
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 20) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<DriveSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 20;
+#endif
 
  private:
   static void drive_callback(const void* msvin, void* context);

@@ -18,9 +18,11 @@
 #include "PCA9685Manager.h"
 #include "TOF.h"
 #include "robot/machines/HeartbeatSubsystem.h"
+#include "robot/drive-base/DriveSubsystem.h"
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
+#include "robot/subsystems/IntakeSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 
@@ -74,6 +76,17 @@ static ArmSubsystem g_arm(g_arm_setup);
 static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial1);
 static RCSubsystem g_rc(g_rc_setup);
 
+// --- Intake subsystem ---
+static IntakeSubsystemSetup g_intake_setup("intake_subsystem", /*pwm*/ 3,
+                                           /*dir*/ 4, /*ir*/ 5);
+static IntakeSubsystem g_intake(g_intake_setup);
+
+// --- Drive subsystem ---
+// TODO: Replace placeholder pin values with actual hardware wiring config
+// static DriveBaseSetup g_drive_base_setup( ... encoder/motor configs ... );
+// static DriveSubsystemSetup g_drive_setup("drive_subsystem", g_drive_base_setup);
+// static DriveSubsystem g_drive(g_drive_setup);
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -104,6 +117,8 @@ void setup() {
   g_arm_encoder.init();
   g_arm.init();
   g_rc.init();
+  g_intake.init();
+  // g_drive.init();  // TODO: uncomment when DriveSubsystem is configured
 
   // 2. Register micro-ROS participants
   g_mr.registerParticipant(&g_hb);
@@ -112,6 +127,8 @@ void setup() {
   g_mr.registerParticipant(&g_imu);
   g_mr.registerParticipant(&g_arm);
   g_mr.registerParticipant(&g_rc);
+  g_mr.registerParticipant(&g_intake);
+  // g_mr.registerParticipant(&g_drive);  // TODO: uncomment when configured
 
   // 3. Start FreeRTOS tasks
   //                       stackSize  priority  rateMs
@@ -122,6 +139,8 @@ void setup() {
   g_battery.beginThreaded( 1024,      1,        100    );  // 10Hz battery
   g_sensor.beginThreaded(  1024,      1,        100    );  // 10Hz TOF
   g_hb.beginThreaded(      512,       1,        200    );  // 5Hz heartbeat
+  g_intake.beginThreaded(  1024,      2,        20     );  // 50Hz intake
+  // g_drive.beginThreaded( 2048,     3,        20     );  // 50Hz drive control
   xTaskCreate(pca_task, "pca", 512, nullptr, 2, nullptr);  // 50Hz PWM flush
 
   Serial.println(PSTR("setup(): starting scheduler..."));

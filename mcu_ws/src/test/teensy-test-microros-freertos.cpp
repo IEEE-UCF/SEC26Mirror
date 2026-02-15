@@ -2,9 +2,10 @@
  * @file teensy-test-microros-freertos.cpp
  * @brief FreeRTOS + micro-ROS integration test for Teensy41
  *
- * Creates two FreeRTOS tasks:
+ * Creates FreeRTOS tasks using the beginThreaded() API:
  *   1. micro-ROS task — runs the MicrorosManager state machine
  *   2. blink task — toggles LED to confirm scheduler is running
+ *   3. status task — publishes status when connected
  */
 
 #include "arduino_freertos.h"
@@ -56,8 +57,7 @@ void setup() {
   g_mr.init();
   g_mr.registerParticipant(&g_ex);
 
-  xTaskCreate(Subsystem::MicrorosManager::taskFunction, "microros", 8192,
-              &g_mr, 3, nullptr);
+  g_mr.beginThreaded(8192, 3);
   xTaskCreate(blink_task, "blink", 128, nullptr, 2, nullptr);
   xTaskCreate(status_task, "status", 512, nullptr, 2, nullptr);
 

@@ -9,13 +9,14 @@
 #include <Arduino.h>
 #include <BaseSubsystem.h>
 #include <IBusBM.h>
-#include <elapsedMillis.h>
 #include <mcu_msgs/msg/rc.h>
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 
-#include "TimedSubsystem.h"
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
 
 namespace Subsystem {
 
@@ -54,10 +55,10 @@ class RCSubsystemSetup : public Classes::BaseSetup {
  * required.
  */
 class RCSubsystem : public IMicroRosParticipant,
-                    public Subsystem::TimedSubsystem {
+                    public Classes::BaseSubsystem {
  public:
   explicit RCSubsystem(const RCSubsystemSetup& setup)
-      : Subsystem::TimedSubsystem(setup), setup_(setup), updateTimer_(0) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override;
@@ -73,23 +74,41 @@ class RCSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 5) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<RCSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 5;
+#endif
+
  private:
   void updateRCData();
   void publishRC();
   void updateRCMessage();
 
-  static constexpr uint32_t UPDATE_DELAY_MS = 2;  // 2ms delay for IBUS updates
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 50;  // Publish at 20 Hz
 
   const RCSubsystemSetup setup_;
   RCSubsystemData data_;
 
   IBusBM ibus_;
-  elapsedMillis updateTimer_;
 
   rcl_publisher_t pub_{};
   mcu_msgs__msg__RC msg_{};
   rcl_node_t* node_ = nullptr;
+  uint32_t last_publish_ms_ = 0;
 };
 
 }  // namespace Subsystem

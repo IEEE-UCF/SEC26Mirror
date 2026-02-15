@@ -79,6 +79,9 @@ class MicrorosManager : public Classes::BaseSubsystem {
 #ifdef USE_FREERTOS
   // FreeRTOS task entry point — pass `this` as pvParams
   static void taskFunction(void* pvParams);
+
+  // Create and start the micro-ROS FreeRTOS task
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority);
 #endif
 
   // Mutex for thread-safe access to the executor (use with std::lock_guard)

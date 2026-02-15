@@ -2,10 +2,12 @@
  * @file RobotLogic.h
  * @date 12/16/25
  * @author Aldem Pido
- * @brief Main logic for the SEC26 robot.
+ * @brief Main logic for the SEC26 robot — FreeRTOS-based scheduling.
  */
 
 #pragma once
+
+#include "arduino_freertos.h"
 
 #include <Arduino.h>
 #include <microros_manager_robot.h>
@@ -16,8 +18,6 @@
 #include "PCA9685Manager.h"
 #include "TOF.h"
 #include "robot/machines/HeartbeatSubsystem.h"
-#include "robot/machines/McuSubsystem.h"
-#include "robot/machines/RobotManager.h"
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
@@ -55,21 +55,6 @@ static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
 
-// --- MCU subsystem wired with callbacks ---
-// Forward-declare callbacks so we can construct the subsystem first
-static bool mcu_init_cb();
-static bool mcu_arm_cb();
-static bool mcu_begin_cb();
-static void mcu_update_cb();
-static void mcu_stop_cb();
-static void mcu_reset_cb();
-
-static MCUSubsystemSetup g_mcu_setup("mcu_subsystem");
-static MCUSubsystemCallbacks g_mcu_cbs{mcu_init_cb,  mcu_arm_cb,
-                                       mcu_begin_cb, mcu_update_cb,
-                                       mcu_stop_cb,  mcu_reset_cb};
-static MCUSubsystem g_mcu(g_mcu_setup, g_mcu_cbs);
-
 // --- PCA9685 manager (servo driver) ---
 static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
 static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
@@ -89,87 +74,60 @@ static ArmSubsystem g_arm(g_arm_setup);
 static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial1);
 static RCSubsystem g_rc(g_rc_setup);
 
-// Define callbacks after g_mcu is declared
-static bool mcu_init_cb() {
-  // Perform any one-time hardware checks; succeed for now
-  bool ok = true;
-  ok = ok && g_mr.init();
-  ok = ok && g_hb.init();
-  ok = ok && g_battery.init();
-  ok = ok && g_sensor.init();
-  ok = ok && g_imu.init();
-  ok = ok && g_pca_mgr.init();
-  ok = ok && g_arm_encoder.init();
-  ok = ok && g_arm.init();
-  ok = ok && g_rc.init();
-  return ok;
+// --- PCA9685 flush task ---
+static void pca_task(void*) {
+  while (true) {
+    g_pca_mgr.update();
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
 }
 
-static bool mcu_arm_cb() {
-  // Ready to run; succeed immediately
-  return true;
-}
+// --- Arduino sketch entry points ---
+void setup() {
+  Serial.begin(0);
+  if (CrashReport) {
+    Serial.print(CrashReport);
+    Serial.println();
+    Serial.flush();
+  }
 
-static bool mcu_begin_cb() {
-  // Register participants before beginning, all within callbacks
-  g_mr.registerParticipant(&g_mcu);
-  // Register other subsystems
+  Serial.println(PSTR("\r\nSEC26 Robot — FreeRTOS kernel "
+                       tskKERNEL_VERSION_NUMBER "\r\n"));
+
+  // 1. Init all subsystems
+  g_mr.init();
+  g_hb.init();
+  g_battery.init();
+  g_sensor.init();
+  g_imu.init();
+  g_pca_mgr.init();
+  g_arm_encoder.init();
+  g_arm.init();
+  g_rc.init();
+
+  // 2. Register micro-ROS participants
   g_mr.registerParticipant(&g_hb);
   g_mr.registerParticipant(&g_battery);
   g_mr.registerParticipant(&g_sensor);
   g_mr.registerParticipant(&g_imu);
   g_mr.registerParticipant(&g_arm);
   g_mr.registerParticipant(&g_rc);
-  g_mr.begin();
-  return true;
+
+  // 3. Start FreeRTOS tasks
+  //                       stackSize  priority  rateMs
+  g_mr.beginThreaded(      8192,      4                );  // highest — ROS agent
+  g_imu.beginThreaded(     2048,      3,        20     );  // 50Hz sensor fusion
+  g_rc.beginThreaded(      1024,      3,        5      );  // fast IBUS polling
+  g_arm.beginThreaded(     1024,      2,        20     );  // 50Hz movement
+  g_battery.beginThreaded( 1024,      1,        100    );  // 10Hz battery
+  g_sensor.beginThreaded(  1024,      1,        100    );  // 10Hz TOF
+  g_hb.beginThreaded(      512,       1,        200    );  // 5Hz heartbeat
+  xTaskCreate(pca_task, "pca", 512, nullptr, 2, nullptr);  // 50Hz PWM flush
+
+  Serial.println(PSTR("setup(): starting scheduler..."));
+  Serial.flush();
+
+  vTaskStartScheduler();
 }
 
-static void mcu_update_cb() {
-  // Drive micro-ROS executor/service checks
-  g_mr.update();
-  // Let heartbeat decide when to publish via its internal timer
-  g_hb.update();
-  // Update battery subsystem
-  g_battery.update();
-  // Update sensor subsystem
-  g_sensor.update();
-  // Update IMU subsystem
-  g_imu.update();
-  // Update arm subsystem
-  g_arm.update();
-  // Update RC subsystem
-  g_rc.update();
-}
-
-static void mcu_stop_cb() {
-  // Tear down micro-ROS entities cleanly
-  g_mr.pause();
-}
-
-static void mcu_reset_cb() {
-  // No-op reset hook for now
-}
-
-// --- RobotManager wiring ---
-static RobotObject g_obj_mcu(g_mcu, MS_20);  // single updater at 50 Hz
-// Manager for PCA9685 updated at 50 Hz
-static RobotObject g_obj_pca(g_pca_mgr, MS_20);
-
-static std::vector<RobotObject*> g_objects{&g_obj_mcu, &g_obj_pca};
-static RobotManagerSetup g_rm_setup("robot_manager", g_objects);
-static RobotManager g_rm(g_rm_setup);
-
-// --- Arduino sketch entry points ---
-void setup() {
-  // Initialize all robot objects
-  (void)g_rm.init();
-
-  // Transition MCU subsystem through arm and begin
-  g_mcu.arm();
-  g_mcu.begin();
-}
-
-void loop() {
-  // Drive timed updates for all objects
-  g_rm.update();
-}
+void loop() {}  // never reached

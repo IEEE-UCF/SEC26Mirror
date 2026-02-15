@@ -35,16 +35,10 @@ bool ImuSubsystem::init() {
 void ImuSubsystem::update() {
   if (!setup_.driver_) return;
 
-  // Update sensor at 50Hz
-  if (everyMs(20)) {
-    setup_.driver_->update();
-  }
+  setup_.driver_->update();
 
-  // Publish at 50Hz to match the sensor update rate!
   if (!pub_.impl) return;
-  if (everyMs(20, 1)) {
-    publishData();
-  }
+  publishData();
 }
 
 void ImuSubsystem::reset() { pause(); }

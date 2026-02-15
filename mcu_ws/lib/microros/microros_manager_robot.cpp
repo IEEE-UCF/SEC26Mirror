@@ -117,6 +117,10 @@ void MicrorosManager::taskFunction(void* pvParams) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
+
+void MicrorosManager::beginThreaded(uint32_t stackSize, UBaseType_t priority) {
+  xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+}
 #endif
 
 std::mutex& MicrorosManager::getMutex() { return mutex_; }

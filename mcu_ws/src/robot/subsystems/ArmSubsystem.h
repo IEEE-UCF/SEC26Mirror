@@ -15,8 +15,11 @@
 #include <microros_manager_robot.h>
 
 #include "PCA9685Driver.h"
-#include "TimedSubsystem.h"
 #include "robot/drive-base/EncoderDriver.h"
+
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
 
 namespace Subsystem {
 
@@ -39,10 +42,10 @@ class ArmSubsystemSetup : public Classes::BaseSetup {
 // Pseudo-code subsystem: publishes current `ArmSusbsytem` state and
 // accepts commands via a service to change states.
 class ArmSubsystem : public IMicroRosParticipant,
-                     public Subsystem::TimedSubsystem {
+                     public Classes::BaseSubsystem {
  public:
   explicit ArmSubsystem(const ArmSubsystemSetup& setup)
-      : Subsystem::TimedSubsystem(setup), setup_(setup) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   // Lifecycle hooks
   bool init() override {
@@ -150,6 +153,25 @@ class ArmSubsystem : public IMicroRosParticipant,
     // rosidl_runtime_c__String__assign(&response->message, "Command accepted");
   }
 
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 20) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<ArmSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 20;
+#endif
+
  private:
   // Non-blocking state transition handler
   void updateMovementState() {
@@ -160,59 +182,9 @@ class ArmSubsystem : public IMicroRosParticipant,
       if (elapsed >= setup_.movement_duration_ms_) {
         // Movement complete, update to target state
         position_state_ = target_position_state_;
-
-        // Pseudo-code: optionally verify position with encoder feedback
-        // long actual_pos = setup_.encoder_->getPosition().position;
-        // int16_t expected = getTargetPosition(target_position_state_,
-        // target_custom_position_); if (abs(actual_pos - expected) <
-        // POSITION_TOLERANCE_TICKS) {
-        //   position_state_ = target_position_state_;
-        // } else {
-        //   // Handle error - position not reached, maybe retry or fault
-        //   state_ = mcu_msgs__msg__ArmSusbsytem__INIT_FAIL;
-        // }
-
-        // Pseudo-code: check for item detection when intake is on
-        // if (intake_state_ == mcu_msgs__msg__ArmSusbsytem__INTAKE_ON) {
-        //   bool item_detected = digitalRead(ITEM_SENSOR_PIN);
-        //   item_state_ = item_detected ?
-        //       mcu_msgs__msg__ArmSusbsytem__ITEM_DETECTED :
-        //       mcu_msgs__msg__ArmSusbsytem__ITEM_NONE;
-        // }
       }
     }
   }
-
-  // Pseudo-code helper: map target state to position value
-  // int16_t getTargetPosition(uint8_t target_state, int16_t custom_pos) {
-  //   switch (target_state) {
-  //     case mcu_msgs__srv__ArmControl_Request__POSITION_RETRACTED:
-  //       return ARM_RETRACTED_POS;  // e.g., 0 degrees
-  //     case mcu_msgs__srv__ArmControl_Request__POSITION_EXTENDED:
-  //       return ARM_EXTENDED_POS;   // e.g., 90 degrees
-  //     case mcu_msgs__srv__ArmControl_Request__POSITION_CUSTOM:
-  //       return custom_pos;
-  //     default:
-  //       return 0;
-  //   }
-  // }
-
-  // Pseudo-code helper: convert position to PWM value
-  // uint16_t positionToPWM(int16_t degrees) {
-  //   // Map degrees to 12-bit PWM (0-4095)
-  //   // Typical servo: 1ms (205) = 0°, 2ms (410) = 180°
-  //   return map(degrees, 0, 180, 205, 410);
-  // }
-
-  // Static trampoline for service callback
-  // static void onServiceStatic(const void* reqin, void* resin) {
-  //   // Context would be passed via executor add_service
-  //   auto* self = /* extract from context */;
-  //   const auto* req = static_cast<const
-  //   mcu_msgs__srv__ArmControl_Request*>(reqin); auto* res =
-  //   static_cast<mcu_msgs__srv__ArmControl_Response*>(resin);
-  //   self->handleServiceControl(req, res);
-  // }
 
   const ArmSubsystemSetup setup_;
 

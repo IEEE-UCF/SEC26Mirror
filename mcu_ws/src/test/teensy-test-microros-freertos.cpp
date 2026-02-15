@@ -24,11 +24,11 @@ static Subsystem::ExampleSubsystemSetup g_ex_setup("example_sub_test");
 static Subsystem::ExampleSubsystem g_ex(g_ex_setup);
 
 static void blink_task(void*) {
-  pinMode(arduino::LED_BUILTIN, arduino::OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
-    digitalWriteFast(arduino::LED_BUILTIN, arduino::HIGH);
+    digitalWriteFast(LED_BUILTIN, HIGH);
     vTaskDelay(pdMS_TO_TICKS(500));
-    digitalWriteFast(arduino::LED_BUILTIN, arduino::LOW);
+    digitalWriteFast(LED_BUILTIN, LOW);
     vTaskDelay(pdMS_TO_TICKS(500));
   }
 }

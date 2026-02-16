@@ -1,4 +1,4 @@
-#include <controller.h>
+#include "controller.h"
 
 // Pin configuration
 // I2C LCD address (typically 0x27 or 0x3F)

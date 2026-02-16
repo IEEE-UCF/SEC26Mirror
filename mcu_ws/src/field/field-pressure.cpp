@@ -1,6 +1,6 @@
 #include <field-colors.h>
 #include <field-element.h>
-#include <pressure.h>
+#include "pressure.h"
 #include <raw-rgb-analog-led.h>
 
 const uint8_t forcePin =

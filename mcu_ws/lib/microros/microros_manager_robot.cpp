@@ -125,8 +125,6 @@ void MicrorosManager::beginThreaded(uint32_t stackSize, UBaseType_t priority) {
 
 std::mutex& MicrorosManager::getMutex() { return mutex_; }
 
-bool MicrorosManager::isConnected() const {
-  return state_ == AGENT_CONNECTED;
-}
+bool MicrorosManager::isConnected() const { return state_ == AGENT_CONNECTED; }
 
 }  // namespace Subsystem

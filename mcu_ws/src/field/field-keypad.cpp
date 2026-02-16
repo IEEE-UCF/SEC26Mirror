@@ -1,7 +1,8 @@
 #include <field-colors.h>
 #include <field-element.h>
-#include "keypad.h"
 #include <raw-rgb-analog-led.h>
+
+#include "keypad.h"
 
 const int ROW_NUM = 4;
 const int COLUMN_NUM = 3;

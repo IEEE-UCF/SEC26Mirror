@@ -25,50 +25,51 @@
 
 #include "arduino_freertos.h"
 
-
 static void task1(void*) {
-    pinMode(LED_BUILTIN, OUTPUT);
-    while (true) {
-        digitalWriteFast(LED_BUILTIN, LOW);
-        vTaskDelay(pdMS_TO_TICKS(500));
+  pinMode(LED_BUILTIN, OUTPUT);
+  while (true) {
+    digitalWriteFast(LED_BUILTIN, LOW);
+    vTaskDelay(pdMS_TO_TICKS(500));
 
-        digitalWriteFast(LED_BUILTIN, HIGH);
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
+    digitalWriteFast(LED_BUILTIN, HIGH);
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
 
-    vTaskDelete(nullptr);
+  vTaskDelete(nullptr);
 }
 
 static void task2(void*) {
-    Serial.begin(0);
-    while (true) {
-        Serial.println("TICK");
-        vTaskDelay(pdMS_TO_TICKS(1'000));
+  Serial.begin(0);
+  while (true) {
+    Serial.println("TICK");
+    vTaskDelay(pdMS_TO_TICKS(1'000));
 
-        Serial.println("TOCK");
-        vTaskDelay(pdMS_TO_TICKS(1'000));
-    }
+    Serial.println("TOCK");
+    vTaskDelay(pdMS_TO_TICKS(1'000));
+  }
 
-    vTaskDelete(nullptr);
+  vTaskDelete(nullptr);
 }
 
 void setup() {
-    Serial.begin(0);
-    if (CrashReport) {
-        Serial.print(CrashReport);
-        Serial.println();
-        Serial.flush();
-    }
-
-    Serial.println(PSTR("\r\nBooting FreeRTOS kernel " tskKERNEL_VERSION_NUMBER ". Built by gcc " __VERSION__ " (newlib " _NEWLIB_VERSION ") on " __DATE__ ". ***\r\n"));
-
-    xTaskCreate(task1, "task1", 128, nullptr, 2, nullptr);
-    xTaskCreate(task2, "task2", 128, nullptr, 2, nullptr);
-
-    Serial.println(PSTR("setup(): starting scheduler..."));
+  Serial.begin(0);
+  if (CrashReport) {
+    Serial.print(CrashReport);
+    Serial.println();
     Serial.flush();
+  }
 
-    vTaskStartScheduler();
+  Serial.println(PSTR("\r\nBooting FreeRTOS kernel " tskKERNEL_VERSION_NUMBER
+                      ". Built by gcc " __VERSION__ " (newlib " _NEWLIB_VERSION
+                      ") on " __DATE__ ". ***\r\n"));
+
+  xTaskCreate(task1, "task1", 128, nullptr, 2, nullptr);
+  xTaskCreate(task2, "task2", 128, nullptr, 2, nullptr);
+
+  Serial.println(PSTR("setup(): starting scheduler..."));
+  Serial.flush();
+
+  vTaskStartScheduler();
 }
 
 void loop() {}

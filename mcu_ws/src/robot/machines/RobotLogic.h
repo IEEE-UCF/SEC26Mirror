@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include "arduino_freertos.h"
-
 #include <Arduino.h>
 #include <microros_manager_robot.h>
 
@@ -17,8 +15,9 @@
 #include "I2CPowerDriver.h"
 #include "PCA9685Manager.h"
 #include "TOF.h"
-#include "robot/machines/HeartbeatSubsystem.h"
+#include "arduino_freertos.h"
 #include "robot/drive-base/DriveSubsystem.h"
+#include "robot/machines/HeartbeatSubsystem.h"
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
@@ -84,8 +83,8 @@ static IntakeSubsystem g_intake(g_intake_setup);
 // --- Drive subsystem ---
 // TODO: Replace placeholder pin values with actual hardware wiring config
 // static DriveBaseSetup g_drive_base_setup( ... encoder/motor configs ... );
-// static DriveSubsystemSetup g_drive_setup("drive_subsystem", g_drive_base_setup);
-// static DriveSubsystem g_drive(g_drive_setup);
+// static DriveSubsystemSetup g_drive_setup("drive_subsystem",
+// g_drive_base_setup); static DriveSubsystem g_drive(g_drive_setup);
 
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
@@ -104,8 +103,8 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR("\r\nSEC26 Robot — FreeRTOS kernel "
-                       tskKERNEL_VERSION_NUMBER "\r\n"));
+  Serial.println(PSTR(
+      "\r\nSEC26 Robot — FreeRTOS kernel " tskKERNEL_VERSION_NUMBER "\r\n"));
 
   // 1. Init all subsystems
   g_mr.init();
@@ -132,14 +131,14 @@ void setup() {
 
   // 3. Start FreeRTOS tasks
   //                       stackSize  priority  rateMs
-  g_mr.beginThreaded(      8192,      4                );  // highest — ROS agent
-  g_imu.beginThreaded(     2048,      3,        20     );  // 50Hz sensor fusion
-  g_rc.beginThreaded(      1024,      3,        5      );  // fast IBUS polling
-  g_arm.beginThreaded(     1024,      2,        20     );  // 50Hz movement
-  g_battery.beginThreaded( 1024,      1,        100    );  // 10Hz battery
-  g_sensor.beginThreaded(  1024,      1,        100    );  // 10Hz TOF
-  g_hb.beginThreaded(      512,       1,        200    );  // 5Hz heartbeat
-  g_intake.beginThreaded(  1024,      2,        20     );  // 50Hz intake
+  g_mr.beginThreaded(8192, 4);            // highest — ROS agent
+  g_imu.beginThreaded(2048, 3, 20);       // 50Hz sensor fusion
+  g_rc.beginThreaded(1024, 3, 5);         // fast IBUS polling
+  g_arm.beginThreaded(1024, 2, 20);       // 50Hz movement
+  g_battery.beginThreaded(1024, 1, 100);  // 10Hz battery
+  g_sensor.beginThreaded(1024, 1, 100);   // 10Hz TOF
+  g_hb.beginThreaded(512, 1, 200);        // 5Hz heartbeat
+  g_intake.beginThreaded(1024, 2, 20);    // 50Hz intake
   // g_drive.beginThreaded( 2048,     3,        20     );  // 50Hz drive control
   xTaskCreate(pca_task, "pca", 512, nullptr, 2, nullptr);  // 50Hz PWM flush
 

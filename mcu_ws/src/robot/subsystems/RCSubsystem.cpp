@@ -68,8 +68,8 @@ void RCSubsystem::updateRCData() {
   int32_t newChannels[10];
   for (int i = 0; i < 10; i++) {
     // Read raw channel data (1000-2000), constrain, then map to -255 to 255
-    newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000,
-                         0, 1000, -255, 255);
+    newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000, 0,
+                         1000, -255, 255);
   }
 
   // Failsafe/mode check: if channel 9 is at its minimum (-255 after mapping),

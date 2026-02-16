@@ -8,13 +8,12 @@
  *   3. status task — publishes status when connected
  */
 
-#include "arduino_freertos.h"
-
 #include <Arduino.h>
 
 #include <mutex>
 
 #include "ExampleMicrorosSubsystem.h"
+#include "arduino_freertos.h"
 #include "microros_manager_robot.h"
 
 static Subsystem::MicrorosManagerSetup g_mr_setup("microros_freertos_test");
@@ -51,8 +50,9 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR("\r\nFreeRTOS + micro-ROS test. Kernel "
-                       tskKERNEL_VERSION_NUMBER "\r\n"));
+  Serial.println(
+      PSTR("\r\nFreeRTOS + micro-ROS test. Kernel " tskKERNEL_VERSION_NUMBER
+           "\r\n"));
 
   g_mr.init();
   g_mr.registerParticipant(&g_ex);

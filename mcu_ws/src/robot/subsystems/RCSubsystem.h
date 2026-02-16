@@ -54,8 +54,7 @@ class RCSubsystemSetup : public Classes::BaseSetup {
  * to the "mcu_robot/rc" topic. No input commands from Raspberry Pi are
  * required.
  */
-class RCSubsystem : public IMicroRosParticipant,
-                    public Classes::BaseSubsystem {
+class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
  public:
   explicit RCSubsystem(const RCSubsystemSetup& setup)
       : Classes::BaseSubsystem(setup), setup_(setup) {}

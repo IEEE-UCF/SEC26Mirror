@@ -13,7 +13,9 @@
 #include <mcu_msgs/msg/battery_health.h>
 #include <microros_manager_robot.h>
 
-#include "TimedSubsystem.h"
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
 
 namespace Subsystem {
 class BatterySubsystemSetup : public Classes::BaseSetup {
@@ -24,10 +26,10 @@ class BatterySubsystemSetup : public Classes::BaseSetup {
 };
 
 class BatterySubsystem : public IMicroRosParticipant,
-                         public Subsystem::TimedSubsystem {
+                         public Classes::BaseSubsystem {
  public:
   explicit BatterySubsystem(const BatterySubsystemSetup& setup)
-      : Subsystem::TimedSubsystem(setup), setup_(setup) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}
@@ -41,11 +43,31 @@ class BatterySubsystem : public IMicroRosParticipant,
 
   void publishData();
 
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 100) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<BatterySubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 100;
+#endif
+
  private:
   const BatterySubsystemSetup setup_;
   rcl_publisher_t pub_{};
   mcu_msgs__msg__BatteryHealth msg{};
   rcl_node_t* node_ = nullptr;
+  uint32_t last_publish_ms_ = 0;
 };
 }  // namespace Subsystem
 

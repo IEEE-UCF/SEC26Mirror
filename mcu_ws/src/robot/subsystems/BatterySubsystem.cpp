@@ -7,11 +7,12 @@ namespace Subsystem {
 bool BatterySubsystem::init() { return setup_.driver_->init(); }
 
 void BatterySubsystem::update() {
-  if (everyMs(100)) {
-    setup_.driver_->update();
-  }
+  setup_.driver_->update();
+
   if (!pub_.impl) return;
-  if (everyMs(1000)) {  // Publish every 1 second
+  uint32_t now = millis();
+  if (now - last_publish_ms_ >= 1000) {
+    last_publish_ms_ = now;
     publishData();
   }
 }

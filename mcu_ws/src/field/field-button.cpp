@@ -1,7 +1,8 @@
-#include <button.h>
 #include <field-colors.h>
 #include <field-element.h>
 #include <raw-rgb-analog-led.h>
+
+#include "button.h"
 
 // Pin configs
 const uint8_t ledPin = 32;

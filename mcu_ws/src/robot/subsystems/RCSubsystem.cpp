@@ -23,7 +23,9 @@ void RCSubsystem::update() {
 
   // Publish RC data at regular intervals
   if (!pub_.impl) return;
-  if (everyMs(PUBLISH_INTERVAL_MS)) {
+  uint32_t now = millis();
+  if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
+    last_publish_ms_ = now;
     publishRC();
   }
 }
@@ -60,32 +62,29 @@ void RCSubsystem::onDestroy() {
 }
 
 void RCSubsystem::updateRCData() {
-  if (updateTimer_ >= UPDATE_DELAY_MS) {
-    updateTimer_ -= UPDATE_DELAY_MS;
-    ibus_.loop();  // Process incoming IBUS data
+  ibus_.loop();  // Process incoming IBUS data
 
-    // Read and map all 10 channels
-    int32_t newChannels[10];
+  // Read and map all 10 channels
+  int32_t newChannels[10];
+  for (int i = 0; i < 10; i++) {
+    // Read raw channel data (1000-2000), constrain, then map to -255 to 255
+    newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000, 0,
+                         1000, -255, 255);
+  }
+
+  // Failsafe/mode check: if channel 9 is at its minimum (-255 after mapping),
+  // zero out specific control channels (kill switch behavior)
+  if (newChannels[9] == -255) {
+    data_.channels[0] = 0;     // e.g., Roll/Aileron
+    data_.channels[1] = 0;     // e.g., Pitch/Elevator
+    data_.channels[2] = 0;     // e.g., Throttle
+    data_.channels[3] = 0;     // e.g., Yaw/Rudder
+    data_.channels[5] = 0;     // e.g., Auxiliary channel
+    data_.channels[9] = -255;  // Keep failsafe switch state
+  } else {
+    // If not in failsafe, update all channels with new readings
     for (int i = 0; i < 10; i++) {
-      // Read raw channel data (1000-2000), constrain, then map to -255 to 255
-      newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000,
-                           0, 1000, -255, 255);
-    }
-
-    // Failsafe/mode check: if channel 9 is at its minimum (-255 after mapping),
-    // zero out specific control channels (kill switch behavior)
-    if (newChannels[9] == -255) {
-      data_.channels[0] = 0;     // e.g., Roll/Aileron
-      data_.channels[1] = 0;     // e.g., Pitch/Elevator
-      data_.channels[2] = 0;     // e.g., Throttle
-      data_.channels[3] = 0;     // e.g., Yaw/Rudder
-      data_.channels[5] = 0;     // e.g., Auxiliary channel
-      data_.channels[9] = -255;  // Keep failsafe switch state
-    } else {
-      // If not in failsafe, update all channels with new readings
-      for (int i = 0; i < 10; i++) {
-        data_.channels[i] = newChannels[i];
-      }
+      data_.channels[i] = newChannels[i];
     }
   }
 }

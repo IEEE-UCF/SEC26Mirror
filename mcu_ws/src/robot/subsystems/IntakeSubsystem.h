@@ -9,7 +9,8 @@
 namespace Subsystem {
 
 /**
- * @brief Intake states: the state machine runs entirely on the Teensy, so no ROS dependencies!!
+ * @brief Intake states: the state machine runs entirely on the Teensy, so no
+ * ROS dependencies!!
  */
 enum class IntakeState : uint8_t {
   IDLE = 0,      // Motor off, waiting for command
@@ -23,12 +24,7 @@ enum class IntakeState : uint8_t {
 /**
  * @brief Commands that can be issued to the intake
  */
-enum class IntakeCommand : uint8_t {
-  NONE = 0,
-  START = 1,
-  STOP = 2,
-  EJECT = 3
-};
+enum class IntakeCommand : uint8_t { NONE = 0, START = 1, STOP = 2, EJECT = 3 };
 
 /**
  * @brief Setup configuration for IntakeSubsystem

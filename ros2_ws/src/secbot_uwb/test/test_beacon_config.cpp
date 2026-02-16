@@ -2,18 +2,19 @@
 // Test BeaconConfig and TagConfig classes
 
 #include <gtest/gtest.h>
+
 #include "secbot_uwb/beacon_config.hpp"
 
 using secbot_uwb::BeaconConfig;
-using secbot_uwb::TagConfig;
 using secbot_uwb::BeaconType;
+using secbot_uwb::TagConfig;
 
 TEST(BeaconConfigTest, StationaryBeacon) {
   std::array<double, 3> position = {1.0, 2.0, 0.15};
   std::vector<std::string> known_axes = {"x", "y", "z"};
 
-  BeaconConfig beacon(10, BeaconType::STATIONARY, position, known_axes,
-                      "", false, "Test beacon");
+  BeaconConfig beacon(10, BeaconType::STATIONARY, position, known_axes, "",
+                      false, "Test beacon");
 
   EXPECT_EQ(beacon.getBeaconId(), 10);
   EXPECT_EQ(beacon.getType(), BeaconType::STATIONARY);
@@ -71,8 +72,7 @@ TEST(TagConfigTest, DefaultValues) {
   EXPECT_FALSE(tag.enable3D());
 }
 
-int main(int argc, char ** argv)
-{
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

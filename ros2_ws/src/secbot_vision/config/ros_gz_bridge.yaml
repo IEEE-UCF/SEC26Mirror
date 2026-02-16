@@ -24,7 +24,7 @@
 
 # Camera 1 Info (Gazebo -> ROS)
 - ros_topic_name: "/camera/camera_info"
-  gz_topic_name: "/camera/camera_info"
+  gz_topic_name: "/camera_info"
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
@@ -38,7 +38,7 @@
 
 # Camera 2 Info (Gazebo -> ROS)
 - ros_topic_name: "/camera2/camera_info"
-  gz_topic_name: "/camera2/camera_info"
+  gz_topic_name: "/camera_info"
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS

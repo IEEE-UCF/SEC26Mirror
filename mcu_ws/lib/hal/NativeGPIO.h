@@ -47,7 +47,7 @@ class NativeGPIO : public HALPin {
 
   DigitalState digitalRead() override {
     return ::digitalRead(pin_) == HIGH ? DigitalState::STATE_HIGH
-                                        : DigitalState::STATE_LOW;
+                                       : DigitalState::STATE_LOW;
   }
 
   void analogWrite(uint16_t value) override {

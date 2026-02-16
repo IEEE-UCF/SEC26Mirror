@@ -51,7 +51,7 @@ class CD74HC4067GPIO : public HALPin {
     if (!driver_) return DigitalState::STATE_LOW;
     driver_->selectChannel(channel_);
     return driver_->digitalRead() == HIGH ? DigitalState::STATE_HIGH
-                                           : DigitalState::STATE_LOW;
+                                          : DigitalState::STATE_LOW;
   }
 
   void analogWrite(uint16_t value) override {

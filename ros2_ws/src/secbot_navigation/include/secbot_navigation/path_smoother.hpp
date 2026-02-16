@@ -1,37 +1,35 @@
 #ifndef SECBOT_NAVIGATION_PATH_SMOOTHER_HPP
 #define SECBOT_NAVIGATION_PATH_SMOOTHER_HPP
-#include "secbot_navigation/grid_map.hpp"
 #include <utility>
 #include <vector>
 
-namespace secbot_navigation
-{
+#include "secbot_navigation/grid_map.hpp"
 
-  struct PathSmootherConfig
-  {
-    int max_skip = 1;
-  };
+namespace secbot_navigation {
 
-  // === Post-processes Grid Paths to make them smoother ===
-  class PathSmoother
-  {
-  public:
-    // === Constructor ===
-    explicit PathSmoother(const GridMap& grid_map, PathSmootherConfig config = PathSmootherConfig());
+struct PathSmootherConfig {
+  int max_skip = 1;
+};
 
-    // === Smooths a given path ===
-    using Cell = GridMap::Cell;
-    std::vector<Cell> smooth(const std::vector<Cell>& path);
+// === Post-processes Grid Paths to make them smoother ===
+class PathSmoother {
+ public:
+  // === Constructor ===
+  explicit PathSmoother(const GridMap& grid_map,
+                        PathSmootherConfig config = PathSmootherConfig());
 
-  private:
-    
-    bool _line_is_clear(const Cell& p1, const Cell& p2);
+  // === Smooths a given path ===
+  using Cell = GridMap::Cell;
+  std::vector<Cell> smooth(const std::vector<Cell>& path);
 
-    const GridMap& grid_map_;
-    PathSmootherConfig config_;
-    size_t max_skip_; 
-  };
+ private:
+  bool _line_is_clear(const Cell& p1, const Cell& p2);
 
-} 
+  const GridMap& grid_map_;
+  PathSmootherConfig config_;
+  size_t max_skip_;
+};
 
-#endif 
+}  // namespace secbot_navigation
+
+#endif

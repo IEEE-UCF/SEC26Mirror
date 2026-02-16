@@ -26,11 +26,11 @@ class CD74HC4067DriverSetup : public Classes::BaseSetup {
         s3_(s3),
         sig_pin_(sig_pin) {}
 
-  const uint8_t s0_;      // Select bit 0
-  const uint8_t s1_;      // Select bit 1
-  const uint8_t s2_;      // Select bit 2
-  const uint8_t s3_;      // Select bit 3
-  const uint8_t sig_pin_; // Common signal pin
+  const uint8_t s0_;       // Select bit 0
+  const uint8_t s1_;       // Select bit 1
+  const uint8_t s2_;       // Select bit 2
+  const uint8_t s3_;       // Select bit 3
+  const uint8_t sig_pin_;  // Common signal pin
 };
 
 /**

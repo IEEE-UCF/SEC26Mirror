@@ -4,42 +4,34 @@
 #ifndef SECBOT_UWB__BEACON_CONFIG_HPP_
 #define SECBOT_UWB__BEACON_CONFIG_HPP_
 
+#include <array>
 #include <string>
 #include <vector>
-#include <array>
 
-namespace secbot_uwb
-{
+namespace secbot_uwb {
 
-enum class BeaconType
-{
-  STATIONARY,
-  MOVING
-};
+enum class BeaconType { STATIONARY, MOVING };
 
-class BeaconConfig
-{
-public:
-  BeaconConfig(
-    int beacon_id,
-    BeaconType type,
-    const std::array<double, 3> & position,
-    const std::vector<std::string> & known_axes,
-    const std::string & odometry_topic = "",
-    bool use_odometry_fusion = false,
-    const std::string & description = "");
+class BeaconConfig {
+ public:
+  BeaconConfig(int beacon_id, BeaconType type,
+               const std::array<double, 3>& position,
+               const std::vector<std::string>& known_axes,
+               const std::string& odometry_topic = "",
+               bool use_odometry_fusion = false,
+               const std::string& description = "");
 
   int getBeaconId() const { return beacon_id_; }
   BeaconType getType() const { return type_; }
-  const std::array<double, 3> & getPosition() const { return position_; }
-  const std::vector<std::string> & getKnownAxes() const { return known_axes_; }
-  const std::string & getOdometryTopic() const { return odometry_topic_; }
+  const std::array<double, 3>& getPosition() const { return position_; }
+  const std::vector<std::string>& getKnownAxes() const { return known_axes_; }
+  const std::string& getOdometryTopic() const { return odometry_topic_; }
   bool useOdometryFusion() const { return use_odometry_fusion_; }
-  const std::string & getDescription() const { return description_; }
+  const std::string& getDescription() const { return description_; }
 
-  bool isAxisKnown(const std::string & axis) const;
+  bool isAxisKnown(const std::string& axis) const;
 
-private:
+ private:
   int beacon_id_;
   BeaconType type_;
   std::array<double, 3> position_;
@@ -49,21 +41,18 @@ private:
   std::string description_;
 };
 
-class TagConfig
-{
-public:
-  TagConfig(
-    int tag_id,
-    const std::string & description,
-    const std::string & publish_topic,
-    bool enable_3d_positioning = false);
+class TagConfig {
+ public:
+  TagConfig(int tag_id, const std::string& description,
+            const std::string& publish_topic,
+            bool enable_3d_positioning = false);
 
   int getTagId() const { return tag_id_; }
-  const std::string & getDescription() const { return description_; }
-  const std::string & getPublishTopic() const { return publish_topic_; }
+  const std::string& getDescription() const { return description_; }
+  const std::string& getPublishTopic() const { return publish_topic_; }
   bool enable3D() const { return enable_3d_positioning_; }
 
-private:
+ private:
   int tag_id_;
   std::string description_;
   std::string publish_topic_;

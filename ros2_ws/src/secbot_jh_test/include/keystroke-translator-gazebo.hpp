@@ -94,7 +94,7 @@ class keystroke_translator: public rclcpp::Node{
                 this->velocity_publisher->publish(velocity_message);
                 break;
                 case('b'):
-                current_z_velocity = current_z_velocity-.09;
+                current_z_velocity = 0.0;
                 current_x_velocity = 0.0;
                 current_y_velocity = 0.0;
                 RCLCPP_INFO(this->get_logger(),"not moving!");

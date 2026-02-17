@@ -43,11 +43,25 @@ bool DriveSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
     return false;
   }
 
+  if (RCL_RET_OK != rclc_subscription_init_best_effort(
+                        &drive_sub_, node_,
+                        ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, DriveBase),
+                        "drive_base/trajectory")) {
+    return false;
+  }
+
   if (RCL_RET_OK != rclc_executor_add_subscription_with_context(
                         executor_, &drive_sub_, &drive_msg_,
                         &DriveSubsystem::drive_callback, this, ON_NEW_DATA)) {
     return false;
   }
+
+  if (RCL_RET_OK != rclc_executor_add_subscription_with_context(
+                        executor_, &drive_sub_, &drive_msg_,
+                        &DriveSubsystem::drive_callback, this, ON_NEW_DATA)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -114,6 +128,37 @@ void DriveSubsystem::drive_callback(const void* msvin, void* context) {
       instance->driveBase_.driveSetPoint(pose);
       break;
     }
+    case mcu_msgs_msg__DriveBase__DRIVE_TRAJ: {
+      const auto& poses = msg->goal_path.poses;
+      size_t count = (poses.size > MAX_WAYPOINTS) ? MAX_WAYPOINTS : poses.size;
+      TrajectoryController::Waypoint waypoints[MAX_WAYPOINTS];
+
+      if (count == 0) {
+        instance->driveBase_.driveVelocity(Vector2D(0, 0, 0));
+        break;
+      }
+
+      for (size_t i = 0; i < count; i++) {
+        const auto& wp = poses.data[i];
+
+        waypoints[i].x = wp.pose.position.x;
+        waypoints[i].y = wp.pose.position.y;
+
+        double qz = wp.pose.orientation.z;
+        double qw = wp.pose.orientation.w;
+
+        float heading = atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
+
+        waypoints[i].heading = heading;
+        waypoints[i].has_heading = 1;
+
+        waypoints[i].v = 0.0f;
+        waypoints[i].has_vel = 0;
+      }
+
+      instance->driveBase_.driveTrajectory(waypoints, count);
+      break;
+    }
     default: {
       Vector2D vel(0, 0, 0);
       instance->driveBase_.driveVelocity(vel);
@@ -121,4 +166,5 @@ void DriveSubsystem::drive_callback(const void* msvin, void* context) {
     }
   }
 }
+
 }  // namespace Subsystem

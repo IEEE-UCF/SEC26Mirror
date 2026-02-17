@@ -13,6 +13,7 @@
 #include <mcu_msgs/msg/drive_base.h>
 #include <micro_ros_utilities/type_utilities.h>
 #include <microros_manager_robot.h>
+#include <traj_controller.h>
 
 #ifdef USE_FREERTOS
 #include "arduino_freertos.h"
@@ -76,6 +77,8 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   const DriveSubsystemSetup setup_;
   RobotDriveBase driveBase_;
+
+  const int MAX_WAYPOINTS = 30;
 
   rcl_node_t* node_ = nullptr;
   rclc_executor_t* executor_ = nullptr;

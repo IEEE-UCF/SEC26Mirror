@@ -43,19 +43,6 @@ bool DriveSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
     return false;
   }
 
-  if (RCL_RET_OK != rclc_subscription_init_best_effort(
-                        &drive_sub_, node_,
-                        ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, DriveBase),
-                        "drive_base/trajectory")) {
-    return false;
-  }
-
-  if (RCL_RET_OK != rclc_executor_add_subscription_with_context(
-                        executor_, &drive_sub_, &drive_msg_,
-                        &DriveSubsystem::drive_callback, this, ON_NEW_DATA)) {
-    return false;
-  }
-
   if (RCL_RET_OK != rclc_executor_add_subscription_with_context(
                         executor_, &drive_sub_, &drive_msg_,
                         &DriveSubsystem::drive_callback, this, ON_NEW_DATA)) {

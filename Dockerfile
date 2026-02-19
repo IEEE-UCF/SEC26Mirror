@@ -122,6 +122,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-requests && \
     rm -rf /var/lib/apt/lists/*
 
+# 9. Install onshape-to-robot for URDF/STL export from Onshape CAD
+RUN pip3 install --break-system-packages onshape-to-robot
+
 FROM base AS dev
 
 # Switch to root to install Gazebo Harmonic and required tools, then switch back
@@ -132,6 +135,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-rviz2 \
     ros-$ROS_DISTRO-gz-ros2-control \
     ros-$ROS_DISTRO-robot-localization \
+    ros-$ROS_DISTRO-robot-state-publisher \
+    ros-$ROS_DISTRO-joint-state-publisher-gui \
+    ros-$ROS_DISTRO-xacro \
     curl \
     lsb-release \
     gnupg \

@@ -24,9 +24,9 @@ void MPU6050Driver::update() {
   data_.a_y = accel_.acceleration.y;
   data_.a_z = accel_.acceleration.z;
 
-  data_.g_yaw = gyro_.gyro.heading;
-  data_.g_roll = gyro_.gyro.roll;
-  data_.g_pitch = gyro_.gyro.pitch;
+  data_.g_x = gyro_.gyro.x;
+  data_.g_y = gyro_.gyro.y;
+  data_.g_z = gyro_.gyro.z;
 
   data_.temp = temp_.temperature;
 }

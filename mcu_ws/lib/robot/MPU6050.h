@@ -26,11 +26,11 @@ struct MPU6050DriverData {
   float a_y = 0.0f;
   float a_z = 0.0f;
 
-  float g_yaw = 0.0f;
-  float g_pitch = 0.0f;
-  float g_roll = 0.0f;
+  float g_x = 0.0f;
+  float g_y = 0.0f;
+  float g_z = 0.0f;
 
-  float temp;
+  float temp = 0.0f;
 };
 
 class MPU6050Driver : public Classes::BaseDriver {

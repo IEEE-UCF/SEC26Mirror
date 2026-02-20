@@ -13,6 +13,10 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    pkg_secbot_nav = get_package_share_directory('secbot_navigation')
+    config_file_path = os.path.join(pkg_secbot_nav, 'config', 'nav_sim.yaml')
+    arena_file_path = os.path.join(pkg_secbot_nav, 'config', 'arena_layout.yaml')
+
     # run the pathing node
     pathing_node = Node(
         package='secbot_navigation',
@@ -21,8 +25,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'use_sim': True,
-            'config_file': 'nav_sim.yaml',
-            'arena_file': 'arena_layout.yaml',
+            'config_file': config_file_path,
+            'arena_file': arena_file_path,
         }]
     )
 

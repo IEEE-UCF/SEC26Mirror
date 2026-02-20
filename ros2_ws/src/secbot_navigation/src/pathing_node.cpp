@@ -304,6 +304,97 @@ class PathingNode : public rclcpp::Node {
     }
   }
 
+  // FOLLOW PATH (Pure Pursuit) ------------------------------
+  void follow_path() {
+    if (!current_trajectory_ || current_trajectory_->get_points().empty()) {
+      stop_robot();
+      return;
+    }
+
+    // 1. Find Lookahead point
+    // Simple search: Find point > lookahead distance from robot
+    // (In a real implementation, we should project robot to path and search forward)
+    double target_x = current_trajectory_->get_points().back().x;
+    double target_y = current_trajectory_->get_points().back().y;
+    double target_v = 0.0;
+
+    bool found_target = false;
+    double min_dist_sq = std::numeric_limits<double>::max();
+    size_t closest_idx = 0;
+
+    // Find closest point first
+    const auto& pts = current_trajectory_->get_points();
+    for (size_t i = 0; i < pts.size(); ++i) {
+      double dx = pts[i].x - robot_x_;
+      double dy = pts[i].y - robot_y_;
+      double d2 = dx*dx + dy*dy;
+      if (d2 < min_dist_sq) {
+        min_dist_sq = d2;
+        closest_idx = i;
+      }
+    }
+
+    // Search forward from closest for a point ~ lookahead dist away
+    for (size_t i = closest_idx; i < pts.size(); ++i) {
+      double dx = pts[i].x - robot_x_;
+      double dy = pts[i].y - robot_y_;
+      double dist = std::hypot(dx, dy);
+
+      if (dist >= lookahead) {
+        target_x = pts[i].x;
+        target_y = pts[i].y;
+        target_v = pts[i].v; // Speed from trajectory
+        found_target = true;
+        break;
+      }
+    }
+
+    // 2. Pure Pursuit Control Law
+    double dx = target_x - robot_x_;
+    double dy = target_y - robot_y_;
+    double target_dist = std::hypot(dx, dy);
+    
+    // Transform to robot frame
+    double alpha = std::atan2(dy, dx) - robot_theta_;
+    // Normalize angle
+    while (alpha > M_PI) alpha -= 2.0 * M_PI;
+    while (alpha < -M_PI) alpha += 2.0 * M_PI;
+
+    // curvature (k = 2*sin(alpha) / L)
+    double curvature = 2.0 * std::sin(alpha) / target_dist;
+
+    // Command velocities
+    double speed_cmd = speed_; // Default to configured speed
+    if (found_target) { 
+        speed_cmd = std::min(speed_cmd, target_v);
+    }
+    
+    // Slow down if heading error is large
+    if (std::abs(alpha) > M_PI / 4.0) {
+        speed_cmd *= 0.5;
+    }
+    
+    // Or closer to goal?
+    if (target_dist < 0.5) {
+         speed_cmd = std::min(speed_cmd, 0.2); // Creep to goal
+    }
+
+    double ang_vel_cmd = curvature * speed_cmd;
+
+    // Clamp
+    speed_cmd = std::max(std::min(speed_cmd, (double)max_v_), -(double)max_v_);
+    ang_vel_cmd = std::max(std::min(ang_vel_cmd, (double)max_w_), -(double)max_w_);
+
+    // Publish
+    geometry_msgs::msg::Twist cmd;
+    cmd.linear.x = speed_cmd;
+    cmd.angular.z = ang_vel_cmd;
+    cmd_vel_pub_->publish(cmd);
+    
+    // Also publish to drive_base (existing code style)
+    // drive_cmd_pub_->... (optional if using cmd_vel)
+  }
+
   // CONVERTERS ==============================================
 
   // check if r and c in bounds ----------
@@ -629,6 +720,9 @@ class PathingNode : public rclcpp::Node {
         return;
       }
     }
+
+    // FOLLOW PATH
+    follow_path();
   }
 
   // PRINT THE INFO ===============================================

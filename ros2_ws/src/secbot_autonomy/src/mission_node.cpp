@@ -2,11 +2,17 @@
  * @file mission_node.cpp
  * @author Rafeed Khan
  * @brief Implementation of the mission sequencer state machine
- *  
+ *
+ * Minibot launches FIRST (state 2), antenna alignment folded into solve
+ * states, intake bridge replaces arm for pressure plate.
+ *
  * THINGS NEEDED IN REAL LIFE FOR IT TO BE ACCURATE
- * - Arena waypoint coordinates (the 7 POS_* constants in the header, currently placeholder floats)
- * - Arm joint IDs 5/6/7 (camera mast, minibot latch, drone latch), need confirmation from mechanical
- * - Light bar detection for WAIT_FOR_START (currently only checks manual btn1 press)
+ * - Arena waypoint coordinates (the POS_* constants in the header, currently
+ *   placeholder floats)
+ * - Servo joint IDs 5/6/7 (camera mast, minibot latch, drone latch), need
+ *   confirmation from mechanical
+ * - Light bar detection for WAIT_FOR_START (currently only checks manual btn1
+ *   press)
  */
 
 #include "secbot_autonomy/mission_node.hpp"
@@ -36,6 +42,9 @@ MissionNode::MissionNode() : Node("mission_node") {
       this->create_publisher<std_msgs::msg::Int16>("/intake_speed", 10);
   drone_cmd_pub_ = this->create_publisher<mcu_msgs::msg::DroneControl>(
       "/mcu_drone/control", 10);
+  bridge_cmd_pub_ =
+      this->create_publisher<mcu_msgs::msg::IntakeBridgeCommand>(
+          "/mcu_robot/intake_bridge/command", 10);
 
   // Subscribers
   goal_reached_sub_ = this->create_subscription<std_msgs::msg::Bool>(
@@ -54,9 +63,15 @@ MissionNode::MissionNode() : Node("mission_node") {
   robot_inputs_sub_ = this->create_subscription<mcu_msgs::msg::RobotInputs>(
       "/mcu_robot/inputs", 10,
       std::bind(&MissionNode::onRobotInputs, this, _1));
+  // Fixed topic: was /mcu_robot/intake_state, firmware publishes to
+  // /mcu_robot/intake/state
   intake_state_sub_ = this->create_subscription<mcu_msgs::msg::IntakeState>(
-      "/mcu_robot/intake_state", 10,
+      "/mcu_robot/intake/state", 10,
       std::bind(&MissionNode::onIntakeState, this, _1));
+  bridge_state_sub_ =
+      this->create_subscription<mcu_msgs::msg::IntakeBridgeState>(
+          "/mcu_robot/intake_bridge/state", 10,
+          std::bind(&MissionNode::onBridgeState, this, _1));
   duck_detect_sub_ =
       this->create_subscription<secbot_msgs::msg::DuckDetections>(
           "/duck_detections", 10,
@@ -119,11 +134,14 @@ void MissionNode::onIntakeState(
   duck_in_intake_ = msg->duck_detected;
 }
 
+void MissionNode::onBridgeState(
+    const mcu_msgs::msg::IntakeBridgeState::SharedPtr msg) {
+  bridge_state_ = msg->state;
+  bridge_duck_detected_ = msg->duck_detected;
+}
+
 void MissionNode::onDuckDetections(
     const secbot_msgs::msg::DuckDetections::SharedPtr msg) {
-  // Store approximate duck world position (robot position when duck is seen
-  // ofc) Only stores during pre-collection NAV phases, and only high-confidence
-  // detections
   for (const auto& det : msg->detections) {
     if (det.confidence < 0.7) continue;
 
@@ -147,7 +165,7 @@ void MissionNode::onDuckDetections(
                   duck_pos.x, duck_pos.y, known_duck_positions_.size());
     }
 
-    // Flag for duck interrupt (post step-9)
+    // Flag for duck interrupt (post COLLECT_KNOWN_DUCKS)
     if (duck_interrupt_enabled_ && !pending_duck_interrupt_) {
       pending_duck_interrupt_ = true;
       interrupt_duck_pos_ = duck_pos;
@@ -227,47 +245,65 @@ void MissionNode::setIntakeSpeed(int16_t speed) {
   intake_speed_pub_->publish(msg);
 }
 
+void MissionNode::sendBridgeCommand(uint8_t cmd) {
+  auto msg = mcu_msgs::msg::IntakeBridgeCommand();
+  msg.command = cmd;
+  bridge_cmd_pub_->publish(msg);
+}
+
+bool MissionNode::checkStateTimeout(double timeout_s) {
+  auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
+  double sec = std::chrono::duration<double>(elapsed).count();
+  if (sec > timeout_s) {
+    RCLCPP_WARN(this->get_logger(), "State %s timeout (%.1fs > %.1fs)",
+                phaseName(phase_), sec, timeout_s);
+    return true;
+  }
+  return false;
+}
+
 void MissionNode::transitionTo(MissionPhase phase) {
-  RCLCPP_INFO(this->get_logger(), "MISSION: %s -> %s", phaseName(phase_),
-              phaseName(phase));
+  auto match_elapsed = std::chrono::steady_clock::now() - match_start_;
+  double match_sec = std::chrono::duration<double>(match_elapsed).count();
+  RCLCPP_INFO(this->get_logger(), "MISSION [%.1fs]: %s -> %s", match_sec,
+              phaseName(phase_), phaseName(phase));
   phase_ = phase;
   phase_entry_ = true;
+  phase_timer_ = std::chrono::steady_clock::now();
 }
 
 const char* MissionNode::phaseName(MissionPhase phase) const {
   switch (phase) {
     case MissionPhase::WAIT_FOR_START:
       return "WAIT_FOR_START";
+    case MissionPhase::ROBOT_START:
+      return "ROBOT_START";
+    case MissionPhase::MINIBOT_LAUNCH:
+      return "MINIBOT_LAUNCH";
+    case MissionPhase::NAV_TO_UWB_CORNER:
+      return "NAV_TO_UWB_CORNER";
+    case MissionPhase::PLACE_UWB_BEACON:
+      return "PLACE_UWB_BEACON";
     case MissionPhase::NAV_TO_BUTTON:
       return "NAV_TO_BUTTON";
-    case MissionPhase::PLACE_UWB_MODULE:
-      return "PLACE_UWB_MODULE";
-    case MissionPhase::ALIGN_ANTENNA_1:
-      return "ALIGN_ANTENNA_1";
     case MissionPhase::SOLVE_BUTTON:
       return "SOLVE_BUTTON";
-    case MissionPhase::BACKUP_FROM_BUTTON:
-      return "BACKUP_FROM_BUTTON";
-    case MissionPhase::NAV_TO_CRANK:
-      return "NAV_TO_CRANK";
+    case MissionPhase::NAV_TO_CRANK_FLAG:
+      return "NAV_TO_CRANK_FLAG";
     case MissionPhase::PLACE_UWB_FLAG:
       return "PLACE_UWB_FLAG";
-    case MissionPhase::ALIGN_ANTENNA_2:
-      return "ALIGN_ANTENNA_2";
+    case MissionPhase::NAV_TO_CRANK:
+      return "NAV_TO_CRANK";
     case MissionPhase::SOLVE_CRANK:
       return "SOLVE_CRANK";
     case MissionPhase::COLLECT_KNOWN_DUCKS:
       return "COLLECT_KNOWN_DUCKS";
     case MissionPhase::NAV_TO_KEYPAD:
       return "NAV_TO_KEYPAD";
-    case MissionPhase::ALIGN_ANTENNA_4:
-      return "ALIGN_ANTENNA_4";
     case MissionPhase::SOLVE_KEYPAD:
       return "SOLVE_KEYPAD";
     case MissionPhase::NAV_TO_PRESSURE:
       return "NAV_TO_PRESSURE";
-    case MissionPhase::ALIGN_ANTENNA_3:
-      return "ALIGN_ANTENNA_3";
     case MissionPhase::SOLVE_PRESSURE:
       return "SOLVE_PRESSURE";
     case MissionPhase::DEPOSIT_DUCK:
@@ -276,14 +312,10 @@ const char* MissionNode::phaseName(MissionPhase phase) const {
       return "VIEW_LED_COLORS";
     case MissionPhase::NAV_TO_LAUNCH:
       return "NAV_TO_LAUNCH";
-    case MissionPhase::LAUNCH_MINIBOT:
-      return "LAUNCH_MINIBOT";
     case MissionPhase::LAUNCH_DRONE:
       return "LAUNCH_DRONE";
     case MissionPhase::NAV_TO_FINISH:
       return "NAV_TO_FINISH";
-    case MissionPhase::SIGNAL_MINIBOT_ENTER:
-      return "SIGNAL_MINIBOT_ENTER";
     case MissionPhase::MISSION_COMPLETE:
       return "MISSION_COMPLETE";
     case MissionPhase::DUCK_INTERRUPT_NAV:
@@ -304,9 +336,8 @@ const char* MissionNode::phaseName(MissionPhase phase) const {
 // Main State Machine
 
 void MissionNode::stepMission() {
-  // Duck interrupt check (active after COLLECT_KNOWN_DUCKS, step 9)
+  // Duck interrupt check (active after COLLECT_KNOWN_DUCKS)
   if (duck_interrupt_enabled_ && pending_duck_interrupt_) {
-    // Only interrupt during NAV wait phases (not mid-task or mid-backup)
     bool in_nav_phase = (phase_ == MissionPhase::NAV_TO_KEYPAD ||
                          phase_ == MissionPhase::NAV_TO_PRESSURE ||
                          phase_ == MissionPhase::NAV_TO_LAUNCH ||
@@ -324,103 +355,170 @@ void MissionNode::stepMission() {
   }
 
   switch (phase_) {
-    //  WAIT FOR START
+    // -- WAIT FOR START --
     case MissionPhase::WAIT_FOR_START: {
       if (phase_entry_) {
         RCLCPP_INFO(this->get_logger(),
                     "Waiting for start signal (button press or light bar)...");
         phase_entry_ = false;
       }
-      // Start on manual button press (btn1 from RobotInputs)
       if (start_button_pressed_) {
         match_start_ = std::chrono::steady_clock::now();
         RCLCPP_INFO(this->get_logger(), "MATCH STARTED (button press)!");
+        transitionTo(MissionPhase::ROBOT_START);
+      }
+      break;
+    }
+
+    // -- ROBOT START (readiness checks + settle) --
+    case MissionPhase::ROBOT_START: {
+      if (phase_entry_) {
+        RCLCPP_INFO(this->get_logger(),
+                    "Robot starting, settling for 0.5s...");
+        phase_entry_ = false;
+      }
+      auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
+      if (std::chrono::duration<double>(elapsed).count() >= 0.5) {
+        transitionTo(MissionPhase::MINIBOT_LAUNCH);
+      }
+      break;
+    }
+
+    // -- MINIBOT LAUNCH (moved to early in sequence) --
+    case MissionPhase::MINIBOT_LAUNCH: {
+      if (phase_entry_) {
+        RCLCPP_INFO(this->get_logger(), "Deploying minibot!");
+        // Open minibot container latch
+        sendArmCommand(JOINT_MINIBOT_LATCH, SERVO_EXTENDED, SERVO_SPEED);
+        phase_entry_ = false;
+      }
+      auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
+      double sec = std::chrono::duration<double>(elapsed).count();
+
+      // After 1s latch open, send forward command to start minibot's run
+      if (sec >= 1.0 && sec < 1.2) {
+        auto cmd = geometry_msgs::msg::Twist();
+        cmd.linear.x = 0.5;
+        minibot_cmd_pub_->publish(cmd);
+      }
+
+      // After 3s, close latch and advance
+      if (sec >= 3.0) {
+        sendArmCommand(JOINT_MINIBOT_LATCH, SERVO_RETRACTED, SERVO_SPEED);
+        RCLCPP_INFO(this->get_logger(),
+                    "Minibot deployed, navigating to UWB corner");
+        transitionTo(MissionPhase::NAV_TO_UWB_CORNER);
+      }
+      if (checkStateTimeout(5.0)) {
+        sendArmCommand(JOINT_MINIBOT_LATCH, SERVO_RETRACTED, SERVO_SPEED);
+        transitionTo(MissionPhase::NAV_TO_UWB_CORNER);
+      }
+      break;
+    }
+
+    // -- NAVIGATE TO UWB CORNER --
+    case MissionPhase::NAV_TO_UWB_CORNER: {
+      if (phase_entry_) {
+        sendNavGoal(POS_UWB_CORNER);
+        phase_entry_ = false;
+      }
+      if (goal_reached_) {
+        transitionTo(MissionPhase::PLACE_UWB_BEACON);
+      }
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
+        transitionTo(MissionPhase::PLACE_UWB_BEACON);
+      }
+      break;
+    }
+
+    // -- PLACE UWB BEACON (FlagPlant task) --
+    case MissionPhase::PLACE_UWB_BEACON: {
+      if (phase_entry_) {
+        RCLCPP_INFO(this->get_logger(), "Placing UWB beacon");
+        sendTaskCommand(TASK_FLAG_PLANT);
+        phase_entry_ = false;
+      }
+      if (task_idle_) {
+        transitionTo(MissionPhase::NAV_TO_BUTTON);
+      }
+      if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+        sendTaskCommand(TASK_NONE);
         transitionTo(MissionPhase::NAV_TO_BUTTON);
       }
       break;
     }
 
-    //  NAVIGATE TO BUTTON BEACON
+    // -- NAVIGATE TO BUTTON BEACON --
     case MissionPhase::NAV_TO_BUTTON: {
       if (phase_entry_) {
         sendNavGoal(POS_BUTTON_BEACON);
         phase_entry_ = false;
       }
       if (goal_reached_) {
-        transitionTo(MissionPhase::PLACE_UWB_MODULE);
+        transitionTo(MissionPhase::SOLVE_BUTTON);
       }
-      break;
-    }
-
-    //  PLACE UWB MODULE (FlagPlant task, drops UWB module via latch servo)
-    case MissionPhase::PLACE_UWB_MODULE: {
-      if (phase_entry_) {
-        RCLCPP_INFO(this->get_logger(),
-                    "Placing UWB module near button beacon");
-        sendTaskCommand(TASK_FLAG_PLANT);
-        phase_entry_ = false;
-      }
-      if (task_idle_) {
-        transitionTo(MissionPhase::ALIGN_ANTENNA_1);
-      }
-      break;
-    }
-
-    //  ALIGN TO ANTENNA 1
-    case MissionPhase::ALIGN_ANTENNA_1: {
-      if (phase_entry_) {
-        sendAntennaTarget(1);
-        sendTaskCommand(TASK_ANTENNA_ALIGN);
-        phase_entry_ = false;
-      }
-      if (task_idle_) {
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
         transitionTo(MissionPhase::SOLVE_BUTTON);
       }
       break;
     }
 
-    //  SOLVE BUTTON (press 3x)
+    // -- SOLVE BUTTON (align antenna 1, then press 3x) --
     case MissionPhase::SOLVE_BUTTON: {
       if (phase_entry_) {
-        sendTaskCommand(TASK_BUTTON_PRESS);
+        sub_step_ = SolveSubStep::ALIGN_ANTENNA;
+        sendAntennaTarget(1);
+        sendTaskCommand(TASK_ANTENNA_ALIGN);
+        RCLCPP_INFO(this->get_logger(), "Aligning to antenna 1");
         phase_entry_ = false;
       }
-      if (task_idle_) {
-        transitionTo(MissionPhase::BACKUP_FROM_BUTTON);
+
+      switch (sub_step_) {
+        case SolveSubStep::ALIGN_ANTENNA:
+          if (task_idle_) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            sendTaskCommand(TASK_BUTTON_PRESS);
+            RCLCPP_INFO(this->get_logger(), "Pressing button");
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            sendTaskCommand(TASK_BUTTON_PRESS);
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          break;
+        case SolveSubStep::EXECUTE_TASK:
+          if (task_idle_) {
+            transitionTo(MissionPhase::NAV_TO_CRANK_FLAG);
+          }
+          if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+            sendTaskCommand(TASK_NONE);
+            transitionTo(MissionPhase::NAV_TO_CRANK_FLAG);
+          }
+          break;
+        case SolveSubStep::DONE:
+          transitionTo(MissionPhase::NAV_TO_CRANK_FLAG);
+          break;
       }
       break;
     }
 
-    //  BACKUP FROM BUTTON
-    case MissionPhase::BACKUP_FROM_BUTTON: {
+    // -- NAVIGATE TO CRANK FLAG POSITION --
+    case MissionPhase::NAV_TO_CRANK_FLAG: {
       if (phase_entry_) {
-        sendBackup(0.3, 1.0);
-        phase_entry_ = false;
-      }
-      auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-      if (std::chrono::duration<double>(elapsed).count() >=
-          backup_duration_sec_) {
-        auto stop = geometry_msgs::msg::Twist();
-        cmd_vel_pub_->publish(stop);
-        transitionTo(MissionPhase::NAV_TO_CRANK);
-      }
-      break;
-    }
-
-    //  NAVIGATE TO CRANK BEACON
-    case MissionPhase::NAV_TO_CRANK: {
-      if (phase_entry_) {
-        sendNavGoal(POS_CRANK_BEACON);
+        sendNavGoal(POS_CRANK_FLAG);
         phase_entry_ = false;
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::PLACE_UWB_FLAG);
       }
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
+        transitionTo(MissionPhase::PLACE_UWB_FLAG);
+      }
       break;
     }
 
-    //  PLACE UWB FLAG (FlagPlant task, drops UWB flag via latch servo again
-    //  lawl)
+    // -- PLACE UWB FLAG --
     case MissionPhase::PLACE_UWB_FLAG: {
       if (phase_entry_) {
         RCLCPP_INFO(this->get_logger(), "Placing UWB flag at crank beacon");
@@ -428,37 +526,71 @@ void MissionNode::stepMission() {
         phase_entry_ = false;
       }
       if (task_idle_) {
-        transitionTo(MissionPhase::ALIGN_ANTENNA_2);
+        transitionTo(MissionPhase::NAV_TO_CRANK);
+      }
+      if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+        sendTaskCommand(TASK_NONE);
+        transitionTo(MissionPhase::NAV_TO_CRANK);
       }
       break;
     }
 
-    //  ALIGN TO ANTENNA 2
-    case MissionPhase::ALIGN_ANTENNA_2: {
+    // -- NAVIGATE TO CRANK --
+    case MissionPhase::NAV_TO_CRANK: {
       if (phase_entry_) {
-        sendAntennaTarget(2);
-        sendTaskCommand(TASK_ANTENNA_ALIGN);
+        sendNavGoal(POS_CRANK_APPROACH);
         phase_entry_ = false;
       }
-      if (task_idle_) {
+      if (goal_reached_) {
+        transitionTo(MissionPhase::SOLVE_CRANK);
+      }
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
         transitionTo(MissionPhase::SOLVE_CRANK);
       }
       break;
     }
 
-    //  SOLVE CRANK (540 degrees)
+    // -- SOLVE CRANK (align antenna 2, then 540 degrees) --
     case MissionPhase::SOLVE_CRANK: {
       if (phase_entry_) {
-        sendTaskCommand(TASK_CRANK_TURN);
+        sub_step_ = SolveSubStep::ALIGN_ANTENNA;
+        sendAntennaTarget(2);
+        sendTaskCommand(TASK_ANTENNA_ALIGN);
+        RCLCPP_INFO(this->get_logger(), "Aligning to antenna 2");
         phase_entry_ = false;
       }
-      if (task_idle_) {
-        transitionTo(MissionPhase::COLLECT_KNOWN_DUCKS);
+
+      switch (sub_step_) {
+        case SolveSubStep::ALIGN_ANTENNA:
+          if (task_idle_) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            sendTaskCommand(TASK_CRANK_TURN);
+            RCLCPP_INFO(this->get_logger(), "Turning crank");
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            sendTaskCommand(TASK_CRANK_TURN);
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          break;
+        case SolveSubStep::EXECUTE_TASK:
+          if (task_idle_) {
+            transitionTo(MissionPhase::COLLECT_KNOWN_DUCKS);
+          }
+          if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+            sendTaskCommand(TASK_NONE);
+            transitionTo(MissionPhase::COLLECT_KNOWN_DUCKS);
+          }
+          break;
+        case SolveSubStep::DONE:
+          transitionTo(MissionPhase::COLLECT_KNOWN_DUCKS);
+          break;
       }
       break;
     }
 
-    //  COLLECT KNOWN DUCKS (multi-step loop: nav -> capture -> deposit each)
+    // -- COLLECT KNOWN DUCKS (multi-step loop) --
     case MissionPhase::COLLECT_KNOWN_DUCKS: {
       if (phase_entry_) {
         duck_collect_index_ = 0;
@@ -493,7 +625,6 @@ void MissionNode::stepMission() {
           break;
         }
         case DuckCollectStep::WAIT_CAPTURE: {
-          // Wait for duck capture or 3s timeout
           auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
           if (duck_in_intake_ ||
               std::chrono::duration<double>(elapsed).count() >= 3.0) {
@@ -537,84 +668,177 @@ void MissionNode::stepMission() {
           break;
         }
       }
+      // Overall duck collection timeout
+      if (checkStateTimeout(60.0)) {
+        setIntakeSpeed(INTAKE_OFF_SPEED);
+        duck_interrupt_enabled_ = true;
+        transitionTo(MissionPhase::NAV_TO_KEYPAD);
+      }
       break;
     }
 
-    //  NAVIGATE TO KEYPAD BEACON
+    // -- NAVIGATE TO KEYPAD BEACON --
     case MissionPhase::NAV_TO_KEYPAD: {
       if (phase_entry_) {
         sendNavGoal(POS_KEYPAD_BEACON);
         phase_entry_ = false;
       }
       if (goal_reached_) {
-        transitionTo(MissionPhase::ALIGN_ANTENNA_4);
+        transitionTo(MissionPhase::SOLVE_KEYPAD);
       }
-      break;
-    }
-
-    //  ALIGN TO ANTENNA 4
-    case MissionPhase::ALIGN_ANTENNA_4: {
-      if (phase_entry_) {
-        sendAntennaTarget(4);
-        sendTaskCommand(TASK_ANTENNA_ALIGN);
-        phase_entry_ = false;
-      }
-      if (task_idle_) {
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
         transitionTo(MissionPhase::SOLVE_KEYPAD);
       }
       break;
     }
 
-    //  SOLVE KEYPAD (it types "73738#")
+    // -- SOLVE KEYPAD (align antenna 4, then type code) --
     case MissionPhase::SOLVE_KEYPAD: {
       if (phase_entry_) {
-        sendTaskCommand(TASK_KEYPAD_ENTER);
+        sub_step_ = SolveSubStep::ALIGN_ANTENNA;
+        sendAntennaTarget(4);
+        sendTaskCommand(TASK_ANTENNA_ALIGN);
+        RCLCPP_INFO(this->get_logger(), "Aligning to antenna 4");
         phase_entry_ = false;
       }
-      if (task_idle_) {
-        transitionTo(MissionPhase::NAV_TO_PRESSURE);
+
+      switch (sub_step_) {
+        case SolveSubStep::ALIGN_ANTENNA:
+          if (task_idle_) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            sendTaskCommand(TASK_KEYPAD_ENTER);
+            RCLCPP_INFO(this->get_logger(), "Entering keypad code");
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            sendTaskCommand(TASK_KEYPAD_ENTER);
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          break;
+        case SolveSubStep::EXECUTE_TASK:
+          if (task_idle_) {
+            transitionTo(MissionPhase::NAV_TO_PRESSURE);
+          }
+          if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+            sendTaskCommand(TASK_NONE);
+            transitionTo(MissionPhase::NAV_TO_PRESSURE);
+          }
+          break;
+        case SolveSubStep::DONE:
+          transitionTo(MissionPhase::NAV_TO_PRESSURE);
+          break;
       }
       break;
     }
 
-    //  NAVIGATE TO PRESSURE PLATE
+    // -- NAVIGATE TO PRESSURE PLATE --
     case MissionPhase::NAV_TO_PRESSURE: {
       if (phase_entry_) {
         sendNavGoal(POS_PRESSURE_PLATE);
         phase_entry_ = false;
       }
       if (goal_reached_) {
-        transitionTo(MissionPhase::ALIGN_ANTENNA_3);
+        transitionTo(MissionPhase::SOLVE_PRESSURE);
       }
-      break;
-    }
-
-    //  ALIGN TO ANTENNA 3
-    case MissionPhase::ALIGN_ANTENNA_3: {
-      if (phase_entry_) {
-        sendAntennaTarget(3);
-        sendTaskCommand(TASK_ANTENNA_ALIGN);
-        phase_entry_ = false;
-      }
-      if (task_idle_) {
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
         transitionTo(MissionPhase::SOLVE_PRESSURE);
       }
       break;
     }
 
-    //  SOLVE PRESSURE (sweep duck off plate into intake)
+    // -- SOLVE PRESSURE (align antenna 3, then intake bridge sub-FSM) --
     case MissionPhase::SOLVE_PRESSURE: {
       if (phase_entry_) {
-        sendTaskCommand(TASK_PRESSURE_CLEAR);
+        sub_step_ = SolveSubStep::ALIGN_ANTENNA;
+        sendAntennaTarget(3);
+        sendTaskCommand(TASK_ANTENNA_ALIGN);
+        RCLCPP_INFO(this->get_logger(), "Aligning to antenna 3");
         phase_entry_ = false;
       }
-      if (task_idle_) {
-        transitionTo(MissionPhase::DEPOSIT_DUCK);
+
+      switch (sub_step_) {
+        case SolveSubStep::ALIGN_ANTENNA:
+          if (task_idle_) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            bridge_step_ = IntakeBridgeStep::EXTEND;
+            RCLCPP_INFO(this->get_logger(),
+                        "Antenna aligned, starting intake bridge");
+            // Send extend command and start intake
+            sendBridgeCommand(
+                mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
+            setIntakeSpeed(INTAKE_CAPTURE_SPEED);
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
+            sub_step_ = SolveSubStep::EXECUTE_TASK;
+            bridge_step_ = IntakeBridgeStep::EXTEND;
+            sendBridgeCommand(
+                mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
+            setIntakeSpeed(INTAKE_CAPTURE_SPEED);
+            phase_timer_ = std::chrono::steady_clock::now();
+          }
+          break;
+
+        case SolveSubStep::EXECUTE_TASK: {
+          auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
+          double sec = std::chrono::duration<double>(elapsed).count();
+
+          switch (bridge_step_) {
+            case IntakeBridgeStep::EXTEND:
+              if (bridge_state_ ==
+                      mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED ||
+                  sec >= 3.0) {
+                bridge_step_ = IntakeBridgeStep::WAIT_CAPTURE;
+                phase_timer_ = std::chrono::steady_clock::now();
+                RCLCPP_INFO(this->get_logger(),
+                            "Bridge extended, waiting for duck");
+              }
+              break;
+            case IntakeBridgeStep::WAIT_CAPTURE:
+              if (bridge_duck_detected_ || sec >= 2.0) {
+                bridge_step_ = IntakeBridgeStep::RETRACT;
+                sendBridgeCommand(
+                    mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT);
+                phase_timer_ = std::chrono::steady_clock::now();
+                RCLCPP_INFO(this->get_logger(),
+                            "Retracting bridge (duck=%s)",
+                            bridge_duck_detected_ ? "yes" : "timeout");
+              }
+              break;
+            case IntakeBridgeStep::RETRACT:
+              if (bridge_state_ ==
+                      mcu_msgs::msg::IntakeBridgeState::STATE_STOWED ||
+                  sec >= 3.0) {
+                setIntakeSpeed(INTAKE_OFF_SPEED);
+                bridge_step_ = IntakeBridgeStep::DONE;
+                RCLCPP_INFO(this->get_logger(),
+                            "Bridge retracted, pressure clear complete");
+              }
+              break;
+            case IntakeBridgeStep::DONE:
+              transitionTo(MissionPhase::DEPOSIT_DUCK);
+              break;
+          }
+
+          // Overall pressure solve timeout
+          if (checkStateTimeout(15.0)) {
+            sendBridgeCommand(
+                mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
+            setIntakeSpeed(INTAKE_OFF_SPEED);
+            transitionTo(MissionPhase::DEPOSIT_DUCK);
+          }
+          break;
+        }
+
+        case SolveSubStep::DONE:
+          transitionTo(MissionPhase::DEPOSIT_DUCK);
+          break;
       }
       break;
     }
 
-    //  DEPOSIT DUCK (nav to target zone + eject from intake)
+    // -- DEPOSIT DUCK (nav to target zone + eject from intake) --
     case MissionPhase::DEPOSIT_DUCK: {
       if (phase_entry_) {
         deposit_step_ = DepositStep::NAV_TO_ZONE;
@@ -655,10 +879,14 @@ void MissionNode::stepMission() {
           break;
         }
       }
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
+        setIntakeSpeed(INTAKE_OFF_SPEED);
+        transitionTo(MissionPhase::VIEW_LED_COLORS);
+      }
       break;
     }
 
-    //  VIEW LED COLORS (extend camera mast, read antenna LEDs)
+    // -- VIEW LED COLORS (extend camera mast, read antenna LEDs) --
     case MissionPhase::VIEW_LED_COLORS: {
       if (phase_entry_) {
         led_step_ = LedReadStep::EXTEND_CAMERA;
@@ -671,13 +899,12 @@ void MissionNode::stepMission() {
 
       switch (led_step_) {
         case LedReadStep::EXTEND_CAMERA: {
-          sendArmCommand(JOINT_CAMERA_MAST, ARM_EXTENDED, ARM_SPEED);
+          sendArmCommand(JOINT_CAMERA_MAST, SERVO_EXTENDED, SERVO_SPEED);
           phase_timer_ = std::chrono::steady_clock::now();
           led_step_ = LedReadStep::READING;
           break;
         }
         case LedReadStep::READING: {
-          // Wait for all 4 antenna colors or 5s timeout
           auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
           if (antennas_read_ >= 4 ||
               std::chrono::duration<double>(elapsed).count() >= 5.0) {
@@ -688,13 +915,12 @@ void MissionNode::stepMission() {
           break;
         }
         case LedReadStep::RETRACT_CAMERA: {
-          sendArmCommand(JOINT_CAMERA_MAST, ARM_RETRACTED, ARM_SPEED);
+          sendArmCommand(JOINT_CAMERA_MAST, SERVO_RETRACTED, SERVO_SPEED);
           phase_timer_ = std::chrono::steady_clock::now();
           led_step_ = LedReadStep::DONE;
           break;
         }
         case LedReadStep::DONE: {
-          // Brief wait for retraction
           auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
           if (std::chrono::duration<double>(elapsed).count() >= 1.0) {
             transitionTo(MissionPhase::NAV_TO_LAUNCH);
@@ -702,57 +928,33 @@ void MissionNode::stepMission() {
           break;
         }
       }
+      if (checkStateTimeout(10.0)) {
+        sendArmCommand(JOINT_CAMERA_MAST, SERVO_RETRACTED, SERVO_SPEED);
+        transitionTo(MissionPhase::NAV_TO_LAUNCH);
+      }
       break;
     }
 
-    //  NAVIGATE TO LAUNCH POINT
+    // -- NAVIGATE TO LAUNCH POINT --
     case MissionPhase::NAV_TO_LAUNCH: {
       if (phase_entry_) {
         sendNavGoal(POS_LAUNCH_POINT);
         phase_entry_ = false;
       }
       if (goal_reached_) {
-        transitionTo(MissionPhase::LAUNCH_MINIBOT);
+        transitionTo(MissionPhase::LAUNCH_DRONE);
       }
-      break;
-    }
-
-    //  LAUNCH MINIBOT (release latch + send drive command)
-    case MissionPhase::LAUNCH_MINIBOT: {
-      if (phase_entry_) {
-        RCLCPP_INFO(this->get_logger(), "Deploying minibot!");
-        // Open minibot container latch
-        sendArmCommand(JOINT_MINIBOT_LATCH, ARM_EXTENDED, ARM_SPEED);
-        phase_timer_ = std::chrono::steady_clock::now();
-        phase_entry_ = false;
-      }
-      auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-      double sec = std::chrono::duration<double>(elapsed).count();
-
-      // After 1s latch open, send forward command to start minibot's run
-      if (sec >= 1.0 && sec < 1.2) {
-        auto cmd = geometry_msgs::msg::Twist();
-        cmd.linear.x = 0.5;
-        minibot_cmd_pub_->publish(cmd);
-      }
-
-      // After 3s, close latch and advance
-      if (sec >= 3.0) {
-        sendArmCommand(JOINT_MINIBOT_LATCH, ARM_RETRACTED, ARM_SPEED);
-        RCLCPP_INFO(this->get_logger(),
-                    "Minibot deployed, moving to drone launch");
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
         transitionTo(MissionPhase::LAUNCH_DRONE);
       }
       break;
     }
 
-    //  LAUNCH DRONE (release latch + send takeoff command)
+    // -- LAUNCH DRONE (release latch + send takeoff command) --
     case MissionPhase::LAUNCH_DRONE: {
       if (phase_entry_) {
         RCLCPP_INFO(this->get_logger(), "Deploying drone!");
-        // Open drone container latch
-        sendArmCommand(JOINT_DRONE_LATCH, ARM_EXTENDED, ARM_SPEED);
-        phase_timer_ = std::chrono::steady_clock::now();
+        sendArmCommand(JOINT_DRONE_LATCH, SERVO_EXTENDED, SERVO_SPEED);
         phase_entry_ = false;
       }
       auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
@@ -762,59 +964,47 @@ void MissionNode::stepMission() {
       if (sec >= 1.0 && sec < 1.2) {
         auto cmd = mcu_msgs::msg::DroneControl();
         cmd.header.stamp = this->now();
-        cmd.twist.linear.z = 1.0;  // upward velocity for takeoff
+        cmd.twist.linear.z = 1.0;
         drone_cmd_pub_->publish(cmd);
       }
 
       // Wait for drone to take off (3s or drone reports RUNNING)
       if (sec >= 3.0 || drone_state_ == mcu_msgs::msg::DroneState::RUNNING) {
-        sendArmCommand(JOINT_DRONE_LATCH, ARM_RETRACTED, ARM_SPEED);
+        sendArmCommand(JOINT_DRONE_LATCH, SERVO_RETRACTED, SERVO_SPEED);
         RCLCPP_INFO(this->get_logger(), "Drone deployed, navigating to finish");
+        transitionTo(MissionPhase::NAV_TO_FINISH);
+      }
+      if (checkStateTimeout(5.0)) {
+        sendArmCommand(JOINT_DRONE_LATCH, SERVO_RETRACTED, SERVO_SPEED);
         transitionTo(MissionPhase::NAV_TO_FINISH);
       }
       break;
     }
 
-    //  NAVIGATE TO FINISH / PARK
+    // -- NAVIGATE TO FINISH / PARK --
     case MissionPhase::NAV_TO_FINISH: {
       if (phase_entry_) {
         sendNavGoal(POS_FINISH);
         phase_entry_ = false;
       }
       if (goal_reached_) {
-        transitionTo(MissionPhase::SIGNAL_MINIBOT_ENTER);
-      }
-      break;
-    }
-
-    //  SIGNAL MINIBOT TO ENTER START ZONE (drive into robot intake)
-    case MissionPhase::SIGNAL_MINIBOT_ENTER: {
-      if (phase_entry_) {
+        // Signal minibot to return
         RCLCPP_INFO(this->get_logger(),
-                    "Signaling minibot to enter start zone");
-        // Send drive command to minibot to come back into the robot
+                    "At finish, signaling minibot to enter start zone");
         auto cmd = geometry_msgs::msg::Twist();
         cmd.linear.x = 0.3;
         minibot_cmd_pub_->publish(cmd);
         phase_timer_ = std::chrono::steady_clock::now();
-        phase_entry_ = false;
+        // Wait briefly for minibot, then complete
+        transitionTo(MissionPhase::MISSION_COMPLETE);
       }
-
-      auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-      double sec = std::chrono::duration<double>(elapsed).count();
-
-      // Wait for minibot to board (check TASK_BOARD_ROBOT) or 5s timeout
-      if (minibot_task_ == mcu_msgs::msg::MiniRobotState::TASK_BOARD_ROBOT ||
-          sec >= 5.0) {
-        // Stop minibot
-        auto stop = geometry_msgs::msg::Twist();
-        minibot_cmd_pub_->publish(stop);
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
         transitionTo(MissionPhase::MISSION_COMPLETE);
       }
       break;
     }
 
-    //  MISSION COMPLETE!!!
+    // -- MISSION COMPLETE --
     case MissionPhase::MISSION_COMPLETE: {
       if (phase_entry_) {
         auto elapsed = std::chrono::steady_clock::now() - match_start_;
@@ -828,15 +1018,16 @@ void MissionNode::stepMission() {
         minibot_cmd_pub_->publish(stop);
         sendTaskCommand(TASK_NONE);
         setIntakeSpeed(INTAKE_OFF_SPEED);
+        sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
 
         phase_entry_ = false;
       }
       break;
     }
 
-    // DUCK INTERRUPT STATES (entered when duck detected post step 9)
+    // -- DUCK INTERRUPT STATES --
 
-    //  Navigate to detected duck
+    // Navigate to detected duck
     case MissionPhase::DUCK_INTERRUPT_NAV: {
       if (phase_entry_) {
         sendNavGoal(interrupt_duck_pos_);
@@ -845,14 +1036,16 @@ void MissionNode::stepMission() {
       if (goal_reached_) {
         transitionTo(MissionPhase::DUCK_INTERRUPT_CAPTURE);
       }
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
+        transitionTo(MissionPhase::DUCK_INTERRUPT_RESUME);
+      }
       break;
     }
 
-    //  Activate intake to capture duck
+    // Activate intake to capture duck
     case MissionPhase::DUCK_INTERRUPT_CAPTURE: {
       if (phase_entry_) {
         setIntakeSpeed(INTAKE_CAPTURE_SPEED);
-        phase_timer_ = std::chrono::steady_clock::now();
         phase_entry_ = false;
       }
       auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
@@ -864,7 +1057,7 @@ void MissionNode::stepMission() {
       break;
     }
 
-    //  Navigate to deposit zone
+    // Navigate to deposit zone
     case MissionPhase::DUCK_INTERRUPT_DEPOSIT_NAV: {
       if (phase_entry_) {
         sendNavGoal(POS_DUCK_DEPOSIT);
@@ -873,14 +1066,16 @@ void MissionNode::stepMission() {
       if (goal_reached_) {
         transitionTo(MissionPhase::DUCK_INTERRUPT_DEPOSIT);
       }
+      if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
+        transitionTo(MissionPhase::DUCK_INTERRUPT_RESUME);
+      }
       break;
     }
 
-    //  Eject duck at deposit zone
+    // Eject duck at deposit zone
     case MissionPhase::DUCK_INTERRUPT_DEPOSIT: {
       if (phase_entry_) {
         setIntakeSpeed(INTAKE_EJECT_SPEED);
-        phase_timer_ = std::chrono::steady_clock::now();
         phase_entry_ = false;
       }
       auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
@@ -892,18 +1087,21 @@ void MissionNode::stepMission() {
       break;
     }
 
-    //  Resume the saved phase
+    // Resume the saved phase (fix: re-send nav goal by setting phase_entry_
+    // true)
     case MissionPhase::DUCK_INTERRUPT_RESUME: {
       RCLCPP_INFO(this->get_logger(), "Duck interrupt complete, resuming %s",
                   phaseName(saved_phase_));
       phase_ = saved_phase_;
-      phase_entry_ = saved_phase_entry_;
+      // Fix race condition: always set phase_entry_=true so nav goal is re-sent
+      phase_entry_ = true;
+      phase_timer_ = std::chrono::steady_clock::now();
       break;
     }
 
   }  // end switch
 
-  // Match time check (5 minute safety, so we force finish at 4:55)
+  // Match time check (5 minute safety, force finish at 4:55)
   if (phase_ != MissionPhase::WAIT_FOR_START &&
       phase_ != MissionPhase::MISSION_COMPLETE) {
     auto elapsed = std::chrono::steady_clock::now() - match_start_;

@@ -21,6 +21,7 @@
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
+#include "robot/subsystems/IntakeBridgeSubsystem.h"
 #include "robot/subsystems/IntakeSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
@@ -80,6 +81,15 @@ static IntakeSubsystemSetup g_intake_setup("intake_subsystem", /*pwm*/ 3,
                                            /*dir*/ 4, /*ir*/ 5);
 static IntakeSubsystem g_intake(g_intake_setup);
 
+// --- Intake bridge subsystem (gear-and-rack for pressure plate) ---
+// TODO: confirm rack motor and TOF pin numbers with electrical team
+static IntakeBridgeSubsystemSetup g_bridge_setup(
+    "intake_bridge_subsystem", /*rack_pwm*/ 6, /*rack_dir*/ 7,
+    /*tof_xshut*/ 8, /*tof_addr*/ 0x30,
+    /*extend_timeout_ms*/ 3000, /*retract_timeout_ms*/ 3000,
+    /*duck_detect_threshold_mm*/ 50, /*motor_speed*/ 200);
+static IntakeBridgeSubsystem g_bridge(g_bridge_setup);
+
 // --- Drive subsystem ---
 // TODO: Replace placeholder pin values with actual hardware wiring config
 // static DriveBaseSetup g_drive_base_setup( ... encoder/motor configs ... );
@@ -117,6 +127,7 @@ void setup() {
   g_arm.init();
   g_rc.init();
   g_intake.init();
+  g_bridge.init();
   // g_drive.init();  // TODO: uncomment when DriveSubsystem is configured
 
   // 2. Register micro-ROS participants
@@ -127,6 +138,7 @@ void setup() {
   g_mr.registerParticipant(&g_arm);
   g_mr.registerParticipant(&g_rc);
   g_mr.registerParticipant(&g_intake);
+  g_mr.registerParticipant(&g_bridge);
   // g_mr.registerParticipant(&g_drive);  // TODO: uncomment when configured
 
   // 3. Start FreeRTOS tasks
@@ -139,6 +151,7 @@ void setup() {
   g_sensor.beginThreaded(1024, 1, 100);   // 10Hz TOF
   g_hb.beginThreaded(512, 1, 200);        // 5Hz heartbeat
   g_intake.beginThreaded(1024, 2, 20);    // 50Hz intake
+  g_bridge.beginThreaded(1024, 2, 20);   // 50Hz intake bridge
   // g_drive.beginThreaded( 2048,     3,        20     );  // 50Hz drive control
   xTaskCreate(pca_task, "pca", 512, nullptr, 2, nullptr);  // 50Hz PWM flush
 

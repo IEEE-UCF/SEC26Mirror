@@ -22,6 +22,9 @@ bool IntakeBridgeSubsystem::init() {
   pinMode(setup_.rack_pwm_pin_, OUTPUT);
   pinMode(setup_.rack_dir_pin_, OUTPUT);
 
+  // Home switch -- active LOW (reads 0 when at home position)
+  pinMode(setup_.home_switch_pin_, INPUT_PULLUP);
+
   // Set PWM frequency for Teensy motor smoothness
   analogWriteFrequency(setup_.rack_pwm_pin_, 18310.55);
 
@@ -56,6 +59,9 @@ void IntakeBridgeSubsystem::begin() {
 }
 
 void IntakeBridgeSubsystem::update() {
+  // Read home switch (active LOW -- 0 means at home)
+  home_switch_active_ = (digitalRead(setup_.home_switch_pin_) == LOW);
+
   // Read TOF sensor
   readTofSensor();
 
@@ -217,6 +223,7 @@ void IntakeBridgeSubsystem::updateStateMachine() {
   // State-specific logic
   switch (state_) {
     case IntakeBridgeState::STOWED:
+      // If home switch is active, don't move in retract direction
       setMotorOff();
       break;
 
@@ -240,11 +247,18 @@ void IntakeBridgeSubsystem::updateStateMachine() {
       break;
 
     case IntakeBridgeState::RETRACTING:
-      setMotorRetract();
-      // Timeout check -- if retract takes too long, error
-      if (time_in_state >= setup_.retract_timeout_ms_) {
+      // Home switch active (LOW) -- stop, we're home
+      if (home_switch_active_) {
+        setMotorOff();
         retract_count_++;
         transitionTo(IntakeBridgeState::STOWED);
+      } else {
+        setMotorRetract();
+        // Safety timeout fallback if switch never triggers
+        if (time_in_state >= setup_.retract_timeout_ms_) {
+          retract_count_++;
+          transitionTo(IntakeBridgeState::STOWED);
+        }
       }
       break;
 

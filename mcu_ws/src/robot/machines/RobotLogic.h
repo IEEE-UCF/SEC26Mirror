@@ -82,10 +82,10 @@ static IntakeSubsystemSetup g_intake_setup("intake_subsystem", /*pwm*/ 3,
 static IntakeSubsystem g_intake(g_intake_setup);
 
 // --- Intake bridge subsystem (gear-and-rack for pressure plate) ---
-// TODO: confirm rack motor and TOF pin numbers with electrical team
+// TODO: confirm rack motor, home switch, and TOF pin numbers with electrical team
 static IntakeBridgeSubsystemSetup g_bridge_setup(
     "intake_bridge_subsystem", /*rack_pwm*/ 6, /*rack_dir*/ 7,
-    /*tof_xshut*/ 8, /*tof_addr*/ 0x30,
+    /*home_switch*/ 9, /*tof_xshut*/ 8, /*tof_addr*/ 0x30,
     /*extend_timeout_ms*/ 3000, /*retract_timeout_ms*/ 3000,
     /*duck_detect_threshold_mm*/ 50, /*motor_speed*/ 200);
 static IntakeBridgeSubsystem g_bridge(g_bridge_setup);

@@ -1,33 +1,23 @@
-#include "MiniBotIMUSubsystem.h"
+#include "MiniBotSubsystem.h"
 
 namespace Subsystem {
 
-// change these later if needed
-static char frame_name[] = "imu_link";
+const char[] imu_frame = "imu_link";
 
-void MiniBotIMUSubsystem::begin() {
-  if (!mpu_.init()) return;
+void MiniBotSubsystem::begin() {}
 
-  calibrate();
-}
+void MiniBotSubsystem::update() {}
 
-void MiniBotIMUSubsystem::update() { mpu_.update(); }
+void MiniBotSubsystem::reset() {}
 
-void MiniBotIMUSubsystem::pause() {}
+void MiniBotSubsystem::pause() {}
 
-void MiniBotIMUSubsystem::reset() { pause(); }
-
-const char* MiniBotIMUSubsystem::getInfo() {
-  const char info[] = "MiniBotIMUSubsystem";
-  return info;
-}
-
-bool MiniBotIMUSubsystem::onCreate(rcl_node_t* node,
-                                   rclc_executor_t* executor) {
+bool MiniBotSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   node_ = node;
   executor_ = executor;
 
   sensor_msgs__msg__Imu_init(&mpu_msg_);
+  mcu_msgs__msg__UWBRanging_init(&uwb_msg_);
 
   if (RCL_RET_OK != rclc_publisher_init_best_effort(
                         &mpu_pub_, node_,
@@ -36,22 +26,43 @@ bool MiniBotIMUSubsystem::onCreate(rcl_node_t* node,
     return false;
   }
 
+  if (RCL_RET_OK != rclc_publisher_init_best_effort(
+                        &uwb_pub_, node_,
+                        ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, UWBRanging),
+                        "/minibot/uwb/data")) {
+    return false;
+  }
+
+  if (RCL_RET_OK !=
+      rclc_publisher_init_best_effort(
+          &batt_pub_, node_,
+          ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, BatteryHealth),
+          "/minibot/battery_health")) {
+    return false;
+  }
+
+  /* if (RCL_RET_OK != rclc_executor_add_subscription_with_context(
+                        executor_, &drive_sub_, &drive_msg_,
+                        &MiniBotSubsystem::drive_callback, this, ON_NEW_DATA)) {
+    return false;
+  } */
+
+  if (RCL_RET_OK != rclc_executor_add_subscription_with_context(
+                        executor_, &led_sub_, &led_msg_,
+                        &MiniBotSubsystem::led_callback, this, ON_NEW_DATA)) {
+    return false;
+  }
+
   return true;
 }
-void MiniBotIMUSubsystem::onDestroy() {
-  rcl_publisher_fini(&mpu_pub_, node_);
-  mcu_msgs__msg__DriveBase__fini(&mpu_msg_);
-  sensor_msgs__msg__Imu__fini(&mpu_msg_);
-  node_ = nullptr;
-}
 
-void MiniBotIMUSubsystem::publishData() {
-  data_ = mpu_.getData();
+void MiniBotSubsystem::imu_pub() {
+  mpu_data_ = mpu_.getData();
 
   int64_t time_ns = rmw_uros_epoch_nanos();
-  mpu_msg_.header.frame_id.data = frame_name;
-  mpu_msg_.header.frame_id.size = strlen(frame_name);
-  mpu_msg_.header.frame_id.capacity = strlen(frame_name) + 1;
+  mpu_msg_.header.frame_id.data = imu_framee;
+  mpu_msg_.header.frame_id.size = strlen(imu_frame);
+  mpu_msg_.header.frame_id.capacity = strlen(imu_frame) + 1;
 
   mpu_msg_.header.stamp.sec = (int32_t)(time_ns / 1000000000);
   mpu_msg_.header.stamp.nanosec = (int32_t)(time_ns % 1000000000);
@@ -78,10 +89,14 @@ void MiniBotIMUSubsystem::publishData() {
   mpu_msg_.linear_acceleration_covariance[4] = 0.001f;
   mpu_msg_.linear_acceleration_covariance[8] = 0.001f;
 
-  rclc_publish(&mpu_pub_, &mpu_msg_, NULL);
+  rclc_publish(&imu_pub_, &mpu_msg_, NULL);
 }
 
-void MiniBotIMUSubsystem::calibrate() {
+void MiniBotSubsystem::drive_callback(const void* msgin, void* context) {}
+
+void MiniBotSubsystem::led_callback(const void* msgin, void* context) {}
+
+void MiniBotSubsystem::calibrate_imu() {
   float sum_a_x = 0.0f, sum_a_y = 0.0f, sum_a_z = 0.0f;
   float sum_g_x = 0.0f, sum_g_y = 0.0f, sum_g_z = 0.0f;
 

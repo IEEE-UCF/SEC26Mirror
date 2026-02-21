@@ -72,9 +72,9 @@ jobs:
           pio run -e robotcomms -t clean_microros || true
 
       - name: Install CMake
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake
+        # Pin to 3.29.x — CMake 3.28 rejects PlatformIO's arm-cortexm7f-eabi-gcc
+        # version "13.20" as unknown; 3.29 fixed that compiler detection issue.
+        run: pip install cmake==3.29.9
 
       - name: Install PlatformIO
         run: pip install platformio

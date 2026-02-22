@@ -39,10 +39,10 @@ DEFAULT_CMD_TOPIC   = "/cmd_vel"        # direct to Gazebo DiffDrive (bypasses M
 DEFAULT_TOLERANCE   = 0.05   # m or rad — error threshold for PASS/FAIL
 
 # Robot physical constants (must match launch params)
-WHEEL_DIAMETER     = 4.0  * 0.0254   # inches → meters (4 in) — calibrated ✓
+WHEEL_DIAMETER     = 3.25 * 0.0254   # inches → meters (3.25 in) — physical reality ✓
 TRACK_WIDTH        = 12.60 * 0.0254  # inches → meters (12.60 in) — exact geometry from URDF chain (Y: ±0.1600 m)
 TICKS_PER_REV      = 2048
-GEAR_RATIO         = 1
+GEAR_RATIO         = 0.6             # 36T gear on motor -> 60T gear on wheel axel
 
 WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER
 TICKS_PER_METER    = TICKS_PER_REV * GEAR_RATIO / WHEEL_CIRCUMFERENCE
@@ -105,8 +105,10 @@ class MotionCalibrationNode(Node):
         self._gt_yaw_prev = None         # previous yaw (for unwrapping)
         self._gt_cumulative_yaw = 0.0    # unwrapped cumulative yaw (fixes 180° boundary)
 
-        self._left_rad  = None   # wheel joint positions (rad)
-        self._right_rad = None
+        self._lf_rad = None   # frontleftwheel
+        self._lb_rad = None   # backleftwheel
+        self._rf_rad = None   # frontrightwheel
+        self._rb_rad = None   # backrightwheel
 
         # Publishers / Subscribers
         self._cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
@@ -161,10 +163,14 @@ class MotionCalibrationNode(Node):
     def _joint_cb(self, msg: JointState):
         with self._lock:
             for i, name in enumerate(msg.name):
-                if name == "leftcenter":
-                    self._left_rad = msg.position[i]
-                elif name == "rightcenter":
-                    self._right_rad = msg.position[i]
+                if name == "frontrightwheel":
+                    self._rf_rad = msg.position[i]
+                elif name == "backrightwheel":
+                    self._rb_rad = msg.position[i]
+                elif name == "frontleftwheel":
+                    self._lf_rad = msg.position[i]
+                elif name == "backleftwheel":
+                    self._lb_rad = msg.position[i]
 
     # ── Helpers ──────────────────────────────────────────────
 
@@ -177,7 +183,7 @@ class MotionCalibrationNode(Node):
             with self._lock:
                 ready = (self._gt_x is not None and
                          self._gz_x is not None and
-                         self._left_rad is not None)
+                         self._lf_rad is not None)
             if ready:
                 self.get_logger().info("All topics received ✓")
                 # Warm up the publisher — DDS needs time to fully connect
@@ -210,8 +216,12 @@ class MotionCalibrationNode(Node):
                 "gz_y":    self._gz_y,
                 "gz_yaw":  self._gz_yaw,
                 # Raw joint angles — used for encoder-formula distance
-                "left_rad":  self._left_rad,
-                "right_rad": self._right_rad,
+                # Left side (frontleft/backleft) and Right side (frontright/backright)
+                # Note: naming in URDF swapped vs physical sides due to chassis orientation
+                "lf_rad": self._lf_rad,
+                "lb_rad": self._lb_rad,
+                "rf_rad": self._rf_rad,
+                "rb_rad": self._rb_rad,
             }
 
     def _stop(self):
@@ -262,10 +272,12 @@ class MotionCalibrationNode(Node):
 
     @staticmethod
     def _enc_delta_linear(start, end):
-        """Encoder-derived linear displacement (m) from joint positions."""
-        d_left  = (end["left_rad"]  - start["left_rad"])  * (WHEEL_DIAMETER / 2.0)
-        d_right = (end["right_rad"] - start["right_rad"]) * (WHEEL_DIAMETER / 2.0)
-        return 0.5 * (d_left + d_right)
+        """Average distance traveled by all 4 physical wheels in meters."""
+        r = WHEEL_DIAMETER / 2.0
+        # Plugin mapping: Left = rf, rb | Right = lf, lb
+        dl = ( (end["rf_rad"] - start["rf_rad"]) + (end["rb_rad"] - start["rb_rad"]) ) / 2.0
+        dr = ( (end["lf_rad"] - start["lf_rad"]) + (end["lb_rad"] - start["lb_rad"]) ) / 2.0
+        return 0.5 * (dl + dr) * r
 
     @staticmethod
     def _gz_delta_angle(start, end):
@@ -283,10 +295,12 @@ class MotionCalibrationNode(Node):
 
     @staticmethod
     def _enc_delta_angle(start, end):
-        """Encoder-derived rotation (radians) from joint positions."""
-        d_left  = (end["left_rad"]  - start["left_rad"])  * (WHEEL_DIAMETER / 2.0)
-        d_right = (end["right_rad"] - start["right_rad"]) * (WHEEL_DIAMETER / 2.0)
-        return (d_right - d_left) / TRACK_WIDTH
+        """Rotation calculated from 4-wheel differential encoder data."""
+        r = WHEEL_DIAMETER / 2.0
+        # Plugin mapping: Left = rf, rb | Right = lf, lb
+        dl = ( (end["rf_rad"] - start["rf_rad"]) + (end["rb_rad"] - start["rb_rad"]) ) / 2.0
+        dr = ( (end["lf_rad"] - start["lf_rad"]) + (end["lb_rad"] - start["lb_rad"]) ) / 2.0
+        return (dr - dl) * r / TRACK_WIDTH
 
     # ── Individual test runners ───────────────────────────────
 
@@ -447,8 +461,8 @@ class MotionCalibrationNode(Node):
                 report.append("    • Genuine timing / pipeline issue — try lowering --speed")
             if turn_gz_errs:
                 report.append(" ⚠  Turn ground-truth errors detected (usually wheel slip, not config):")
-                report.append("    • Spin-in-place turns experience physics friction drag on chassis")
-                report.append("    • EncOdom still < 0.3% → encoder formula IS correct")
+                report.append("    • Geeks: 6-wheel-in-place turns have high side-drag (scrubbing)")
+                report.append("    • Current: 4-wheel omni-drive should have lower scrub than legacy")
                 report.append("    • Real robot: EKF + IMU corrects this drift automatically")
         else:
             report.append(" ✓  Gazebo ground-truth errors are within tolerance")

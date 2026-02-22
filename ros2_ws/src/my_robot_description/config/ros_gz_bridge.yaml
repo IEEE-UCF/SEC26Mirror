@@ -1,5 +1,5 @@
 # ROS-Gazebo Bridge Configuration
-# Bridges specific topics for my_robot_description
+# Bridges specific topics for SECBot
 
 # Command Velocity (ROS -> Gazebo)
 - ros_topic_name: "/cmd_vel"
@@ -29,13 +29,6 @@
   gz_type_name: "gz.msgs.Model"
   direction: GZ_TO_ROS
 
-# Camera 1 (Gazebo -> ROS)
-- ros_topic_name: "/camera"
-  gz_topic_name: "/camera"
-  ros_type_name: "sensor_msgs/msg/Image"
-  gz_type_name: "gz.msgs.Image"
-  direction: GZ_TO_ROS
-
 # Clock (Gazebo -> ROS)
 - ros_topic_name: "/clock"
   gz_topic_name: "/clock"
@@ -43,9 +36,28 @@
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS
 
-# Camera 2 (Gazebo -> ROS)
-- ros_topic_name: "/camera2"
-  gz_topic_name: "/camera2"
+# --- CAMERA 1 (Left-ish, Active for Navigation) ---
+- ros_topic_name: "/camera1/image"
+  gz_topic_name: "/camera1/image"
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera1/camera_info"
+  gz_topic_name: "/camera1/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# --- CAMERA 2 (Right-ish, Inactive) ---
+- ros_topic_name: "/camera2/image"
+  gz_topic_name: "/camera2/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera2/camera_info"
+  gz_topic_name: "/camera2/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS

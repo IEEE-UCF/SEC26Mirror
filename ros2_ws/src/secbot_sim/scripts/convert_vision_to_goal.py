@@ -3,7 +3,7 @@ import math
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
 
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CameraInfo
@@ -52,11 +52,33 @@ class ConvertVisionToGoal(Node):
         self.declare_parameter("grid_height", 32)
 
 
-        # state =============================
-        self.fx = None
-        self.fy = None
-        self.cx = None
-        self.cy = None
+        # Camera intrinsic fallbacks (used when CameraInfo not available).
+        # Values computed from URDF: hfov=1.089 rad, 640x480
+        # fx = (width/2) / tan(hfov/2) = 320 / tan(0.5445) ≈ 528
+        self.declare_parameter("fallback_fx", 528.0)
+        self.declare_parameter("fallback_fy", 528.0)
+        self.declare_parameter("fallback_cx", 320.0)
+        self.declare_parameter("fallback_cy", 240.0)
+
+        fallback_fx = float(self.get_parameter("fallback_fx").value)
+        fallback_fy = float(self.get_parameter("fallback_fy").value)
+        fallback_cx = float(self.get_parameter("fallback_cx").value)
+        fallback_cy = float(self.get_parameter("fallback_cy").value)
+
+        # Pre-seed with fallback so we can compute goals immediately.
+        # on_camera_info() will overwrite with real values if CameraInfo arrives.
+        if fallback_fx > 0:
+            self.fx = fallback_fx
+            self.fy = fallback_fy
+            self.cx = fallback_cx
+            self.cy = fallback_cy
+            self.get_logger().info(
+                f"Using fallback intrinsics: fx={self.fx} fy={self.fy} cx={self.cx} cy={self.cy}")
+        else:
+            self.fx = None
+            self.fy = None
+            self.cx = None
+            self.cy = None
 
         self.robot_x = None
         self.robot_y = None
@@ -66,14 +88,15 @@ class ConvertVisionToGoal(Node):
         
 
 
-        # QOS (SUBSCRIBE TO RELIABLE MESSAGES) =======================================
+        # QOS ========================================================================
         reliable_qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
+        sensor_qos = qos_profile_sensor_data
 
         # subscriptions and publishes ========================
 
-        self.create_subscription(CameraInfo, self.camera_info_topic, self.on_camera_info, reliable_qos)
+        self.create_subscription(CameraInfo, self.camera_info_topic, self.on_camera_info, sensor_qos)
         self.create_subscription(Odometry, self.odom_topic, self.on_odom, reliable_qos)
-        self.create_subscription(DuckDetections, self.detection_topic, self.on_detections, reliable_qos)
+        self.create_subscription(DuckDetections, self.detection_topic, self.on_detections, sensor_qos)
         self.create_subscription(Bool, "/nav/goal_reached", self.on_goal_reached, reliable_qos)
 
         # publisher ===============================
@@ -88,15 +111,11 @@ class ConvertVisionToGoal(Node):
 
     # camera info including where it's located on robot and center x center y =================================================
     def on_camera_info(self, msg: CameraInfo):
-        if self.fx is not None:
-            return
-        
         self.fx = msg.k[0]
         self.fy = msg.k[4]
         self.cx = msg.k[2]
         self.cy = msg.k[5]
-
-        self.get_logger().info(f"GOT INFO fx={self.fx:.2f}, fy={self.fy:.2f}, cx={self.cx:.2f}, cy={self.cy:.2f}")
+        self.get_logger().info(f"CameraInfo received: fx={self.fx:.2f} fy={self.fy:.2f} cx={self.cx:.2f} cy={self.cy:.2f}")
 
     # after recieving odom information find where robot is and where it's facing ==================================
     def on_odom(self, msg: Odometry):
@@ -219,7 +238,11 @@ class ConvertVisionToGoal(Node):
 
             u = float(detection.x + detection.w * 0.5)
             v = float(detection.y + detection.h)
-            self.get_logger().info(f"detection id = {detection.id} confidence={detection.confidence:.1f}% u={u:.1f} v={v:.1f} bearing={math.degrees(bearing):.1f}deg d={dist_forward:.2f}m -> goal=(x={goal_x:.2f}, y{goal_y:.2f})")
+            self.get_logger().info(
+                f"GOAL PUBLISHED: id={detection.id} conf={detection.confidence:.1f}% "
+                f"u={u:.1f} v={v:.1f} bearing={math.degrees(bearing):.1f}deg "
+                f"dist={dist_forward:.2f}m goal=(x={goal_x:.2f}, y={goal_y:.2f}) "
+                f"robot=({self.robot_x:.2f},{self.robot_y:.2f}) yaw={math.degrees(self.robot_yaw):.1f}deg")
             return  # published first valid non-visited candidate
 
         self.get_logger().info("All visible detections are near visited positions — no goal published")

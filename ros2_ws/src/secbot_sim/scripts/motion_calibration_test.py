@@ -40,7 +40,7 @@ DEFAULT_TOLERANCE   = 0.05   # m or rad — error threshold for PASS/FAIL
 
 # Robot physical constants (must match launch params)
 WHEEL_DIAMETER     = 4.0  * 0.0254   # inches → meters (4 in) — calibrated ✓
-TRACK_WIDTH        = 12.88 * 0.0254  # inches → meters (12.88 in) — measured from GT turn tests
+TRACK_WIDTH        = 11.93 * 0.0254  # inches → meters (11.93 in) — matches wheel_separation=0.3030m
 TICKS_PER_REV      = 2048
 GEAR_RATIO         = 1
 
@@ -101,7 +101,9 @@ class MotionCalibrationNode(Node):
 
         self._gt_x   = None   # Ground-truth world pose (/odom/ground_truth)
         self._gt_y   = None
-        self._gt_yaw = None
+        self._gt_yaw = None              # wrapped yaw [-pi, pi]
+        self._gt_yaw_prev = None         # previous yaw (for unwrapping)
+        self._gt_cumulative_yaw = 0.0    # unwrapped cumulative yaw (fixes 180° boundary)
 
         self._left_rad  = None   # wheel joint positions (rad)
         self._right_rad = None
@@ -139,7 +141,8 @@ class MotionCalibrationNode(Node):
             self._gz_yaw = yaw
 
     def _gt_cb(self, msg: Odometry):
-        """OdometryPublisher ground truth — true physics position, no wheel params."""
+        """OdometryPublisher ground truth — true physics position, no wheel params.
+        Accumulates yaw continuously to survive ±π boundary crossings."""
         qz = msg.pose.pose.orientation.z
         qw = msg.pose.pose.orientation.w
         yaw = 2.0 * math.atan2(qz, qw)
@@ -147,6 +150,13 @@ class MotionCalibrationNode(Node):
             self._gt_x   = msg.pose.pose.position.x
             self._gt_y   = msg.pose.pose.position.y
             self._gt_yaw = yaw
+            if self._gt_yaw_prev is not None:
+                delta = yaw - self._gt_yaw_prev
+                # Unwrap: snap large jumps (±π crossing) to the small-step equivalent
+                if delta >  math.pi: delta -= 2 * math.pi
+                if delta < -math.pi: delta += 2 * math.pi
+                self._gt_cumulative_yaw += delta
+            self._gt_yaw_prev = yaw
 
     def _joint_cb(self, msg: JointState):
         with self._lock:
@@ -194,6 +204,7 @@ class MotionCalibrationNode(Node):
                 "gt_x":    self._gt_x,
                 "gt_y":    self._gt_y,
                 "gt_yaw":  self._gt_yaw,
+                "gt_cum_yaw": self._gt_cumulative_yaw,  # unwrapped cumulative
                 # DiffDrive odometry (depends on wheel_radius parameter)
                 "gz_x":    self._gz_x,
                 "gz_y":    self._gz_y,
@@ -258,11 +269,9 @@ class MotionCalibrationNode(Node):
 
     @staticmethod
     def _gz_delta_angle(start, end):
-        """Signed angular displacement from ground-truth yaw."""
-        delta = end["gt_yaw"] - start["gt_yaw"]
-        while delta >  math.pi: delta -= 2 * math.pi
-        while delta < -math.pi: delta += 2 * math.pi
-        return delta
+        """Signed angular displacement from cumulative ground-truth yaw.
+        Uses unwrapped cumulative yaw so turns > 180° are measured correctly."""
+        return end["gt_cum_yaw"] - start["gt_cum_yaw"]
 
     @staticmethod
     def _diffdrive_delta_angle(start, end):

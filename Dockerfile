@@ -125,6 +125,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 9. Install onshape-to-robot for URDF/STL export from Onshape CAD
 RUN pip3 install --break-system-packages onshape-to-robot
 
+# 10. Patch cmake 3.28 cross-compilation regression (fatal for STATIC_LIBRARY ARM builds;
+#     fixed in cmake 3.29). ros:jazzy-ros-base ships Ubuntu 24.04 which has cmake 3.28.
+#     The patched macro sets a safe C/CXX standard default instead of fataling when the
+#     ABI-detection binary cannot be run for cross-compilers.
+COPY mcu_ws/libs_external/teensy/micro_ros_platformio/cmake_overrides/Compiler/CMakeCommonCompilerMacros.cmake \
+     /usr/share/cmake-3.28/Modules/Compiler/CMakeCommonCompilerMacros.cmake
+
 FROM base AS dev
 
 # Switch to root to install Gazebo Harmonic and required tools, then switch back

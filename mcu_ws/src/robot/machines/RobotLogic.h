@@ -22,6 +22,7 @@
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
 #include "robot/subsystems/IntakeSubsystem.h"
+#include "robot/subsystems/OLEDSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 
@@ -30,6 +31,21 @@ using namespace Subsystem;
 // --- micro-ROS manager ---
 static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
+
+// --- OLED display (SSD1306 128x64, hardware SPI) ---
+// Screen is split into two 128x32 zones.  Other subsystems can write to a
+// zone by calling g_oled.setTopText() / g_oled.setBottomText() etc.
+// To grant access from another subsystem header, forward-declare:
+//   extern Subsystem::OLEDSubsystem g_oled;
+//
+// Teensy 4.1 SPI0: MOSI=11, SCK=13 (hardware)
+// DC=12, RST=-1 (not connected), CS=10
+static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
+                                       &SPI,
+                                       /*dc*/  12,
+                                       /*rst*/ -1,
+                                       /*cs*/  10);
+static OLEDSubsystem g_oled(g_oled_setup);
 
 // --- Heartbeat subsystem ---
 static HeartbeatSubsystemSetup g_hb_setup("heartbeat_subsystem");
@@ -108,6 +124,7 @@ void setup() {
 
   // 1. Init all subsystems
   g_mr.init();
+  g_oled.init();
   g_hb.init();
   g_battery.init();
   g_sensor.init();
@@ -120,6 +137,7 @@ void setup() {
   // g_drive.init();  // TODO: uncomment when DriveSubsystem is configured
 
   // 2. Register micro-ROS participants
+  g_mr.registerParticipant(&g_oled);
   g_mr.registerParticipant(&g_hb);
   g_mr.registerParticipant(&g_battery);
   g_mr.registerParticipant(&g_sensor);
@@ -133,6 +151,7 @@ void setup() {
   //                       stackSize  priority  rateMs
   g_mr.beginThreaded(8192, 4);            // highest — ROS agent
   g_imu.beginThreaded(2048, 3, 20);       // 50Hz sensor fusion
+  g_oled.beginThreaded(2048, 1, 50);      // 20Hz display refresh
   g_rc.beginThreaded(1024, 3, 5);         // fast IBUS polling
   g_arm.beginThreaded(1024, 2, 20);       // 50Hz movement
   g_battery.beginThreaded(1024, 1, 100);  // 10Hz battery

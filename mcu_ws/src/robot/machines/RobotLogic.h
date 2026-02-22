@@ -38,13 +38,13 @@ static MicrorosManager g_mr(g_mr_setup);
 // To grant access from another subsystem header, forward-declare:
 //   extern Subsystem::OLEDSubsystem g_oled;
 //
-// Teensy 4.1 SPI0: MOSI=11, SCK=13 (hardware)
-// DC=12, RST=-1 (not connected), CS=10
+// Software SPI: MOSI=11, CLK=13, DC=9, RST=3, CS=10
 static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
-                                       &SPI,
-                                       /*dc*/  12,
-                                       /*rst*/ -1,
-                                       /*cs*/  10);
+                                       /*mosi*/ 11,
+                                       /*clk*/  13,
+                                       /*dc*/    9,
+                                       /*rst*/   3,
+                                       /*cs*/   10);
 static OLEDSubsystem g_oled(g_oled_setup);
 
 // --- Heartbeat subsystem ---

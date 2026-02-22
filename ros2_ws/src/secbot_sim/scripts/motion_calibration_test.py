@@ -40,7 +40,7 @@ DEFAULT_TOLERANCE   = 0.05   # m or rad — error threshold for PASS/FAIL
 
 # Robot physical constants (must match launch params)
 WHEEL_DIAMETER     = 3.25 * 0.0254   # inches → meters (3.25 in) — physical reality ✓
-TRACK_WIDTH        = 12.60 * 0.0254  # inches → meters (12.60 in) — exact geometry from URDF chain (Y: ±0.1600 m)
+TRACK_WIDTH        = 11.93 * 0.0254  # inches → meters (11.93 in) — matches URDF wheel_separation (0.3030m)
 TICKS_PER_REV      = 2048
 GEAR_RATIO         = 0.6             # 36T gear on motor -> 60T gear on wheel axel
 
@@ -198,7 +198,7 @@ class MotionCalibrationNode(Node):
             "Timed out waiting for topics!\n"
             f"  /odom/ground_truth: {'OK' if self._gt_x is not None else 'MISSING'}\n"
             f"  /odom:              {'OK' if self._gz_x is not None else 'MISSING'}\n"
-            f"  /joint_states:      {'OK' if self._left_rad is not None else 'MISSING'}"
+            f"  /joint_states:      {'OK' if self._lf_rad is not None else 'MISSING'}"
         )
         return False
 

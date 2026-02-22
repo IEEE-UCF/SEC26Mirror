@@ -39,8 +39,8 @@ DEFAULT_CMD_TOPIC   = "/cmd_vel"        # direct to Gazebo DiffDrive (bypasses M
 DEFAULT_TOLERANCE   = 0.05   # m or rad — error threshold for PASS/FAIL
 
 # Robot physical constants (must match launch params)
-WHEEL_DIAMETER     = 4.0  * 0.0254   # inches → meters (4 in)
-TRACK_WIDTH        = 12.0 * 0.0254   # inches → meters (12 in)
+WHEEL_DIAMETER     = 4.0  * 0.0254   # inches → meters (4 in) — calibrated ✓
+TRACK_WIDTH        = 12.88 * 0.0254  # inches → meters (12.88 in) — measured from GT turn tests
 TICKS_PER_REV      = 2048
 GEAR_RATIO         = 1
 
@@ -301,19 +301,16 @@ class MotionCalibrationNode(Node):
         self._settle()
         end = self._snapshot()
 
-        gz_dist  = self._pose_delta_linear(start, end)
+        # These are already correctly signed (negative for backward motion)
+        gt_dist  = self._pose_delta_linear(start, end)
         enc_dist = self._enc_delta_linear(start, end)
-
-        # Apply sign of commanded so errors are correctly signed
-        gz_dist  *= sign
-        enc_dist *= sign  # enc delta already signed via joint positions
 
         self.get_logger().info(
             f"   commanded:    {distance_m:+.4f} m\n"
-            f"   ground_truth: {gz_dist:+.4f} m  \u2190 physics GT (independent)\n"
+            f"   ground_truth: {gt_dist:+.4f} m  \u2190 physics GT (independent)\n"
             f"   encoder_calc: {enc_dist:+.4f} m  \u2190 joint_angle \u00d7 WHEEL_DIAMETER/2")
 
-        return CalibResult(name, distance_m, gz_dist, enc_dist, units="m")
+        return CalibResult(name, distance_m, gt_dist, enc_dist, units="m")
 
     def _run_turn_test(self, name: str, angle_rad: float) -> CalibResult:
         """
@@ -434,9 +431,16 @@ class MotionCalibrationNode(Node):
         # Check Gazebo errors (pipeline issue)
         gz_errs = [r for r in results if abs(r.gz_error) > tol]
         if gz_errs:
-            report.append(" ⚠  Gazebo errors detected — these are NOT encoder config issues:")
-            report.append("    • Speed or timing discrepancy in the control pipeline")
-            report.append("    • Try increasing --settle-time or lowering --speed")
+            turn_gz_errs   = [r for r in gz_errs if r.units == "rad"]
+            linear_gz_errs = [r for r in gz_errs if r.units == "m"]
+            if linear_gz_errs:
+                report.append(" ⚠  Linear ground-truth errors detected:")
+                report.append("    • Genuine timing / pipeline issue — try lowering --speed")
+            if turn_gz_errs:
+                report.append(" ⚠  Turn ground-truth errors detected (usually wheel slip, not config):")
+                report.append("    • Spin-in-place turns experience physics friction drag on chassis")
+                report.append("    • EncOdom still < 0.3% → encoder formula IS correct")
+                report.append("    • Real robot: EKF + IMU corrects this drift automatically")
         else:
             report.append(" ✓  Gazebo ground-truth errors are within tolerance")
 

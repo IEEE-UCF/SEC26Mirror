@@ -24,6 +24,7 @@ import time
 
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
@@ -94,20 +95,31 @@ class MotionCalibrationNode(Node):
 
         # Latest sensor readings (protected by lock)
         self._lock = threading.Lock()
-        self._gz_x   = None   # Gazebo odom X  (m)
-        self._gz_y   = None   # Gazebo odom Y  (m)
-        self._gz_yaw = None   # Gazebo odom yaw (rad)
+        self._gz_x   = None   # Gazebo /odom X (DiffDrive estimate)
+        self._gz_y   = None
+        self._gz_yaw = None
 
-        self._left_rad  = None   # wheel joint positions (rad) - raw
+        self._gt_x   = None   # Ground-truth world pose (/odom/ground_truth)
+        self._gt_y   = None
+        self._gt_yaw = None
+
+        self._left_rad  = None   # wheel joint positions (rad)
         self._right_rad = None
 
         # Publishers / Subscribers
         self._cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
 
+        # DiffDrive-computed odometry (uses wheel_radius parameter)
         self._gz_sub = self.create_subscription(
             Odometry, "/odom", self._gz_cb, 10)
+        # Physics ground truth (OdometryPublisher – wheel-radius independent)
+        self._gt_sub = self.create_subscription(
+            Odometry, "/odom/ground_truth", self._gt_cb, 10)
         self._joint_sub = self.create_subscription(
             JointState, "/joint_states", self._joint_cb, 10)
+
+        # Use sim time so drive durations match Gazebo's clock
+        self.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
 
         self.get_logger().info(
             f"Motion Calibration Test ready — "
@@ -117,6 +129,7 @@ class MotionCalibrationNode(Node):
     # ── Callbacks ────────────────────────────────────────────
 
     def _gz_cb(self, msg: Odometry):
+        """DiffDrive /odom — uses wheel_radius, NOT independent ground truth."""
         qz = msg.pose.pose.orientation.z
         qw = msg.pose.pose.orientation.w
         yaw = 2.0 * math.atan2(qz, qw)
@@ -124,6 +137,16 @@ class MotionCalibrationNode(Node):
             self._gz_x   = msg.pose.pose.position.x
             self._gz_y   = msg.pose.pose.position.y
             self._gz_yaw = yaw
+
+    def _gt_cb(self, msg: Odometry):
+        """OdometryPublisher ground truth — true physics position, no wheel params."""
+        qz = msg.pose.pose.orientation.z
+        qw = msg.pose.pose.orientation.w
+        yaw = 2.0 * math.atan2(qz, qw)
+        with self._lock:
+            self._gt_x   = msg.pose.pose.position.x
+            self._gt_y   = msg.pose.pose.position.y
+            self._gt_yaw = yaw
 
     def _joint_cb(self, msg: JointState):
         with self._lock:
@@ -142,7 +165,8 @@ class MotionCalibrationNode(Node):
         while time.time() < deadline:
             rclpy.spin_once(self, timeout_sec=0.1)
             with self._lock:
-                ready = (self._gz_x is not None and
+                ready = (self._gt_x is not None and
+                         self._gz_x is not None and
                          self._left_rad is not None)
             if ready:
                 self.get_logger().info("All topics received ✓")
@@ -156,18 +180,25 @@ class MotionCalibrationNode(Node):
                 return True
         self.get_logger().error(
             "Timed out waiting for topics!\n"
-            f"  /odom:         {'OK' if self._gz_x  is not None else 'MISSING'}\n"
-            f"  /joint_states: {'OK' if self._left_rad is not None else 'MISSING'}"
+            f"  /odom/ground_truth: {'OK' if self._gt_x is not None else 'MISSING'}\n"
+            f"  /odom:              {'OK' if self._gz_x is not None else 'MISSING'}\n"
+            f"  /joint_states:      {'OK' if self._left_rad is not None else 'MISSING'}"
         )
         return False
 
     def _snapshot(self):
-        """Return a dict of current poses from Gazebo odom + raw joint positions."""
+        """Return current poses from all sources."""
         with self._lock:
             return {
+                # Physics ground truth (independent of wheel_radius)
+                "gt_x":    self._gt_x,
+                "gt_y":    self._gt_y,
+                "gt_yaw":  self._gt_yaw,
+                # DiffDrive odometry (depends on wheel_radius parameter)
                 "gz_x":    self._gz_x,
                 "gz_y":    self._gz_y,
                 "gz_yaw":  self._gz_yaw,
+                # Raw joint angles — used for encoder-formula distance
                 "left_rad":  self._left_rad,
                 "right_rad": self._right_rad,
             }
@@ -176,31 +207,44 @@ class MotionCalibrationNode(Node):
         msg = Twist()
         self._cmd_pub.publish(msg)
 
+    def _now_sec(self):
+        """Current time in seconds via sim clock (matches Gazebo physics speed)."""
+        return self.get_clock().now().nanoseconds / 1e9
+
     def _drive(self, lin_x: float, ang_z: float, duration: float):
-        """Publish cmd_vel at PUBLISH_HZ for `duration` seconds."""
+        """Publish cmd_vel at PUBLISH_HZ for `duration` SIM-seconds."""
         msg = Twist()
         msg.linear.x  = float(lin_x)
         msg.angular.z = float(ang_z)
         period = 1.0 / PUBLISH_HZ
-        end = time.time() + duration
-        while time.time() < end:
+        end = self._now_sec() + duration
+        while self._now_sec() < end:
             self._cmd_pub.publish(msg)
             rclpy.spin_once(self, timeout_sec=period)
         self._stop()
 
     def _settle(self):
-        """Wait for robot to stop, keep spinning so callbacks stay fresh."""
-        deadline = time.time() + self.settle_time
-        while time.time() < deadline:
+        """Wait settle_time SIM-seconds while spinning for fresh callbacks."""
+        deadline = self._now_sec() + self.settle_time
+        while self._now_sec() < deadline:
             rclpy.spin_once(self, timeout_sec=0.05)
 
     @staticmethod
     def _pose_delta_linear(start, end):
-        """2-D Euclidean distance between two (x, y) snapshots, signed by direction."""
+        """Signed linear displacement from ground-truth world pose."""
+        dx = end["gt_x"] - start["gt_x"]
+        dy = end["gt_y"] - start["gt_y"]
+        dist = math.hypot(dx, dy)
+        start_yaw = start["gt_yaw"]
+        proj = dx * math.cos(start_yaw) + dy * math.sin(start_yaw)
+        return dist if proj >= 0 else -dist
+
+    @staticmethod
+    def _diffdrive_delta_linear(start, end):
+        """DiffDrive /odom estimate — uses wheel_radius parameter."""
         dx = end["gz_x"] - start["gz_x"]
         dy = end["gz_y"] - start["gz_y"]
         dist = math.hypot(dx, dy)
-        # Sign: if robot roughly moved forward relative to its start yaw, positive
         start_yaw = start["gz_yaw"]
         proj = dx * math.cos(start_yaw) + dy * math.sin(start_yaw)
         return dist if proj >= 0 else -dist
@@ -214,9 +258,16 @@ class MotionCalibrationNode(Node):
 
     @staticmethod
     def _gz_delta_angle(start, end):
-        """Signed angular displacement from Gazebo yaw (radians)."""
+        """Signed angular displacement from ground-truth yaw."""
+        delta = end["gt_yaw"] - start["gt_yaw"]
+        while delta >  math.pi: delta -= 2 * math.pi
+        while delta < -math.pi: delta += 2 * math.pi
+        return delta
+
+    @staticmethod
+    def _diffdrive_delta_angle(start, end):
+        """Angular displacement from DiffDrive /odom yaw."""
         delta = end["gz_yaw"] - start["gz_yaw"]
-        # Wrap to [-π, π]
         while delta >  math.pi: delta -= 2 * math.pi
         while delta < -math.pi: delta += 2 * math.pi
         return delta
@@ -258,9 +309,9 @@ class MotionCalibrationNode(Node):
         enc_dist *= sign  # enc delta already signed via joint positions
 
         self.get_logger().info(
-            f"   commanded: {distance_m:+.4f} m\n"
-            f"   gz_odom:   {gz_dist:+.4f} m\n"
-            f"   encoder:   {enc_dist:+.4f} m")
+            f"   commanded:    {distance_m:+.4f} m\n"
+            f"   ground_truth: {gz_dist:+.4f} m  \u2190 physics GT (independent)\n"
+            f"   encoder_calc: {enc_dist:+.4f} m  \u2190 joint_angle \u00d7 WHEEL_DIAMETER/2")
 
         return CalibResult(name, distance_m, gz_dist, enc_dist, units="m")
 
@@ -287,9 +338,9 @@ class MotionCalibrationNode(Node):
         enc_angle = self._enc_delta_angle(start, end)
 
         self.get_logger().info(
-            f"   commanded: {angle_rad:+.4f} rad  ({math.degrees(angle_rad):+.1f}°)\n"
-            f"   gz_odom:   {gz_angle:+.4f} rad  ({math.degrees(gz_angle):+.1f}°)\n"
-            f"   encoder:   {enc_angle:+.4f} rad  ({math.degrees(enc_angle):+.1f}°)")
+            f"   commanded:    {angle_rad:+.4f} rad ({math.degrees(angle_rad):+.1f}\u00b0)\n"
+            f"   ground_truth: {gz_angle:+.4f} rad  \u2190 physics GT (independent)\n"
+            f"   encoder_calc: {enc_angle:+.4f} rad  \u2190 (d_right-d_left)/TRACK_WIDTH")
 
         return CalibResult(name, angle_rad, gz_angle, enc_angle, units="rad")
 

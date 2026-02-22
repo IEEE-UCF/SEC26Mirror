@@ -43,7 +43,7 @@ if ! ros2 pkg prefix image_tools > /dev/null 2>&1; then
 fi
 # ---- Start sim in the background ----
 echo "Launching mcu_sim_secbot..."
-ros2 launch secbot_sim mcu_sim_secbot.launch.py &
+ros2 launch secbot_sim sim_viz_secbot.launch.py &
 LAUNCH_PID=$!
 # Capture process group so Ctrl+C kills everything
 PGID="$(ps -o pgid= "$LAUNCH_PID" | tr -d ' ')"
@@ -51,11 +51,13 @@ PGID="$(ps -o pgid= "$LAUNCH_PID" | tr -d ' ')"
 echo "Waiting for sim to start..."
 sleep 5
 echo "Opening camera views..."
-ros2 run image_tools showimage --ros-args -r image:=/camera  &
-ros2 run image_tools showimage --ros-args -r image:=/camera2 &
+ros2 run image_tools showimage --ros-args -r image:=/camera1/image  &
+ros2 run image_tools showimage --ros-args -r image:=/vision/debug_image &
+ros2 run image_tools showimage --ros-args -r image:=/camera2/image &
 echo "---------------------------------------------------------"
 echo "SECbot sim is running!"
-echo "  Camera 1: /camera"
+echo "  Camera 1: /camera1"
+echo "  Debug Image: /vision/debug_image"
 echo "  Camera 2: /camera2"
 echo "Press Ctrl+C to stop everything."
 echo "---------------------------------------------------------"

@@ -1,37 +1,33 @@
 <?xml version="1.0" ?>
 <!-- Generated using onshape-to-robot -->
-<!-- Onshape https://cad.onshape.com/documents/a9b8f413da1e8f572f6c05e0/w/33df98f1c900bb5f67ec3d05/e/237b202db83b358d39da5213 -->
-<robot name="tmp.e3jfT1uFZg">
-  <!-- Dummy Link base_link -->
-  <link name="base_link">
-    <visual>
-      <geometry>
-        <box size="0.01 0.01 0.01"/>
-      </geometry>
-      <material name="base_material">
-        <color rgba="1 1 1 0"/>
-      </material>
-    </visual>
-  </link>
-
-  <!-- Joint from base_link to original root -->
-  <!-- rpy yaw=-1.5708 rotates chassis 90° so physical robot front aligns with base_link +X (DiffDrive forward) -->
-  <joint name="base_link_to_chassis" type="fixed">
-    <parent link="base_link"/>
-    <child link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
-    <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
-  </joint>
-
+<!-- Onshape https://cad.onshape.com/documents/a9b8f413da1e8f572f6c05e0/w/53bec894c084d03405126192/e/237b202db83b358d39da5213 -->
+<robot name="tmp.2bj3TmtlgL">
   <!-- Link 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default -->
   <link name="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default">
     <inertial>
-      <origin xyz="6.71974e-06 0.0256998 0.0185822" rpy="0 0 0"/>
-      <mass value="0.779175"/>
-      <inertia ixx="0.0033002" ixy="-2.32734e-07" ixz="9.3511e-08" iyy="0.00754834" iyz="5.19105e-06" izz="0.0106436"/>
+      <origin xyz="-0.0156535 0.0283847 0.102266" rpy="0 0 0"/>
+      <mass value="2.26208"/>
+      <inertia ixx="0.0279334" ixy="0.0020233" ixz="0.00105613" iyy="0.0295071" iyz="0.00213543" izz="0.0255674"/>
     </inertial>
+    <!-- Part base -->
+    <visual>
+      <origin xyz="0.000356065 0.0319584 -0.01735" rpy="2e-12 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/base.stl"/>
+      </geometry>
+      <material name="base_material">
+        <color rgba="0.411765 0.392157 0.392157 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0319584 -0.01735" rpy="2e-12 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/base.stl"/>
+      </geometry>
+    </collision>
     <!-- Part 1_x_2_x_1_x________13________aluminum_c_channel__276_2289___8271407f0f256bfb7e42d0c298055273 -->
     <visual>
-      <origin xyz="0.08255 0.05715 0.0016" rpy="3.14159 -0 -1.5708"/>
+      <origin xyz="0.08255 0.03175 0.0016" rpy="3.14159 -0 -1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_2_x_1_x________13________aluminum_c_channel__276_2289___8271407f0f256bfb7e42d0c298055273.stl"/>
       </geometry>
@@ -40,9 +36,41 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.08255 0.05715 0.0016" rpy="3.14159 -0 -1.5708"/>
+      <origin xyz="0.08255 0.03175 0.0016" rpy="3.14159 -0 -1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_2_x_1_x________13________aluminum_c_channel__276_2289___8271407f0f256bfb7e42d0c298055273.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part ds3225_sg_coreless -->
+    <visual>
+      <origin xyz="-0.0289426 0.0792474 0.080414" rpy="-2e-12 -0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/ds3225_sg_coreless.stl"/>
+      </geometry>
+      <material name="ds3225_sg_coreless_material">
+        <color rgba="0.498039 0.498039 0.498039 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0289426 0.0792474 0.080414" rpy="-2e-12 -0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/ds3225_sg_coreless.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part upper_holder -->
+    <visual>
+      <origin xyz="0.000356065 0.0319561 -0.01735" rpy="-0 -0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/upper_holder.stl"/>
+      </geometry>
+      <material name="upper_holder_material">
+        <color rgba="0.411765 0.392157 0.392157 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0319561 -0.01735" rpy="-0 -0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/upper_holder.stl"/>
       </geometry>
     </collision>
     <!-- Part 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default -->
@@ -63,7 +91,7 @@
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter -->
     <visual>
-      <origin xyz="0.14572 0.1651 0.00795" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 0.1524 0.00795" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -72,14 +100,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 0.1651 0.00795" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 0.1524 0.00795" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter_2 -->
     <visual>
-      <origin xyz="0.14572 -0.1143 0.00795" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 -0.127 0.00795" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -88,14 +116,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 -0.1143 0.00795" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 -0.127 0.00795" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter_3 -->
     <visual>
-      <origin xyz="0.14572 -0.1143 0.03335" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 -0.127 0.03335" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -104,14 +132,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 -0.1143 0.03335" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 -0.127 0.03335" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part 1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660 -->
     <visual>
-      <origin xyz="0.14732 -0.12065 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14732 -0.13335 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
@@ -120,14 +148,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14732 -0.12065 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14732 -0.13335 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
     </collision>
     <!-- Part 1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660_2 -->
     <visual>
-      <origin xyz="0.08382 -0.12065 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.08382 -0.13335 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
@@ -136,14 +164,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.08382 -0.12065 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.08382 -0.13335 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
     </collision>
     <!-- Part motor_mount_half -->
     <visual>
-      <origin xyz="0.141863 -0.129163 0.0397" rpy="-3.14159 0 3.14159"/>
+      <origin xyz="0.141863 -0.141863 0.0397" rpy="-3.14159 0 3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/motor_mount_half.stl"/>
       </geometry>
@@ -152,14 +180,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.141863 -0.129163 0.0397" rpy="-3.14159 0 3.14159"/>
+      <origin xyz="0.141863 -0.141863 0.0397" rpy="-3.14159 0 3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/motor_mount_half.stl"/>
       </geometry>
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter_4 -->
     <visual>
-      <origin xyz="0.14572 0.1651 0.03335" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 0.1524 0.03335" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -168,14 +196,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 0.1651 0.03335" rpy="0 -1.5708 0"/>
+      <origin xyz="0.14572 0.1524 0.03335" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part 25d_nfpshop -->
     <visual>
-      <origin xyz="0.01672 0.0254 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="0.01672 0.0127 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/25d_nfpshop.stl"/>
       </geometry>
@@ -184,14 +212,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.01672 0.0254 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="0.01672 0.0127 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/25d_nfpshop.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_4_________star_drive_screw______33_31___configuration_default -->
     <visual>
-      <origin xyz="-0.0762 0.0635 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="-0.0762 0.0381 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
@@ -200,14 +228,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.0762 0.0635 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="-0.0762 0.0381 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027 -->
     <visual>
-      <origin xyz="-0.0762 0.0635 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="-0.0762 0.0381 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
@@ -216,7 +244,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.0762 0.0635 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="-0.0762 0.0381 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
@@ -255,7 +283,7 @@
     </collision>
     <!-- Part 8_32_x________1_4_________star_drive_screw______33_31___configuration_default_3 -->
     <visual>
-      <origin xyz="0.0762 0.0635 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="0.0762 0.0381 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
@@ -264,14 +292,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.0762 0.0635 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="0.0762 0.0381 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_3 -->
     <visual>
-      <origin xyz="0.0762 0.0635 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="0.0762 0.0381 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
@@ -280,14 +308,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.0762 0.0635 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="0.0762 0.0381 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_4_________star_drive_screw______33_31___configuration_default_4 -->
     <visual>
-      <origin xyz="0.0762 0.0508 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="0.0762 0.0254 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
@@ -296,14 +324,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.0762 0.0508 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="0.0762 0.0254 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_4 -->
     <visual>
-      <origin xyz="0.0762 0.0508 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="0.0762 0.0254 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
@@ -312,14 +340,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.0762 0.0508 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="0.0762 0.0254 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_4_________star_drive_screw______33_31___configuration_default_5 -->
     <visual>
-      <origin xyz="-0.0762 0.0508 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="-0.0762 0.0254 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
@@ -328,14 +356,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.0762 0.0508 2.52e-05" rpy="-3.14159 0 1.5708"/>
+      <origin xyz="-0.0762 0.0254 2.52e-05" rpy="-3.14159 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_4_________star_drive_screw______33_31___configuration_default.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_5 -->
     <visual>
-      <origin xyz="-0.0762 0.0508 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="-0.0762 0.0254 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
@@ -344,7 +372,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.0762 0.0508 0.0038912" rpy="0 0 1.5708"/>
+      <origin xyz="-0.0762 0.0254 0.0038912" rpy="0 0 1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
@@ -381,6 +409,422 @@
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027.stl"/>
       </geometry>
     </collision>
+    <!-- Part 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default_2 -->
+    <visual>
+      <origin xyz="0.08382 0.1524 0.21115" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default.stl"/>
+      </geometry>
+      <material name="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default_2_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.08382 0.1524 0.21115" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part midplatform1 -->
+    <visual>
+      <origin xyz="0 -0.0127 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/midplatform1.stl"/>
+      </geometry>
+      <material name="midplatform1_material">
+        <color rgba="0.231373 0.380392 0.705882 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.0127 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/midplatform1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part tinobuckconverter -->
+    <visual>
+      <origin xyz="-0.03 -0.060325 0.215068" rpy="3.14159 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tinobuckconverter.stl"/>
+      </geometry>
+      <material name="tinobuckconverter_material">
+        <color rgba="0.513725 0.737255 0.407843 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.03 -0.060325 0.215068" rpy="3.14159 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tinobuckconverter.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part battery -->
+    <visual>
+      <origin xyz="-0.114323 0.09525 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/battery.stl"/>
+      </geometry>
+      <material name="battery_material">
+        <color rgba="0.513725 0.737255 0.407843 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.114323 0.09525 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/battery.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part tinobuckconverter_2 -->
+    <visual>
+      <origin xyz="0.03 -0.060325 0.215068" rpy="3.14159 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tinobuckconverter.stl"/>
+      </geometry>
+      <material name="tinobuckconverter_2_material">
+        <color rgba="0.513725 0.737255 0.407843 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.03 -0.060325 0.215068" rpy="3.14159 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tinobuckconverter.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default_3 -->
+    <visual>
+      <origin xyz="-0.08382 -0.127 0.21115" rpy="0 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default.stl"/>
+      </geometry>
+      <material name="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default_3_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.127 0.21115" rpy="0 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part frontface -->
+    <visual>
+      <origin xyz="0 -0.0127 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/frontface.stl"/>
+      </geometry>
+      <material name="frontface_material">
+        <color rgba="0.768627 0.886275 0.952941 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.0127 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/frontface.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part topplatform2 -->
+    <visual>
+      <origin xyz="0 -0.0127 0" rpy="0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/topplatform2.stl"/>
+      </geometry>
+      <material name="topplatform2_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.0127 0" rpy="0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/topplatform2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part 1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a -->
+    <visual>
+      <origin xyz="-0.08382 0.04445 0.05875" rpy="-3.14159 -1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a.stl"/>
+      </geometry>
+      <material name="1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 0.04445 0.05875" rpy="-3.14159 -1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part 1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a_2 -->
+    <visual>
+      <origin xyz="0.08382 -0.01905 0.05875" rpy="0 -1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a.stl"/>
+      </geometry>
+      <material name="1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a_2_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.08382 -0.01905 0.05875" rpy="0 -1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___5___aluminum_c_channel__276_4359___80ef3c6dc66985e05afb2b1db3821a3a.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part 1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d -->
+    <visual>
+      <origin xyz="-0.08382 0.0127 0.0397" rpy="1.5708 -0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d.stl"/>
+      </geometry>
+      <material name="1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 0.0127 0.0397" rpy="1.5708 -0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part uwbrobotmount -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/uwbrobotmount.stl"/>
+      </geometry>
+      <material name="uwbrobotmount_material">
+        <color rgba="0.498039 0.498039 0.498039 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/uwbrobotmount.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part topplatform1 -->
+    <visual>
+      <origin xyz="0 -0.0127 0" rpy="0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/topplatform1.stl"/>
+      </geometry>
+      <material name="topplatform1_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.0127 0" rpy="0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/topplatform1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part 1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93 -->
+    <visual>
+      <origin xyz="0.0763016 0 0.117068" rpy="-3.14159 -0 3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93.stl"/>
+      </geometry>
+      <material name="1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.0763016 0 0.117068" rpy="-3.14159 -0 3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part 1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d_2 -->
+    <visual>
+      <origin xyz="0.08382 0.0127 0.0397" rpy="1.5708 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d.stl"/>
+      </geometry>
+      <material name="1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d_2_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.08382 0.0127 0.0397" rpy="1.5708 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___14___aluminum_c_channel__276_4359___e788b2ef1020e1b88ef986f0800cfa4d.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part backface -->
+    <visual>
+      <origin xyz="0 0.153518 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/backface.stl"/>
+      </geometry>
+      <material name="backface_material">
+        <color rgba="0.972549 0.529412 0.00392157 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0.153518 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/backface.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part batteryholder -->
+    <visual>
+      <origin xyz="0 -0.0127 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/batteryholder.stl"/>
+      </geometry>
+      <material name="batteryholder_material">
+        <color rgba="0.917647 0.917647 0.917647 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.0127 0" rpy="-0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/batteryholder.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part 1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93_2 -->
+    <visual>
+      <origin xyz="-0.08382 0 0.10955" rpy="-0 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93.stl"/>
+      </geometry>
+      <material name="1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93_2_material">
+        <color rgba="0.901961 0.901961 0.901961 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 0 0.10955" rpy="-0 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/1_x_1_x___13___aluminum_angle__276_6484___c7856b8defec0343f189be0f4a38cc93.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part ds3225_sg_coreless_2 -->
+    <visual>
+      <origin xyz="0.0362984 0.0969686 0.0461698" rpy="-1.5708 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/ds3225_sg_coreless.stl"/>
+      </geometry>
+      <material name="ds3225_sg_coreless_2_material">
+        <color rgba="0.498039 0.498039 0.498039 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.0362984 0.0969686 0.0461698" rpy="-1.5708 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/ds3225_sg_coreless.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part planet1 -->
+    <visual>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/planet1.stl"/>
+      </geometry>
+      <material name="planet1_material">
+        <color rgba="0.913725 0.0352941 0.0352941 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/planet1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part servo_mount -->
+    <visual>
+      <origin xyz="-0.00635082 0.0114061 -0.0176669" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/servo_mount.stl"/>
+      </geometry>
+      <material name="servo_mount_material">
+        <color rgba="0.337255 0.337255 0.305882 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.00635082 0.0114061 -0.0176669" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/servo_mount.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part planet3 -->
+    <visual>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/planet3.stl"/>
+      </geometry>
+      <material name="planet3_material">
+        <color rgba="0.913725 0.0352941 0.0352941 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/planet3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part sun -->
+    <visual>
+      <origin xyz="0.000356065 0.0322061 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/sun.stl"/>
+      </geometry>
+      <material name="sun_material">
+        <color rgba="0.0235294 0.568627 0.933333 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0322061 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/sun.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part crankmount -->
+    <visual>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/crankmount.stl"/>
+      </geometry>
+      <material name="crankmount_material">
+        <color rgba="0.337255 0.337255 0.305882 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/crankmount.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part carrier -->
+    <visual>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/carrier.stl"/>
+      </geometry>
+      <material name="carrier_material">
+        <color rgba="0.192157 0.968627 0 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/carrier.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part planet2 -->
+    <visual>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/planet2.stl"/>
+      </geometry>
+      <material name="planet2_material">
+        <color rgba="0.913725 0.0352941 0.0352941 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.000356065 0.0319561 -0.0173502" rpy="-0 0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/planet2.stl"/>
+      </geometry>
+    </collision>
     <!-- Part 8_32_x________1_4_________star_drive_screw______33_31___configuration_default_7 -->
     <visual>
       <origin xyz="0.0762 0 0" rpy="3.14159 -0 1.5708"/>
@@ -415,7 +859,7 @@
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter_5 -->
     <visual>
-      <origin xyz="-0.14572 0.1651 0.03335" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 0.1524 0.03335" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -424,14 +868,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 0.1651 0.03335" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 0.1524 0.03335" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter_6 -->
     <visual>
-      <origin xyz="-0.14572 -0.1143 0.03335" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 -0.127 0.03335" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -440,14 +884,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 -0.1143 0.03335" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 -0.127 0.03335" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter_7 -->
     <visual>
-      <origin xyz="-0.14572 -0.1143 0.00795" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 -0.127 0.00795" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -456,14 +900,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 -0.1143 0.00795" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 -0.127 0.00795" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part 1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660_3 -->
     <visual>
-      <origin xyz="-0.14732 -0.12065 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14732 -0.13335 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
@@ -472,14 +916,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14732 -0.12065 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14732 -0.13335 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
     </collision>
     <!-- Part 1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660_4 -->
     <visual>
-      <origin xyz="-0.08382 -0.12065 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.08382 -0.13335 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
@@ -488,14 +932,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.08382 -0.12065 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.08382 -0.13335 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_x_3_x_1_x___23___aluminum_c_channel__276_4359___a38264014896210428c26aa3428c6660.stl"/>
       </geometry>
     </collision>
     <!-- Part motor_mount_half_2 -->
     <visual>
-      <origin xyz="-0.141863 -0.129163 0.0016" rpy="0 -0 0"/>
+      <origin xyz="-0.141863 -0.141863 0.0016" rpy="0 -0 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/motor_mount_half.stl"/>
       </geometry>
@@ -504,14 +948,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.141863 -0.129163 0.0016" rpy="0 -0 0"/>
+      <origin xyz="-0.141863 -0.141863 0.0016" rpy="0 -0 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/motor_mount_half.stl"/>
       </geometry>
     </collision>
     <!-- Part standoff_2_437_0_16__list_input_1_default_len_0_0619_meter_8 -->
     <visual>
-      <origin xyz="-0.14572 0.1651 0.00795" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 0.1524 0.00795" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
@@ -520,14 +964,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 0.1651 0.00795" rpy="0 1.5708 0"/>
+      <origin xyz="-0.14572 0.1524 0.00795" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/standoff_2_437_0_16__list_input_1_default_len_0_0619_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part 25d_nfpshop_2 -->
     <visual>
-      <origin xyz="-0.01672 0.0254 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="-0.01672 0.0127 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/25d_nfpshop.stl"/>
       </geometry>
@@ -536,7 +980,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.01672 0.0254 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="-0.01672 0.0127 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/25d_nfpshop.stl"/>
       </geometry>
@@ -575,7 +1019,7 @@
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2 -->
     <visual>
-      <origin xyz="0.13937 4.886e-09 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0127 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -584,14 +1028,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 4.886e-09 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0127 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_9 -->
     <visual>
-      <origin xyz="0.147244 -0.0254 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -600,14 +1044,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 -0.0254 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209 -->
     <visual>
-      <origin xyz="0.14572 -0.0127 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 -0.0254 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -616,14 +1060,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 -0.0127 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 -0.0254 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_2 -->
     <visual>
-      <origin xyz="0.13937 -0.0254 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0381 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -632,14 +1076,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 -0.0254 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0381 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_10 -->
     <visual>
-      <origin xyz="0.147244 4.886e-09 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0127 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -648,14 +1092,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 4.886e-09 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0127 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_3 -->
     <visual>
-      <origin xyz="0.13937 0.0381 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0254 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -664,14 +1108,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 0.0381 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0254 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_11 -->
     <visual>
-      <origin xyz="0.147244 0.0127 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 4.886e-09 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -680,14 +1124,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 0.0127 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 4.886e-09 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_2 -->
     <visual>
-      <origin xyz="0.14572 0.0254 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 0.0127 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -696,14 +1140,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 0.0254 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 0.0127 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_4 -->
     <visual>
-      <origin xyz="0.13937 0.0127 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 4.886e-09 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -712,14 +1156,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 0.0127 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 4.886e-09 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_12 -->
     <visual>
-      <origin xyz="0.147244 0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0254 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -728,14 +1172,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0254 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_5 -->
     <visual>
-      <origin xyz="0.07587 0.127 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.1143 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -744,14 +1188,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 0.127 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.1143 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_13 -->
     <visual>
-      <origin xyz="0.083744 0.1016 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.0889 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -760,14 +1204,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 0.1016 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.0889 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_3 -->
     <visual>
-      <origin xyz="0.08222 0.1143 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 0.1016 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -776,14 +1220,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.08222 0.1143 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 0.1016 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_6 -->
     <visual>
-      <origin xyz="0.07587 0.1016 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.0889 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -792,14 +1236,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 0.1016 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.0889 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_14 -->
     <visual>
-      <origin xyz="0.083744 0.127 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.1143 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -808,14 +1252,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 0.127 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.1143 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_7 -->
     <visual>
-      <origin xyz="0.07587 0.0762 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.0635 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -824,14 +1268,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 0.0762 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.0635 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_15 -->
     <visual>
-      <origin xyz="0.083744 0.0508 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -840,14 +1284,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 0.0508 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_4 -->
     <visual>
-      <origin xyz="0.08222 0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 0.0508 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -856,14 +1300,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.08222 0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 0.0508 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_8 -->
     <visual>
-      <origin xyz="0.07587 0.0508 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.0381 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -872,14 +1316,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 0.0508 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 0.0381 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_16 -->
     <visual>
-      <origin xyz="0.083744 0.0762 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.0635 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -888,14 +1332,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 0.0762 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 0.0635 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_9 -->
     <visual>
-      <origin xyz="0.13937 0.127 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.1143 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -904,14 +1348,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 0.127 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.1143 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_17 -->
     <visual>
-      <origin xyz="0.147244 0.1016 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0889 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -920,14 +1364,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 0.1016 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0889 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_5 -->
     <visual>
-      <origin xyz="0.14572 0.1143 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 0.1016 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -936,14 +1380,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 0.1143 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 0.1016 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_10 -->
     <visual>
-      <origin xyz="0.13937 0.1016 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0889 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -952,14 +1396,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 0.1016 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0889 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_18 -->
     <visual>
-      <origin xyz="0.147244 0.127 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.1143 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -968,14 +1412,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 0.127 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.1143 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_11 -->
     <visual>
-      <origin xyz="0.13937 0.0762 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0635 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -984,14 +1428,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 0.0762 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0635 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_19 -->
     <visual>
-      <origin xyz="0.147244 0.0508 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0381 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1000,14 +1444,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 0.0508 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0381 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_6 -->
     <visual>
-      <origin xyz="0.14572 0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 0.0508 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1016,14 +1460,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 0.0508 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_12 -->
     <visual>
-      <origin xyz="0.13937 0.0508 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0381 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1032,14 +1476,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 0.0508 0.02065" rpy="0 -1.5708 0"/>
+      <origin xyz="0.13937 0.0381 0.02065" rpy="0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_20 -->
     <visual>
-      <origin xyz="0.147244 0.0762 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0635 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1048,14 +1492,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 0.0762 0.02065" rpy="-3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 0.0635 0.02065" rpy="-3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_13 -->
     <visual>
-      <origin xyz="0.13937 -0.0508 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0635 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1064,14 +1508,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 -0.0508 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0635 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_21 -->
     <visual>
-      <origin xyz="0.147244 -0.0762 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0889 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1080,14 +1524,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 -0.0762 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0889 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_7 -->
     <visual>
-      <origin xyz="0.14572 -0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 -0.0762 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1096,14 +1540,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.14572 -0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.14572 -0.0762 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_14 -->
     <visual>
-      <origin xyz="0.13937 -0.0762 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0889 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1112,14 +1556,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.13937 -0.0762 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.13937 -0.0889 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_22 -->
     <visual>
-      <origin xyz="0.147244 -0.0508 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0635 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1128,14 +1572,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.147244 -0.0508 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.147244 -0.0635 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_15 -->
     <visual>
-      <origin xyz="0.07587 -0.0508 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0635 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1144,14 +1588,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 -0.0508 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0635 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_23 -->
     <visual>
-      <origin xyz="0.083744 -0.0762 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0889 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1160,14 +1604,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 -0.0762 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0889 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_8 -->
     <visual>
-      <origin xyz="0.08222 -0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 -0.0762 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1176,14 +1620,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.08222 -0.0635 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 -0.0762 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_16 -->
     <visual>
-      <origin xyz="0.07587 -0.0762 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0889 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1192,14 +1636,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 -0.0762 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0889 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_24 -->
     <visual>
-      <origin xyz="0.083744 -0.0508 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0635 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1208,14 +1652,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 -0.0508 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0635 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_17 -->
     <visual>
-      <origin xyz="0.07587 4.886e-09 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0127 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1224,14 +1668,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 4.886e-09 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0127 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_25 -->
     <visual>
-      <origin xyz="0.083744 -0.0254 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1240,14 +1684,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 -0.0254 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0381 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_9 -->
     <visual>
-      <origin xyz="0.08222 -0.0127 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 -0.0254 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1256,14 +1700,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.08222 -0.0127 0.02065" rpy="-1.5708 0 -0"/>
+      <origin xyz="0.08222 -0.0254 0.02065" rpy="-1.5708 0 -0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_18 -->
     <visual>
-      <origin xyz="0.07587 -0.0254 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0381 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1272,14 +1716,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.07587 -0.0254 0.02065" rpy="-0 -1.5708 0"/>
+      <origin xyz="0.07587 -0.0381 0.02065" rpy="-0 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_26 -->
     <visual>
-      <origin xyz="0.083744 4.886e-09 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0127 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1288,14 +1732,1326 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0.083744 4.886e-09 0.02065" rpy="3.14159 -1.5708 0"/>
+      <origin xyz="0.083744 -0.0127 0.02065" rpy="3.14159 -1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
+    <!-- Part part_1 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_1.stl"/>
+      </geometry>
+      <material name="part_1_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_6 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_6.stl"/>
+      </geometry>
+      <material name="part_6_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_6.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_3 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_3.stl"/>
+      </geometry>
+      <material name="part_3_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_7 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_7.stl"/>
+      </geometry>
+      <material name="part_7_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_7.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_2 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_2.stl"/>
+      </geometry>
+      <material name="part_2_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_5 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_5.stl"/>
+      </geometry>
+      <material name="part_5_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_5.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_4 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_4.stl"/>
+      </geometry>
+      <material name="part_4_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_4.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part drone_frame -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/drone_frame.stl"/>
+      </geometry>
+      <material name="drone_frame_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/drone_frame.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_8 -->
+    <visual>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_8.stl"/>
+      </geometry>
+      <material name="part_8_material">
+        <color rgba="0.627451 0.627451 0.627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.003 0.088725 0.238068" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_8.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part soic_8_3_9x4_9mm_p1_27mm -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/soic_8_3_9x4_9mm_p1_27mm.stl"/>
+      </geometry>
+      <material name="soic_8_3_9x4_9mm_p1_27mm_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/soic_8_3_9x4_9mm_p1_27mm.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0805_2012metric -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric.stl"/>
+      </geometry>
+      <material name="led_0805_2012metric_material">
+        <color rgba="0.980392 0.713725 0.00392157 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_2 -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_2.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part c_0805_2012metric -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric.stl"/>
+      </geometry>
+      <material name="c_0805_2012metric_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0805_2012metric_1 -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_1.stl"/>
+      </geometry>
+      <material name="led_0805_2012metric_1_material">
+        <color rgba="0.647059 0.647059 0.647059 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_1 -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_1.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_1_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part secbotpowerpcb_v1_pcb -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/secbotpowerpcb_v1_pcb.stl"/>
+      </geometry>
+      <material name="secbotpowerpcb_v1_pcb_material">
+        <color rgba="0.313725 0.486275 0.411765 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/secbotpowerpcb_v1_pcb.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_3 -->
+    <visual>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_3.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_3_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08382 -0.208378 0.245623" rpy="1.5708 -0 1.5708"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0603_1608metric_2 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_2.stl"/>
+      </geometry>
+      <material name="r_0603_1608metric_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0603_1608metric_3 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_3.stl"/>
+      </geometry>
+      <material name="r_0603_1608metric_3_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0603_1608metric_2 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_2.stl"/>
+      </geometry>
+      <material name="led_0603_1608metric_2_material">
+        <color rgba="0.498039 0.498039 0.498039 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pinheader_2x09_p2_54mm_vertical -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinheader_2x09_p2_54mm_vertical.stl"/>
+      </geometry>
+      <material name="pinheader_2x09_p2_54mm_vertical_material">
+        <color rgba="0.858824 0.737255 0.494118 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinheader_2x09_p2_54mm_vertical.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0603_1608metric -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric.stl"/>
+      </geometry>
+      <material name="r_0603_1608metric_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0603_1608metric_4 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_4.stl"/>
+      </geometry>
+      <material name="r_0603_1608metric_4_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_4.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part c_0603_1608metric -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0603_1608metric.stl"/>
+      </geometry>
+      <material name="c_0603_1608metric_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0603_1608metric.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0603_1608metric_1 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_1.stl"/>
+      </geometry>
+      <material name="r_0603_1608metric_1_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part secbotuwbpcb_v1_pcb -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/secbotuwbpcb_v1_pcb.stl"/>
+      </geometry>
+      <material name="secbotuwbpcb_v1_pcb_material">
+        <color rgba="0.313725 0.486275 0.411765 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/secbotuwbpcb_v1_pcb.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0603_1608metric_4 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_4.stl"/>
+      </geometry>
+      <material name="led_0603_1608metric_4_material">
+        <color rgba="0.917647 0.917647 0.917647 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_4.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0603_1608metric_1 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_1.stl"/>
+      </geometry>
+      <material name="led_0603_1608metric_1_material">
+        <color rgba="0.917647 0.917647 0.917647 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0603_1608metric_3 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_3.stl"/>
+      </geometry>
+      <material name="led_0603_1608metric_3_material">
+        <color rgba="0.980392 0.713725 0.00392157 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric_3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part c_0603_1608metric_1 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0603_1608metric_1.stl"/>
+      </geometry>
+      <material name="c_0603_1608metric_1_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0603_1608metric_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0603_1608metric -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric.stl"/>
+      </geometry>
+      <material name="led_0603_1608metric_material">
+        <color rgba="0.980392 0.713725 0.00392157 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0603_1608metric.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0603_1608metric_5 -->
+    <visual>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_5.stl"/>
+      </geometry>
+      <material name="r_0603_1608metric_5_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.14575 0.0127 0.344568" rpy="1.5708 0 -3.14159"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0603_1608metric_5.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pin001 -->
+    <visual>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pin001.stl"/>
+      </geometry>
+      <material name="pin001_material">
+        <color rgba="0.678431 0.678431 0.678431 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pin001.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part corps001 -->
+    <visual>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/corps001.stl"/>
+      </geometry>
+      <material name="corps001_material">
+        <color rgba="0.0980392 0.0980392 0.0980392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/corps001.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pin001_1 -->
+    <visual>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pin001_1.stl"/>
+      </geometry>
+      <material name="pin001_1_material">
+        <color rgba="0.678431 0.678431 0.678431 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pin001_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part bouton001 -->
+    <visual>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/bouton001.stl"/>
+      </geometry>
+      <material name="bouton001_material">
+        <color rgba="0.0980392 0.0980392 0.0980392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.08582 -0.0274682 0.170862" rpy="-3.14159 1.5708 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/bouton001.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part part_1_2 -->
+    <visual>
+      <origin xyz="-0.1397 0.01605 0.0016002" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_1__2.stl"/>
+      </geometry>
+      <material name="part_1_2_material">
+        <color rgba="0.886275 0.623529 0.0627451 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.1397 0.01605 0.0016002" rpy="-0 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/part_1__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_2.stl"/>
+      </geometry>
+      <material name="led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_14 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_14.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_14_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_14.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_11 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_11.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_11_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_11.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_1 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_1.stl"/>
+      </geometry>
+      <material name="led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_1_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part tssop_28_4_4x9_7mm_p0_65mm -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_28_4_4x9_7mm_p0_65mm.stl"/>
+      </geometry>
+      <material name="tssop_28_4_4x9_7mm_p0_65mm_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_28_4_4x9_7mm_p0_65mm.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part tssop_28_4_4x9_7mm_p0_65mm_1 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_28_4_4x9_7mm_p0_65mm_1.stl"/>
+      </geometry>
+      <material name="tssop_28_4_4x9_7mm_p0_65mm_1_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_28_4_4x9_7mm_p0_65mm_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part c_0805_2012metric_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric__2.stl"/>
+      </geometry>
+      <material name="c_0805_2012metric_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pinsocket_1x24_p2_54mm_vertical -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x24_p2_54mm_vertical.stl"/>
+      </geometry>
+      <material name="pinsocket_1x24_p2_54mm_vertical_material">
+        <color rgba="0.858824 0.737255 0.494118 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x24_p2_54mm_vertical.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_6 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_6.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_6_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_6.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pinsocket_1x24_p2_54mm_vertical_1 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x24_p2_54mm_vertical_1.stl"/>
+      </geometry>
+      <material name="pinsocket_1x24_p2_54mm_vertical_1_material">
+        <color rgba="0.858824 0.737255 0.494118 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x24_p2_54mm_vertical_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_9 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_9.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_9_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_9.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part c_0805_2012metric_3 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric_3.stl"/>
+      </geometry>
+      <material name="c_0805_2012metric_3_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric_3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_5 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_5.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_5_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_5.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_3_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_3__2.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_3_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_3__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_10 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_10.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_10_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_10.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_4 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_4.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_4_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_4.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_2_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_2__2.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_2_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_2__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part sw_dip_spstx08_slide_6_7x21_88mm_w7_62mm_p2_54mm_lowprofile -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/sw_dip_spstx08_slide_6_7x21_88mm_w7_62mm_p2_54mm_lowprofile.stl"/>
+      </geometry>
+      <material name="sw_dip_spstx08_slide_6_7x21_88mm_w7_62mm_p2_54mm_lowprofile_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/sw_dip_spstx08_slide_6_7x21_88mm_w7_62mm_p2_54mm_lowprofile.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pinsocket_1x03_p2_54mm_vertical -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x03_p2_54mm_vertical.stl"/>
+      </geometry>
+      <material name="pinsocket_1x03_p2_54mm_vertical_material">
+        <color rgba="0.858824 0.737255 0.494118 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x03_p2_54mm_vertical.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0805_2012metric_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric__2.stl"/>
+      </geometry>
+      <material name="led_0805_2012metric_2_material">
+        <color rgba="0.231373 0.380392 0.705882 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0805_2012metric_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_2.stl"/>
+      </geometry>
+      <material name="led_0805_2012metric_2_material">
+        <color rgba="0.980392 0.713725 0.00392157 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part d_0805_2012metric -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/d_0805_2012metric.stl"/>
+      </geometry>
+      <material name="d_0805_2012metric_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/d_0805_2012metric.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part tssop_24_4_4x7_8mm_p0_65mm_1 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_24_4_4x7_8mm_p0_65mm_1.stl"/>
+      </geometry>
+      <material name="tssop_24_4_4x7_8mm_p0_65mm_1_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_24_4_4x7_8mm_p0_65mm_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_1_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_1__2.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_1_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_1__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part c_0805_2012metric_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric_2.stl"/>
+      </geometry>
+      <material name="c_0805_2012metric_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric_2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_4 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_4.stl"/>
+      </geometry>
+      <material name="led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_4_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_4.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0805_2012metric_3 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_3.stl"/>
+      </geometry>
+      <material name="led_0805_2012metric_3_material">
+        <color rgba="0.231373 0.380392 0.705882 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_16 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_16.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_16_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_16.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0805_2012metric_1_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_1__2.stl"/>
+      </geometry>
+      <material name="led_0805_2012metric_1_2_material">
+        <color rgba="0.231373 0.380392 0.705882 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_1__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part mainrobot_pcb -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/mainrobot_pcb.stl"/>
+      </geometry>
+      <material name="mainrobot_pcb_material">
+        <color rgba="0.313725 0.486275 0.411765 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/mainrobot_pcb.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_17 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_17.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_17_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_17.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_0805_2012metric_4 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_4.stl"/>
+      </geometry>
+      <material name="led_0805_2012metric_4_material">
+        <color rgba="0.615686 0.811765 0.929412 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_0805_2012metric_4.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_13 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_13.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_13_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_13.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_7 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_7.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_7_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_7.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_8 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_8.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_8_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_8.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_3 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_3.stl"/>
+      </geometry>
+      <material name="led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_3_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_3.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part led_ws2812b_plcc4_5_0x5_0mm_p3_2mm -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm.stl"/>
+      </geometry>
+      <material name="led_ws2812b_plcc4_5_0x5_0mm_p3_2mm_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/led_ws2812b_plcc4_5_0x5_0mm_p3_2mm.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_2 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric__2.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_2_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric__2.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_15 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_15.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_15_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_15.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pinsocket_1x03_p2_54mm_vertical_1 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x03_p2_54mm_vertical_1.stl"/>
+      </geometry>
+      <material name="pinsocket_1x03_p2_54mm_vertical_1_material">
+        <color rgba="0.858824 0.737255 0.494118 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x03_p2_54mm_vertical_1.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part r_0805_2012metric_12 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_12.stl"/>
+      </geometry>
+      <material name="r_0805_2012metric_12_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/r_0805_2012metric_12.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part pinsocket_1x10_p2_54mm_vertical -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x10_p2_54mm_vertical.stl"/>
+      </geometry>
+      <material name="pinsocket_1x10_p2_54mm_vertical_material">
+        <color rgba="0.858824 0.737255 0.494118 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/pinsocket_1x10_p2_54mm_vertical.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part tssop_24_4_4x7_8mm_p0_65mm -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_24_4_4x7_8mm_p0_65mm.stl"/>
+      </geometry>
+      <material name="tssop_24_4_4x7_8mm_p0_65mm_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/tssop_24_4_4x7_8mm_p0_65mm.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part c_0805_2012metric_1 -->
+    <visual>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric_1.stl"/>
+      </geometry>
+      <material name="c_0805_2012metric_1_material">
+        <color rgba="0.823529 0.819608 0.780392 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.0721091 0.156006 0.115468" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/c_0805_2012metric_1.stl"/>
+      </geometry>
+    </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_19 -->
     <visual>
-      <origin xyz="-0.13937 4.886e-09 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0127 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1304,14 +3060,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 4.886e-09 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0127 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_27 -->
     <visual>
-      <origin xyz="-0.147244 -0.0254 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0381 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1320,14 +3076,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 -0.0254 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0381 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_10 -->
     <visual>
-      <origin xyz="-0.14572 -0.0127 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 -0.0254 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1336,14 +3092,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 -0.0127 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 -0.0254 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_20 -->
     <visual>
-      <origin xyz="-0.13937 -0.0254 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0381 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1352,14 +3108,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 -0.0254 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0381 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_28 -->
     <visual>
-      <origin xyz="-0.147244 4.886e-09 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0127 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1368,14 +3124,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 4.886e-09 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0127 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_21 -->
     <visual>
-      <origin xyz="-0.13937 0.0381 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0254 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1384,14 +3140,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 0.0381 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0254 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_29 -->
     <visual>
-      <origin xyz="-0.147244 0.0127 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 4.886e-09 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1400,14 +3156,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 0.0127 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 4.886e-09 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_11 -->
     <visual>
-      <origin xyz="-0.14572 0.0254 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 0.0127 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1416,14 +3172,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 0.0254 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 0.0127 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_22 -->
     <visual>
-      <origin xyz="-0.13937 0.0127 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 4.886e-09 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1432,14 +3188,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 0.0127 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 4.886e-09 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_30 -->
     <visual>
-      <origin xyz="-0.147244 0.0381 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0254 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1448,14 +3204,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 0.0381 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0254 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_23 -->
     <visual>
-      <origin xyz="-0.07587 0.127 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.1143 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1464,14 +3220,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 0.127 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.1143 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_31 -->
     <visual>
-      <origin xyz="-0.083744 0.1016 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.0889 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1480,14 +3236,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 0.1016 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.0889 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_12 -->
     <visual>
-      <origin xyz="-0.08222 0.1143 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 0.1016 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1496,14 +3252,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.08222 0.1143 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 0.1016 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_24 -->
     <visual>
-      <origin xyz="-0.07587 0.1016 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.0889 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1512,14 +3268,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 0.1016 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.0889 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_32 -->
     <visual>
-      <origin xyz="-0.083744 0.127 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.1143 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1528,14 +3284,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 0.127 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.1143 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_25 -->
     <visual>
-      <origin xyz="-0.07587 0.0762 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.0635 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1544,14 +3300,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 0.0762 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.0635 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_33 -->
     <visual>
-      <origin xyz="-0.083744 0.0508 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.0381 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1560,14 +3316,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 0.0508 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.0381 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_13 -->
     <visual>
-      <origin xyz="-0.08222 0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 0.0508 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1576,14 +3332,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.08222 0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 0.0508 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_26 -->
     <visual>
-      <origin xyz="-0.07587 0.0508 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.0381 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1592,14 +3348,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 0.0508 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 0.0381 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_34 -->
     <visual>
-      <origin xyz="-0.083744 0.0762 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.0635 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1608,14 +3364,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 0.0762 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 0.0635 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_27 -->
     <visual>
-      <origin xyz="-0.13937 0.127 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.1143 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1624,14 +3380,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 0.127 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.1143 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_35 -->
     <visual>
-      <origin xyz="-0.147244 0.1016 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0889 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1640,14 +3396,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 0.1016 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0889 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_14 -->
     <visual>
-      <origin xyz="-0.14572 0.1143 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 0.1016 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1656,14 +3412,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 0.1143 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 0.1016 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_28 -->
     <visual>
-      <origin xyz="-0.13937 0.1016 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0889 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1672,14 +3428,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 0.1016 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0889 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_36 -->
     <visual>
-      <origin xyz="-0.147244 0.127 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.1143 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1688,14 +3444,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 0.127 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.1143 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_29 -->
     <visual>
-      <origin xyz="-0.13937 0.0762 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0635 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1704,14 +3460,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 0.0762 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0635 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_37 -->
     <visual>
-      <origin xyz="-0.147244 0.0508 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0381 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1720,14 +3476,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 0.0508 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0381 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_15 -->
     <visual>
-      <origin xyz="-0.14572 0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 0.0508 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1736,14 +3492,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 0.0508 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_30 -->
     <visual>
-      <origin xyz="-0.13937 0.0508 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0381 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1752,14 +3508,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 0.0508 0.02065" rpy="0 1.5708 0"/>
+      <origin xyz="-0.13937 0.0381 0.02065" rpy="0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_38 -->
     <visual>
-      <origin xyz="-0.147244 0.0762 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0635 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1768,14 +3524,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 0.0762 0.02065" rpy="-3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 0.0635 0.02065" rpy="-3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_31 -->
     <visual>
-      <origin xyz="-0.13937 -0.0508 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0635 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1784,14 +3540,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 -0.0508 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0635 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_39 -->
     <visual>
-      <origin xyz="-0.147244 -0.0762 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0889 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1800,14 +3556,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 -0.0762 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0889 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_16 -->
     <visual>
-      <origin xyz="-0.14572 -0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 -0.0762 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1816,14 +3572,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.14572 -0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.14572 -0.0762 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_32 -->
     <visual>
-      <origin xyz="-0.13937 -0.0762 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0889 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1832,14 +3588,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.13937 -0.0762 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.13937 -0.0889 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_40 -->
     <visual>
-      <origin xyz="-0.147244 -0.0508 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0635 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1848,14 +3604,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.147244 -0.0508 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.147244 -0.0635 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_33 -->
     <visual>
-      <origin xyz="-0.07587 -0.0508 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0635 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1864,14 +3620,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 -0.0508 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0635 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_41 -->
     <visual>
-      <origin xyz="-0.083744 -0.0762 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0889 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1880,14 +3636,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 -0.0762 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0889 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_17 -->
     <visual>
-      <origin xyz="-0.08222 -0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 -0.0762 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1896,14 +3652,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.08222 -0.0635 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 -0.0762 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_34 -->
     <visual>
-      <origin xyz="-0.07587 -0.0762 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0889 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1912,14 +3668,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 -0.0762 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0889 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_42 -->
     <visual>
-      <origin xyz="-0.083744 -0.0508 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0635 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1928,14 +3684,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 -0.0508 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0635 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_35 -->
     <visual>
-      <origin xyz="-0.07587 4.886e-09 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0127 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1944,14 +3700,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 4.886e-09 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0127 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_43 -->
     <visual>
-      <origin xyz="-0.083744 -0.0254 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0381 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -1960,14 +3716,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 -0.0254 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0381 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
     </collision>
     <!-- Part flat_bearing__276_1209_18 -->
     <visual>
-      <origin xyz="-0.08222 -0.0127 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 -0.0254 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
@@ -1976,14 +3732,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.08222 -0.0127 0.02065" rpy="1.5708 0 -3.14159"/>
+      <origin xyz="-0.08222 -0.0254 0.02065" rpy="1.5708 0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/flat_bearing__276_1209.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2_36 -->
     <visual>
-      <origin xyz="-0.07587 -0.0254 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0381 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
@@ -1992,14 +3748,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.07587 -0.0254 0.02065" rpy="-0 1.5708 0"/>
+      <origin xyz="-0.07587 -0.0381 0.02065" rpy="-0 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_x________1_2______star_drive_screw______276_5007___configuration__1_2.stl"/>
       </geometry>
     </collision>
     <!-- Part 8_32_nylock_nut__275_1027_44 -->
     <visual>
-      <origin xyz="-0.083744 4.886e-09 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0127 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -2008,7 +3764,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0.083744 4.886e-09 0.02065" rpy="3.14159 1.5708 0"/>
+      <origin xyz="-0.083744 -0.0127 0.02065" rpy="3.14159 1.5708 0"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/8_32_nylock_nut__275_1027__2.stl"/>
       </geometry>
@@ -2023,7 +3779,7 @@
     </inertial>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4 -->
     <visual>
-      <origin xyz="0 -0 -0.0015875" rpy="3.14159 0 3.14159"/>
+      <origin xyz="0 0 -0.0015875" rpy="3.14159 0 3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2032,7 +3788,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 -0 -0.0015875" rpy="3.14159 0 3.14159"/>
+      <origin xyz="0 0 -0.0015875" rpy="3.14159 0 3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2120,11 +3876,11 @@
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to drivecenter -->
   <joint name="rightcenter" type="revolute">
-    <origin xyz="-0.13937 0.0254 0.02065" rpy="0 -1.5708 0"/>
+    <origin xyz="-0.13937 0.0127 0.02065" rpy="0 -1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="drivecenter"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000" velocity="100" lower="-1e16" upper="1e16"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
   </joint>
   <!-- Link drivewheel -->
   <link name="drivewheel">
@@ -2199,7 +3955,7 @@
     </collision>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4_3 -->
     <visual>
-      <origin xyz="0 -0 -0.0015875" rpy="-3.14159 0 -1.5708"/>
+      <origin xyz="0 0 -0.0015875" rpy="-3.14159 0 -1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2208,7 +3964,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 -0 -0.0015875" rpy="-3.14159 0 -1.5708"/>
+      <origin xyz="0 0 -0.0015875" rpy="-3.14159 0 -1.5708"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2280,12 +4036,12 @@
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to drivewheel -->
   <joint name="frontrightwheel" type="revolute">
-    <origin xyz="-0.13937 -0.0635 0.02065" rpy="0 -1.5708 0"/>
+    <origin xyz="-0.13937 -0.0762 0.02065" rpy="0 -1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="drivewheel"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000" velocity="100" lower="-1e16" upper="1e16"/>
-    <mimic joint="rightcenter" multiplier="0.6"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="rightcenter" multiplier="1.667"/>
   </joint>
   <!-- Link driveoffcenter -->
   <link name="driveoffcenter">
@@ -2408,10 +4164,13 @@
     </collision>
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to driveoffcenter -->
-  <joint name="frontrightgear" type="fixed">
-    <origin xyz="-0.13937 -0.0127 0.02065" rpy="0 -1.5708 0"/>
+  <joint name="frontrightgear" type="revolute">
+    <origin xyz="-0.13937 -0.0254 0.02065" rpy="0 -1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="driveoffcenter"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="rightcenter" multiplier="-1.0"/>
   </joint>
   <!-- Link driveoffcenter_2 -->
   <link name="driveoffcenter_2">
@@ -2470,7 +4229,7 @@
     </collision>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4_5 -->
     <visual>
-      <origin xyz="-0 0 -0.0015875" rpy="3.14159 -0 -3.14159"/>
+      <origin xyz="0 0 -0.0015875" rpy="3.14159 -0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2479,7 +4238,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0 0 -0.0015875" rpy="3.14159 -0 -3.14159"/>
+      <origin xyz="0 0 -0.0015875" rpy="3.14159 -0 -3.14159"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2534,10 +4293,13 @@
     </collision>
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to driveoffcenter_2 -->
-  <joint name="backrightgear" type="fixed">
-    <origin xyz="-0.13937 0.0635 0.02065" rpy="-0 -1.5708 0"/>
+  <joint name="backrightgear" type="revolute">
+    <origin xyz="-0.13937 0.0508 0.02065" rpy="-0 -1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="driveoffcenter_2"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="rightcenter" multiplier="-1.0"/>
   </joint>
   <!-- Link drivewheel_2 -->
   <link name="drivewheel_2">
@@ -2693,12 +4455,12 @@
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to drivewheel_2 -->
   <joint name="backrightwheel" type="revolute">
-    <origin xyz="-0.13937 0.1143 0.02065" rpy="-0 -1.5708 0"/>
+    <origin xyz="-0.13937 0.1016 0.02065" rpy="-0 -1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="drivewheel_2"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000" velocity="100" lower="-1e16" upper="1e16"/>
-    <mimic joint="rightcenter" multiplier="0.6"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="rightcenter" multiplier="1.667"/>
   </joint>
   <!-- Link drivecenter_2 -->
   <link name="drivecenter_2">
@@ -2709,7 +4471,7 @@
     </inertial>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4_8 -->
     <visual>
-      <origin xyz="0 -0 -0.0015875" rpy="-3.14159 0 -0.0796938"/>
+      <origin xyz="-0 0 -0.0015875" rpy="-3.14159 0 -0.0796938"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2718,7 +4480,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 -0 -0.0015875" rpy="-3.14159 0 -0.0796938"/>
+      <origin xyz="-0 0 -0.0015875" rpy="-3.14159 0 -0.0796938"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2806,11 +4568,11 @@
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to drivecenter_2 -->
   <joint name="leftcenter" type="revolute">
-    <origin xyz="0.13937 0.0254 0.02065" rpy="0 1.5708 0"/>
+    <origin xyz="0.13937 0.0127 0.02065" rpy="0 1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="drivecenter_2"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000" velocity="100" lower="-1e16" upper="1e16"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
   </joint>
   <!-- Link drivewheel_3 -->
   <link name="drivewheel_3">
@@ -2853,7 +4615,7 @@
     </collision>
     <!-- Part 3___standard_shaft___276_1149___shaft_length_0_0762_meter_5 -->
     <visual>
-      <origin xyz="0 0 -0.1424" rpy="-1.5708 -0 -1.179"/>
+      <origin xyz="0 -0 -0.1424" rpy="-1.5708 -0 -1.179"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/3___standard_shaft___276_1149___shaft_length_0_0762_meter.stl"/>
       </geometry>
@@ -2862,14 +4624,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.1424" rpy="-1.5708 -0 -1.179"/>
+      <origin xyz="0 -0 -0.1424" rpy="-1.5708 -0 -1.179"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/3___standard_shaft___276_1149___shaft_length_0_0762_meter.stl"/>
       </geometry>
     </collision>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4_9 -->
     <visual>
-      <origin xyz="-0 0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="0 -0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2878,7 +4640,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="-0 0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="0 -0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -2901,7 +4663,7 @@
     </collision>
     <!-- Part 60t_gear__276_2169_003_3 -->
     <visual>
-      <origin xyz="0 0 -0.0177165" rpy="-1.5708 -0 -2.7498"/>
+      <origin xyz="0 -0 -0.0177165" rpy="-1.5708 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/60t_gear__276_2169_003.stl"/>
       </geometry>
@@ -2910,14 +4672,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.0177165" rpy="-1.5708 -0 -2.7498"/>
+      <origin xyz="0 -0 -0.0177165" rpy="-1.5708 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/60t_gear__276_2169_003.stl"/>
       </geometry>
     </collision>
     <!-- Part high_strength_gear_shaft_insert__276_3881_5 -->
     <visual>
-      <origin xyz="0 0 -0.028829" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="0 -0 -0.028829" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/high_strength_gear_shaft_insert__276_3881.stl"/>
       </geometry>
@@ -2926,7 +4688,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.028829" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="0 -0 -0.028829" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/high_strength_gear_shaft_insert__276_3881.stl"/>
       </geometry>
@@ -2966,12 +4728,12 @@
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to drivewheel_3 -->
   <joint name="frontleftwheel" type="revolute">
-    <origin xyz="0.13937 -0.0635 0.02065" rpy="0 1.5708 0"/>
+    <origin xyz="0.13937 -0.0762 0.02065" rpy="0 1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="drivewheel_3"/>
-    <axis xyz="0 0 -1"/>
-    <limit effort="1000" velocity="100" lower="-1e16" upper="1e16"/>
-    <mimic joint="leftcenter" multiplier="0.6"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="leftcenter" multiplier="1.667"/>
   </joint>
   <!-- Link driveoffcenter_3 -->
   <link name="driveoffcenter_3">
@@ -3030,7 +4792,7 @@
     </collision>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4_11 -->
     <visual>
-      <origin xyz="0 -0 -0.0015875" rpy="-3.14159 0 0.0796938"/>
+      <origin xyz="-0 -0 -0.0015875" rpy="-3.14159 0 0.0796938"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -3039,7 +4801,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 -0 -0.0015875" rpy="-3.14159 0 0.0796938"/>
+      <origin xyz="-0 -0 -0.0015875" rpy="-3.14159 0 0.0796938"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -3094,10 +4856,13 @@
     </collision>
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to driveoffcenter_3 -->
-  <joint name="frontleftgear" type="fixed">
-    <origin xyz="0.13937 -0.0127 0.02065" rpy="0 1.5708 0"/>
+  <joint name="frontleftgear" type="revolute">
+    <origin xyz="0.13937 -0.0254 0.02065" rpy="0 1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="driveoffcenter_3"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="leftcenter" multiplier="-1.0"/>
   </joint>
   <!-- Link driveoffcenter_4 -->
   <link name="driveoffcenter_4">
@@ -3220,10 +4985,13 @@
     </collision>
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to driveoffcenter_4 -->
-  <joint name="backleftgear" type="fixed">
-    <origin xyz="0.13937 0.0635 0.02065" rpy="-0 1.5708 0"/>
+  <joint name="backleftgear" type="revolute">
+    <origin xyz="0.13937 0.0508 0.02065" rpy="-0 1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="driveoffcenter_4"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="leftcenter" multiplier="-1.0"/>
   </joint>
   <!-- Link drivewheel_4 -->
   <link name="drivewheel_4">
@@ -3282,7 +5050,7 @@
     </collision>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4_13 -->
     <visual>
-      <origin xyz="0 0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="-0 -0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -3291,14 +5059,14 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="-0 -0 -0.0240665" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
     </collision>
     <!-- Part 1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4_14 -->
     <visual>
-      <origin xyz="0 0 -0.0015875" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="-0 0 -0.0015875" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -3307,7 +5075,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.0015875" rpy="3.14159 -0 -2.7498"/>
+      <origin xyz="-0 0 -0.0015875" rpy="3.14159 -0 -2.7498"/>
       <geometry>
         <mesh filename="package://my_robot_description/meshes/1_4__x______3_8__od_x__8_nylon_spacer_______276_6340___length___1_4.stl"/>
       </geometry>
@@ -3379,146 +5147,124 @@
   </link>
   <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to drivewheel_4 -->
   <joint name="backleftwheel" type="revolute">
-    <origin xyz="0.13937 0.1143 0.02065" rpy="-0 1.5708 0"/>
+    <origin xyz="0.13937 0.1016 0.02065" rpy="-0 1.5708 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
     <child link="drivewheel_4"/>
-    <axis xyz="0 0 -1"/>
-    <limit effort="1000" velocity="100" lower="-1e16" upper="1e16"/>
-    <mimic joint="leftcenter" multiplier="0.6"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="leftcenter" multiplier="1.667"/>
   </joint>
-  <gazebo>
-    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
-      <!-- Left Wheels: physically on left side of base_link after -90° yaw on base_link_to_chassis -->
-      <left_joint>backrightwheel</left_joint>
-      <left_joint>frontrightwheel</left_joint>
-
-      <!-- Right Wheels: physically on right side of base_link after -90° yaw -->
-      <right_joint>backleftwheel</right_joint>
-      <right_joint>frontleftwheel</right_joint>
-      
-      <wheel_separation>0.295</wheel_separation>
-      <wheel_radius>0.041275</wheel_radius>
-      <max_wheel_torque>20</max_wheel_torque>
-      <max_wheel_acceleration>1.0</max_wheel_acceleration>
-      
-      <odom_publish_frequency>50</odom_publish_frequency>
-      <topic>/cmd_vel</topic>
-      <odom_topic>/odom</odom_topic>
-      <tf_topic>/tf</tf_topic>
-      <frame_id>odom</frame_id>
-      <child_frame_id>base_link</child_frame_id>
-    </plugin>
-    
-    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-      <topic>joint_states</topic>
-    </plugin>
-  </gazebo>
-
-  <!-- ====================================================
-       Camera Links — give each camera a proper URDF link so
-       robot_state_publisher publishes TF frames and RViz can
-       show them as blue boxes on the robot.
-       Origin rpy yaw=+1.5708 aims the camera forward after
-       the -90° base_link_to_chassis rotation.
-       ==================================================== -->
-
-  <!-- Camera 1 (Left-ish) -->
-  <link name="camera_link">
+  <!-- Link crank -->
+  <link name="crank">
+    <inertial>
+      <origin xyz="-0.00778459 0.00301443 -0.0148317" rpy="0 0 0"/>
+      <mass value="0.0276286"/>
+      <inertia ixx="1.32817e-05" ixy="8.27182e-07" ixz="-3.57733e-06" iyy="1.50975e-05" iyz="1.38524e-06" izz="1.02142e-05"/>
+    </inertial>
+    <!-- Part crank -->
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="-0.0359423 -0.06352 0.0750125" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.04 0.04 0.04"/>
+        <mesh filename="package://my_robot_description/meshes/crank.stl"/>
       </geometry>
-      <material name="camera_green">
-        <color rgba="0.0 0.8 0.0 1.0"/>
+      <material name="crank_material">
+        <color rgba="0.933333 0.933333 0.901961 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><box size="0.04 0.04 0.04"/></geometry>
+      <origin xyz="-0.0359423 -0.06352 0.0750125" rpy="-1.5708 0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/crank.stl"/>
+      </geometry>
     </collision>
   </link>
-
-  <joint name="camera_joint" type="fixed">
+  <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to crank -->
+  <joint name="crank" type="revolute">
+    <origin xyz="0.0362984 0.106969 0.0461698" rpy="1.5708 0 -0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
-    <child link="camera_link"/>
-    <!-- xyz rotated 90° CCW from original chassis coords to compensate for base_link_to_chassis -90° yaw
-         Original: (0.2424, +0.140) in chassis → appeared on SIDE in base_link
-         Fixed:   (-0.140, +0.2424) in chassis → appears at FRONT-LEFT in base_link -->
-    <origin xyz="-0.140024 0.2424 0.30" rpy="0 0 1.5708"/>
+    <child link="crank"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="0" upper="9.42478"/>
   </joint>
-
-  <!-- Camera 2 (Right-ish) -->
-  <link name="camera2_link">
+  <!-- Link keypad_servo -->
+  <link name="keypad_servo">
+    <inertial>
+      <origin xyz="-1e-12 -1e-12 -0.0019993" rpy="0 0 0"/>
+      <mass value="0.0116942"/>
+      <inertia ixx="2.1748e-06" ixy="0" ixz="-0" iyy="2.1748e-06" iyz="-0" izz="4.31842e-06"/>
+    </inertial>
+    <!-- Part keypad_servo -->
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0.029606 -0.047289 -0.096464" rpy="0 -0 -0"/>
       <geometry>
-        <box size="0.04 0.04 0.04"/>
+        <mesh filename="package://my_robot_description/meshes/keypad_servo.stl"/>
       </geometry>
-      <material name="camera_blue">
-        <color rgba="0.1 0.2 0.9 1.0"/>
+      <material name="keypad_servo_material">
+        <color rgba="0.980392 0.109804 0.109804 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><box size="0.04 0.04 0.04"/></geometry>
+      <origin xyz="0.029606 -0.047289 -0.096464" rpy="0 -0 -0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/keypad_servo.stl"/>
+      </geometry>
     </collision>
   </link>
-
-  <joint name="camera2_joint" type="fixed">
+  <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to keypad_servo -->
+  <joint name="keyinner" type="revolute">
+    <origin xyz="-0.0289426 0.0792474 0.076414" rpy="-3.14159 0 0"/>
     <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
-    <child link="camera2_link"/>
-    <!-- xyz rotated 90° CCW — front-right in base_link frame -->
-    <origin xyz="0.140024 0.2424 0.30" rpy="0 0 1.5708"/>
+    <child link="keypad_servo"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="0" upper="4.71239"/>
   </joint>
-
-  <!-- Attach Gazebo sensors to their named links -->
-  <gazebo reference="camera_link">
-    <!-- Camera 1 Sensor (Front Left-ish) -->
-    <sensor name="camera" type="camera">
-      <!-- sensor pose is local to camera_link (joint handles world position) -->
-      <pose>0 0 0 0 0 0</pose>
-      <camera>
-        <horizontal_fov>1.089</horizontal_fov>
-        <image>
-          <width>640</width>
-          <height>480</height>
-          <format>R8G8B8</format>
-        </image>
-        <clip>
-          <near>0.05</near>
-          <far>8.0</far>
-        </clip>
-      </camera>
-      <always_on>1</always_on>
-      <update_rate>10</update_rate>
-      <visualize>true</visualize>
-      <topic>camera1/image</topic>
-    </sensor>
-
-  </gazebo>
-
-  <gazebo reference="camera2_link">
-    <sensor name="camera2" type="camera">
-      <!-- sensor pose is local to camera2_link (joint handles world position) -->
-      <pose>0 0 0 0 0 0</pose>
-      <camera>
-        <horizontal_fov>1.089</horizontal_fov>
-        <image>
-          <width>640</width>
-          <height>480</height>
-          <format>R8G8B8</format>
-        </image>
-        <clip>
-          <near>0.05</near>
-          <far>8.0</far>
-        </clip>
-      </camera>
-      <always_on>1</always_on>
-      <update_rate>10</update_rate>
-      <visualize>true</visualize>
-      <topic>camera2/image</topic>
-    </sensor>
-  </gazebo>
-
+  <!-- Link keypad_axle -->
+  <link name="keypad_axle">
+    <inertial>
+      <origin xyz="0.000299039 0.000149932 -0.0307289" rpy="0 0 0"/>
+      <mass value="0.174378"/>
+      <inertia ixx="8.80916e-05" ixy="-7.16238e-07" ixz="-4.5379e-07" iyy="8.84449e-05" iyz="-1.91277e-06" izz="6.3659e-05"/>
+    </inertial>
+    <!-- Part keypad_axle -->
+    <visual>
+      <origin xyz="0.0296046 0.101789 0.034864" rpy="3.14159 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/keypad_axle.stl"/>
+      </geometry>
+      <material name="keypad_axle_material">
+        <color rgba="0.980392 0.109804 0.109804 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.0296046 0.101789 0.034864" rpy="3.14159 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/keypad_axle.stl"/>
+      </geometry>
+    </collision>
+    <!-- Part keypad_presser -->
+    <visual>
+      <origin xyz="0.029606 0.101789 0.034964" rpy="3.14159 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/keypad_presser.stl"/>
+      </geometry>
+      <material name="keypad_presser_material">
+        <color rgba="0.964706 0.964706 0.952941 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.029606 0.101789 0.034964" rpy="3.14159 -0 0"/>
+      <geometry>
+        <mesh filename="package://my_robot_description/meshes/keypad_presser.stl"/>
+      </geometry>
+    </collision>
+  </link>
+  <!-- Joint from 1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default to keypad_axle -->
+  <joint name="keyouter" type="revolute">
+    <origin xyz="-0.0292499 0.133747 0.017114" rpy="-3.14159 0 0"/>
+    <parent link="1_x_1_x___23___aluminum_angle__276_6484___length_0_2921_meter_angle_type__default"/>
+    <child link="keypad_axle"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="10" lower="-3.141592653589793" upper="3.141592653589793"/>
+    <mimic joint="keyinner" multiplier="-1.0"/>
+  </joint>
 </robot>

@@ -205,6 +205,16 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::bind(&McuSubsystemSimulator::gzOdomCallback, this,
                 std::placeholders::_1));
 
+  gz_joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
+      "/joint_states", 10,
+      std::bind(&McuSubsystemSimulator::gzJointStateCallback, this,
+                std::placeholders::_1));
+
+  gz_imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+      "/imu", 10,
+      std::bind(&McuSubsystemSimulator::gzImuCallback, this,
+                std::placeholders::_1));
+
   // Timers
   // Physics + control update @ 100 Hz (10 ms)
   update_timer_ = this->create_wall_timer(
@@ -427,6 +437,31 @@ void McuSubsystemSimulator::gzOdomCallback(
   gz_odom_received_ = true;
 }
 
+void McuSubsystemSimulator::gzJointStateCallback(
+    const sensor_msgs::msg::JointState::SharedPtr msg) {
+  for (size_t i = 0; i < msg->name.size(); ++i) {
+    if (msg->name[i] == "leftcenter") {
+      // Convert radians to encoder ticks
+      // pose (rad) * (ticks_per_rev / 2pi)
+      double ticks_per_rev = static_cast<double>(encoder_ticks_per_rev_) * gear_ratio_;
+      left_encoder_accum_ = msg->position[i] * (ticks_per_rev / (2.0 * M_PI));
+    } else if (msg->name[i] == "rightcenter") {
+      double ticks_per_rev = static_cast<double>(encoder_ticks_per_rev_) * gear_ratio_;
+      right_encoder_accum_ = msg->position[i] * (ticks_per_rev / (2.0 * M_PI));
+    }
+  }
+}
+
+void McuSubsystemSimulator::gzImuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+  gz_imu_data_ = *msg;
+  gz_imu_received_ = true;
+
+  // Update sim_yaw_ from IMU orientation for internal consistency
+  double qz = msg->orientation.z;
+  double qw = msg->orientation.w;
+  sim_yaw_ = static_cast<float>(2.0 * std::atan2(qz, qw));
+}
+
 // Main update loop, mirrors RobotDriveBase::update(yaw, dt)
 void McuSubsystemSimulator::updateTimerCallback() {
   rclcpp::Time current_time = this->now();
@@ -435,8 +470,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
 
   if (dt < 0.001f) return;
 
-  // First we simulate physics, motor PWM -> wheel velocity -> encoder ticks
-  simulatePhysics(dt);
+  // Physics simulation is now handled by Gazebo
+  // simulatePhysics(dt); 
 
   // Then we read simulated encoders (cast accumulator to long, same as real
   // encoder read)
@@ -491,7 +526,7 @@ void McuSubsystemSimulator::updateTimerCallback() {
   prev_right_ticks_ = right_ticks;
 
   // Convert inches/s -> m/s if you're running inches internally
-  static constexpr double IN_TO_M = 0.0254;
+  // static constexpr double IN_TO_M = 0.0254;
 
   // Publish commanded velocity directly to Gazebo (not internal encoder
   // velocity)
@@ -589,7 +624,7 @@ void McuSubsystemSimulator::setPointControl(float dt) {
 void McuSubsystemSimulator::trajectoryControl(float dt) {
   if (dt < 0.001f) return;
 
-  static constexpr float M_TO_IN = 39.37007874f;
+  // static constexpr float M_TO_IN = 39.37007874f;
 
   // In simulation, use Gazebo's ground-truth odom so the trajectory controller
   // knows where the robot ACTUALLY is (not where the simulated encoders think).
@@ -723,6 +758,15 @@ void McuSubsystemSimulator::drivePublishCallback() {
 
 // IMU publish
 void McuSubsystemSimulator::imuPublishCallback() {
+  if (gz_imu_received_) {
+    auto msg = gz_imu_data_;
+    msg.header.stamp = this->now();
+    msg.header.frame_id = "imu_link";
+    imu_pub_->publish(msg);
+    return;
+  }
+
+  // Fallback to internal simulation if Gazebo IMU not received
   auto msg = sensor_msgs::msg::Imu();
 
   msg.header.stamp = this->now();

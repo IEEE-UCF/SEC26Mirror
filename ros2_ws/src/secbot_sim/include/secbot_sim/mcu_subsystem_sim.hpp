@@ -25,6 +25,7 @@
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <vector>
@@ -114,12 +115,17 @@ class McuSubsystemSimulator : public rclcpp::Node {
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr trajectory_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr gz_odom_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr gz_joint_state_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr gz_imu_sub_;
 
   // ── Gazebo ground-truth odom (for sim trajectory tracking) ──
   double gz_odom_x_ = 0.0;
   double gz_odom_y_ = 0.0;
   double gz_odom_yaw_ = 0.0;
   bool gz_odom_received_ = false;
+
+  sensor_msgs::msg::Imu gz_imu_data_;
+  bool gz_imu_received_ = false;
 
   std::vector<TrajectoryController::Waypoint> active_traj_;
 
@@ -161,6 +167,8 @@ class McuSubsystemSimulator : public rclcpp::Node {
   void mcuStatePublishCallback();
   void trajectoryCallback(const nav_msgs::msg::Path::SharedPtr msg);
   void gzOdomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
+  void gzJointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
+  void gzImuCallback(const sensor_msgs::msg::Imu::SharedPtr msg);
 };
 
 }  // namespace secbot_sim

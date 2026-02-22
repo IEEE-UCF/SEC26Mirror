@@ -40,7 +40,7 @@ DEFAULT_TOLERANCE   = 0.05   # m or rad — error threshold for PASS/FAIL
 
 # Robot physical constants (must match launch params)
 WHEEL_DIAMETER     = 4.0  * 0.0254   # inches → meters (4 in) — calibrated ✓
-TRACK_WIDTH        = 11.93 * 0.0254  # inches → meters (11.93 in) — matches wheel_separation=0.3030m
+TRACK_WIDTH        = 12.60 * 0.0254  # inches → meters (12.60 in) — exact geometry from URDF chain (Y: ±0.1600 m)
 TICKS_PER_REV      = 2048
 GEAR_RATIO         = 1
 
@@ -401,7 +401,7 @@ class MotionCalibrationNode(Node):
             sep,
             " MOTION CALIBRATION RESULTS",
             f" speed={self.speed} m/s  turn_speed={self.turn_speed} rad/s"
-            f"  tolerance={tol}",
+            f"  tolerance={tol*100:.0f}%",
             sep,
             hdr,
             line,
@@ -410,8 +410,8 @@ class MotionCalibrationNode(Node):
         all_pass = True
         for r in results:
             u = r.units
-            gz_pass  = abs(r.gz_error)  <= tol
-            enc_pass = abs(r.enc_error) <= tol
+            gz_pass  = abs(r.gz_pct / 100) <= tol   # relative: within tol% of commanded
+            enc_pass = abs(r.enc_pct / 100) <= tol  # relative: within tol% of commanded
             status   = "PASS" if (gz_pass and enc_pass) else ("FAIL_GZ" if not gz_pass else "FAIL_ENC")
             if status != "PASS":
                 all_pass = False

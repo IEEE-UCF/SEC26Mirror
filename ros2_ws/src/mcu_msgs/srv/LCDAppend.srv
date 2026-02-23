@@ -1,5 +1,5 @@
 # Append text to the robot LCD terminal.
-# Newlines (\n) split into separate terminal lines.
+# Newline characters split into separate terminal lines.
 # Lines longer than 21 chars are truncated; ring buffer holds 128 lines.
 string text
 ---

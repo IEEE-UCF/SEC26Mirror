@@ -32,10 +32,10 @@ using namespace Subsystem;
 static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
 
-// --- OLED display (SSD1306 128x64, hardware SPI) ---
-// Screen is split into two 128x32 zones.  Other subsystems can write to a
-// zone by calling g_oled.setTopText() / g_oled.setBottomText() etc.
-// To grant access from another subsystem header, forward-declare:
+// --- OLED display (SSD1306 128x64, software SPI) ---
+// Serial-terminal style: call g_oled.appendText("line") from any subsystem.
+// ROS2 topics: /mcu_robot/lcd/text (append) and /mcu_robot/lcd/scroll (-1/+1).
+// To call from another subsystem header, forward-declare:
 //   extern Subsystem::OLEDSubsystem g_oled;
 //
 // Software SPI: MOSI=11, CLK=13, DC=9, RST=3, CS=10

@@ -4,26 +4,34 @@ Custom ROS2 message and service definitions shared between the ROS2 workspace an
 
 ---
 
-## OLEDControl service
+## OLED display — serial terminal interface
 
-Controls the SSD1306 128×64 OLED display on the robot over micro-ROS.
-Service: `/mcu_robot/oled_control`
-Type: `mcu_msgs/srv/OLEDControl`
+The SSD1306 128×64 OLED on the robot behaves like a serial terminal.
+Text is appended to a 128-line ring buffer; the display shows 8 lines at a time.
+One writer at a time — last write wins.
 
-### Zones
+### Interface
 
-| Constant    | Value | Area              |
-|-------------|-------|-------------------|
-| ZONE_FULL   | 0     | Entire 128×64     |
-| ZONE_TOP    | 1     | Upper half 128×32 |
-| ZONE_BOTTOM | 2     | Lower half 128×32 |
+| Name                      | Type                           | Description                                          |
+|---------------------------|--------------------------------|------------------------------------------------------|
+| `/mcu_robot/lcd/append`  | service `mcu_msgs/LCDAppend`   | Append text; `\n` splits into lines. Returns `accepted`. |
+| `/mcu_robot/lcd/scroll`  | topic `std_msgs/Int8`          | `-1` = scroll up (older), `+1` = scroll down (newer) |
 
-### Modes
+### LCDAppend.srv
 
-| Constant    | Value | Description                  |
-|-------------|-------|------------------------------|
-| MODE_TEXT   | 0     | UTF-8 text, default 5×7 font |
-| MODE_BITMAP | 1     | Raw 1-bpp pixel data         |
+```
+string text      # text to append (\n splits into separate lines)
+---
+bool accepted
+```
+
+### Limits
+
+| Parameter     | Value | Notes                                           |
+|---------------|-------|-------------------------------------------------|
+| Lines visible | 8     | 64 px ÷ 8 px/row (text size 1)                 |
+| Max line len  | 21    | 128 px ÷ 6 px/char — longer input is truncated  |
+| Ring depth    | 128   | Oldest lines are overwritten when full           |
 
 ---
 
@@ -34,25 +42,39 @@ Enter the container:
 docker compose exec devcontainer bash
 ```
 
-**Write text to the bottom half:**
+**Append a line:**
 ```bash
-ros2 service call /mcu_robot/oled_control mcu_msgs/srv/OLEDControl \
-  "{zone: 2, mode: 0, text: 'Hello\nfrom ROS2!'}"
+ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend "text: 'Hello from ROS2'"
 ```
 
-**Write text to the top half:**
+**Competition — write antenna colors after VIEW_LED_COLORS:**
 ```bash
-ros2 service call /mcu_robot/oled_control mcu_msgs/srv/OLEDControl \
-  "{zone: 1, mode: 0, text: 'Status: OK'}"
+ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend \
+  "text: 'A1:RED A2:BLU\nA3:GRN A4:PUR'"
+```
+Result on display (2 lines appended at bottom):
+```
+A1:RED A2:BLU
+A3:GRN A4:PUR
 ```
 
-**Write text to the full screen:**
+**Scroll up to see older lines:**
 ```bash
-ros2 service call /mcu_robot/oled_control mcu_msgs/srv/OLEDControl \
-  "{zone: 0, mode: 0, text: 'SEC26 Robot\nAll systems go'}"
+ros2 topic pub --once /mcu_robot/lcd/scroll std_msgs/msg/Int8 "data: -1"
 ```
 
-**Notes:**
-- `\n` advances to the next line within the zone (4 lines per half, 21 chars wide).
+**Scroll down (back to live view):**
+```bash
+ros2 topic pub --once /mcu_robot/lcd/scroll std_msgs/msg/Int8 "data: 1"
+```
+
+**Jump back to live in one shot:**
+```bash
+ros2 topic pub --once /mcu_robot/lcd/scroll std_msgs/msg/Int8 "data: 127"
+```
+
+### Notes
 - The micro-ROS agent must be running and the robot connected before calling.
-- The top and bottom zones are independent; writing to one does not clear the other.
+- Appending does not reset the scroll position. Publish `data: 127` to jump back to live.
+- The ring buffer overwrites the oldest line when 128 lines are exceeded.
+- After adding `LCDAppend.srv`, rebuild micro-ROS: `pio run -e robot -t clean_microros && pio run -e robot`

@@ -1,37 +1,27 @@
 /**
  * @file OLEDSubsystem.h
  * @date 2026-02-22
- * @brief SSD1306 128x64 OLED display subsystem for the SEC26 robot.
+ * @brief SSD1306 128x64 OLED display subsystem — serial-terminal style.
  *
- * The screen is split into two independent 128x32 zones so separate subsystems
- * can each own one half without interfering with each other:
+ * Behaves like a serial terminal: text is appended to a ring buffer and the
+ * display shows a scrollable window over the most-recent lines.
  *
- *   ┌──────────────────────┐  y=0
- *   │   TOP  zone (128×32) │
- *   ├──────────────────────┤  y=32
- *   │ BOTTOM zone (128×32) │
- *   └──────────────────────┘  y=63
+ * ── ROS2 interface ───────────────────────────────────────────────────────────
+ *   /mcu_robot/lcd/append   service  mcu_msgs/srv/LCDAppend
+ *                           Request:  string text  (\n splits into lines)
+ *                           Response: bool accepted
  *
- * ── Internal C++ API (call from any subsystem) ───────────────────────────────
- *   setTopText(text)            setBottomText(text)
- *   setTopBitmap(data, len)     setBottomBitmap(data, len)
- *   setFullText(text)           setFullBitmap(data, len)
+ *   /mcu_robot/lcd/scroll   topic    std_msgs/Int8
+ *                           -1 = scroll up (older), +1 = scroll down (newer)
  *
- * ── ROS2 service ─────────────────────────────────────────────────────────────
- *   /mcu_robot/oled_control  →  mcu_msgs/srv/OLEDControl
- *   Fields: zone (FULL/TOP/BOTTOM), mode (TEXT/BITMAP), text, bitmap[1024]
+ * ── Internal C++ API (thread-safe) ───────────────────────────────────────────
+ *   appendText(text)     — same effect as calling /mcu_robot/lcd/append
+ *   scrollBy(delta)      — same effect as publishing to /mcu_robot/lcd/scroll
  *
- * ── Thread safety ────────────────────────────────────────────────────────────
- *   All public setters and the micro-ROS service callback are guarded by a
- *   FreeRTOS mutex.  The display hardware is only touched inside update(),
- *   which runs in the subsystem's own task.
- *
- * ── Sharing with other subsystems ────────────────────────────────────────────
- *   Declare g_oled as a non-static global in RobotLogic.h (remove `static`)
- *   and forward-declare it in any subsystem header that needs it:
- *
- *     extern Subsystem::OLEDSubsystem g_oled;
- *     // then call: g_oled.setBottomText("imu: 1.5 g");
+ * ── Limits ───────────────────────────────────────────────────────────────────
+ *   MAX_LINES    (128) ring-buffer depth; oldest lines overwritten when full
+ *   MAX_LINE_LEN (21)  characters per line; longer input is truncated
+ *   TEXT_BUF_CAP       max bytes per service request (MAX_LINES × 22 = 2816)
  */
 
 #ifndef OLEDSUBSYSTEM_H
@@ -39,7 +29,8 @@
 
 #include <Adafruit_SSD1306.h>
 #include <BaseSubsystem.h>
-#include <mcu_msgs/srv/oled_control.h>
+#include <mcu_msgs/srv/lcd_append.h>
+#include <std_msgs/msg/int8.h>
 #include <microros_manager_robot.h>
 
 #ifdef USE_FREERTOS
@@ -54,8 +45,8 @@ class OLEDSubsystemSetup : public Classes::BaseSetup {
  public:
   /**
    * @param id        Subsystem identifier string.
-   * @param mosi_pin  MOSI / D1 pin.
-   * @param clk_pin   CLK  / D0 pin.
+   * @param mosi_pin  MOSI / D1 pin (software SPI).
+   * @param clk_pin   CLK  / D0 pin (software SPI).
    * @param dc_pin    Data/Command select pin.
    * @param rst_pin   Reset pin, or -1 if not connected.
    * @param cs_pin    Chip-select pin.
@@ -81,22 +72,13 @@ class OLEDSubsystemSetup : public Classes::BaseSetup {
 class OLEDSubsystem : public IMicroRosParticipant,
                       public Classes::BaseSubsystem {
  public:
-  // ── Zone / mode constants (mirror the .srv file) ──────────────────────────
-  static constexpr uint8_t ZONE_FULL   = 0;
-  static constexpr uint8_t ZONE_TOP    = 1;
-  static constexpr uint8_t ZONE_BOTTOM = 2;
-
-  static constexpr uint8_t MODE_TEXT   = 0;
-  static constexpr uint8_t MODE_BITMAP = 1;
-
   // ── Display geometry ──────────────────────────────────────────────────────
-  static constexpr uint8_t DISPLAY_W = 128;
-  static constexpr uint8_t DISPLAY_H = 64;
-  static constexpr uint8_t HALF_H    = 32;
-
-  // Byte counts for raw bitmaps (1-bpp, horizontal scanlines)
-  static constexpr size_t BITMAP_HALF = (DISPLAY_W * HALF_H) / 8;   // 512 B
-  static constexpr size_t BITMAP_FULL = (DISPLAY_W * DISPLAY_H) / 8; // 1024 B
+  static constexpr uint8_t DISPLAY_W    = 128;
+  static constexpr uint8_t DISPLAY_H    = 64;
+  static constexpr int     LINES_VISIBLE = 8;   // 64 px / 8 px per text-size-1 row
+  static constexpr int     MAX_LINE_LEN  = 21;  // floor(128 px / 6 px per char)
+  static constexpr int     MAX_LINES     = 128; // ring-buffer depth
+  static constexpr int     TEXT_BUF_CAP  = MAX_LINES * (MAX_LINE_LEN + 1); // 2816 B
 
   explicit OLEDSubsystem(const OLEDSubsystemSetup& setup);
 
@@ -112,38 +94,17 @@ class OLEDSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
-  // ── Internal display API (thread-safe, callable from any subsystem) ───────
+  // ── Internal C++ API (thread-safe) ───────────────────────────────────────
 
-  /** Render text in the top 128x32 half.  Newlines (\n) are honoured. */
-  void setTopText(const char* text);
-
-  /** Render text in the bottom 128x32 half. */
-  void setBottomText(const char* text);
+  /** Append text to the terminal. Newlines (\\n) split into separate lines. */
+  void appendText(const char* text);
 
   /**
-   * Render text starting at the top-left of the full 128x64 screen.
-   * Text that overflows 4 lines will naturally continue into the bottom half.
-   * Clears any previous top/bottom zone content.
+   * Adjust the scroll position.
+   * @param delta  -1 = scroll up (older lines), +1 = scroll down (newer).
+   *               Clamped to valid range automatically.
    */
-  void setFullText(const char* text);
-
-  /**
-   * Write a raw 1-bpp bitmap into the top half.
-   * @param data  BITMAP_HALF (512) bytes — 128 px wide × 32 px tall,
-   *              horizontal scanlines, MSB = leftmost pixel.
-   * @param len   Number of bytes provided; clamped to BITMAP_HALF internally.
-   */
-  void setTopBitmap(const uint8_t* data, size_t len);
-
-  /** Write a raw 1-bpp bitmap into the bottom half (512 bytes). */
-  void setBottomBitmap(const uint8_t* data, size_t len);
-
-  /**
-   * Write a raw 1-bpp bitmap across the full 128x64 screen.
-   * @param data  BITMAP_FULL (1024) bytes, MSB = leftmost pixel.
-   * @param len   Byte count; clamped to BITMAP_FULL internally.
-   */
-  void setFullBitmap(const uint8_t* data, size_t len);
+  void scrollBy(int8_t delta);
 
 #ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, UBaseType_t priority,
@@ -154,38 +115,33 @@ class OLEDSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
-  // ── Zone state ───────────────────────────────────────────────────────────
-  struct ZoneState {
-    uint8_t mode          = MODE_TEXT;
-    char    text[128]     = {};       // Null-terminated; 4 lines × 21 chars
-    uint8_t bitmap[BITMAP_HALF] = {}; // 128×32 px, 1-bpp
-    bool    dirty         = false;
-  };
-
-  ZoneState top_;
-  ZoneState bottom_;
-
-  // Full-screen overrides (bypass zone system when active)
-  bool    full_bitmap_active_ = false;
-  bool    full_text_active_   = false;
-  uint8_t full_bitmap_[BITMAP_FULL] = {}; // 128×64 px, 1-bpp
-  char    full_text_[256]           = {}; // Up to 8 lines × ~21 chars
+  // ── Ring buffer ───────────────────────────────────────────────────────────
+  char lines_[MAX_LINES][MAX_LINE_LEN + 1] = {};
+  int  next_write_    = 0;  // next write index in ring
+  int  total_written_ = 0;  // lines ever written, capped at MAX_LINES
+  int  view_offset_   = 0;  // 0 = live (newest visible); N = scrolled N back
+  bool dirty_         = false;
 
   // ── Render helpers ────────────────────────────────────────────────────────
-  void renderTop();
-  void renderBottom();
-  void renderFullBitmap();
-  void renderFullText();
+  void appendOneLine(const char* s, int len);
+  void renderLines();
   void flushDisplay();
 
-  // ── micro-ROS service ─────────────────────────────────────────────────────
-  void handleService(const mcu_msgs__srv__OLEDControl_Request*  req,
-                     mcu_msgs__srv__OLEDControl_Response*       res);
-  static void serviceCallback(const void* req, void* res, void* ctx);
+  // ── micro-ROS: LCD append service ─────────────────────────────────────────
+  void handleAppend(const mcu_msgs__srv__LCDAppend_Request*  req,
+                          mcu_msgs__srv__LCDAppend_Response* res);
+  static void appendServiceCallback(const void* req, void* res, void* ctx);
 
-  // Pre-allocated buffers for service request/response string fields
-  char srv_text_buf_[128] = {};
-  char srv_msg_buf_[64]   = {};
+  char                               lcd_text_buf_[TEXT_BUF_CAP] = {};
+  mcu_msgs__srv__LCDAppend_Request   lcd_req_{};
+  mcu_msgs__srv__LCDAppend_Response  lcd_res_{};
+  rcl_service_t                      lcd_srv_{};
+
+  // ── micro-ROS: scroll topic ───────────────────────────────────────────────
+  static void scrollCallback(const void* msg, void* ctx);
+
+  std_msgs__msg__Int8 scroll_msg_ = {};
+  rcl_subscription_t  scroll_sub_ = {};
 
 #ifdef USE_FREERTOS
   static void taskFunction(void* pv) {
@@ -214,10 +170,7 @@ class OLEDSubsystem : public IMicroRosParticipant,
   const OLEDSubsystemSetup setup_;
   Adafruit_SSD1306         display_;
 
-  rcl_node_t*    node_ = nullptr;
-  rcl_service_t  srv_{};
-  mcu_msgs__srv__OLEDControl_Request  srv_req_{};
-  mcu_msgs__srv__OLEDControl_Response srv_res_{};
+  rcl_node_t* node_ = nullptr;
 };
 
 }  // namespace Subsystem

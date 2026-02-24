@@ -15,12 +15,11 @@ The codebase is split into two workspaces:
 
 ### MCU Workspace (`mcu_ws/`)
 
-- **Platforms**: ESP32 (field elements, beacons, drone, robotcomms) and Teensy41 (main robot controller)
+- **Platforms**: ESP32 (field elements, beacons, drone) and Teensy41 (main robot controller)
 - **Framework**: Arduino with PlatformIO build system
 - **Micro-ROS**: Robot and beacons use micro-ROS for ROS2 communication (stored in `libs_external/`)
 - **Source organization**:
   - `src/robot/`: Main Teensy41 robot firmware (uses micro-ROS)
-  - `src/robotcomms/`: ESP32 communication bridge
   - `src/beacon/`: UWB beacon nodes (differentiated by `BEACON_ID` build flag)
   - `src/drone/`: Drone controller
   - `src/field/`: Field element controllers (button, crank, earth, keypad, pressure)
@@ -91,7 +90,6 @@ pio run -e <environment>
 Examples:
 ```bash
 pio run -e robot              # Teensy41 main robot
-pio run -e robotcomms         # ESP32 comms bridge
 pio run -e beacon1            # UWB beacon with ID=10
 pio run -e beacon2            # UWB beacon with ID=11
 pio run -e drone              # Drone controller
@@ -111,9 +109,6 @@ pio run -e <environment> --target clean
 
 **Clean micro-ROS** (when micro-ROS messages are outdated):
 ```bash
-# Clean ESP32 micro-ROS (for robotcomms, beacons)
-pio run -e robotcomms -t clean_microros
-
 # Clean Teensy micro-ROS (for robot)
 pio run -e robot -t clean_microros
 ```
@@ -128,7 +123,7 @@ pio device monitor -e <environment>
 ```bash
 /home/ubuntu/scripts/flash_mcu.sh
 ```
-This script handles flashing both Teensy (robot) and ESP32 (robotcomms) with retries and prebuilt artifact support.
+This script handles flashing Teensy (robot) with retries and prebuilt artifact support.
 
 ### ROS2 Development
 
@@ -172,16 +167,23 @@ ros2 launch secbot_vision vision.launch.py              # Vision system
 
 ### Deployment
 
-**Deploy all systems to robot**:
+The deployment pipeline is triggered by pushing to `prod` or by pressing the physical deploy button on the Pi. It uses Gitea Actions (`.gitea/workflows/pi-deploy.yml`) to:
+
+1. Build Teensy firmware on an amd64 runner (avoids ARM64 compile issues)
+2. Download artifacts and deploy on the Pi (`rpi-ros2` runner)
+3. Rebuild Docker container, flash MCU, build ROS 2, and launch nodes
+
+**Deploy all systems inside the container**:
 ```bash
-python3 /home/ubuntu/scripts/deploy-all.py
+python3 /home/ubuntu/scripts/deploy-all.py [--skip-mcu] [--skip-ros] [--skip-launch]
 ```
 
-This script:
-1. Stages prebuilt firmware artifacts if available
-2. Builds ROS2 workspace
-3. Flashes Teensy and ESP32 firmware
-4. Launches ROS2 nodes
+**Flash Teensy only**:
+```bash
+bash /home/ubuntu/scripts/flash_mcu.sh
+```
+
+See `scripts/README.md` for full Pi setup instructions, button daemon configuration, CI/CD workflow details, and troubleshooting.
 
 ## Architecture Notes
 

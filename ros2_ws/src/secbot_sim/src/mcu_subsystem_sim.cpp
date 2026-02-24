@@ -173,6 +173,12 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   intake_pub_ = this->create_publisher<mcu_msgs::msg::IntakeState>(
       "/mcu_robot/intake/state", 10);
 
+<<<<<<< HEAD
+=======
+  bridge_pub_ = this->create_publisher<mcu_msgs::msg::IntakeBridgeState>(
+      "/mcu_robot/intake_bridge/state", 10);
+
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
   mini_robot_pub_ = this->create_publisher<mcu_msgs::msg::MiniRobotState>(
       "/mcu_robot/mini_robot/state", 10);
 
@@ -199,6 +205,28 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::bind(&McuSubsystemSimulator::cmdVelCallback, this,
                 std::placeholders::_1));
 
+<<<<<<< HEAD
+=======
+  // Bridge command subscriber
+  bridge_cmd_sub_ =
+      this->create_subscription<mcu_msgs::msg::IntakeBridgeCommand>(
+          "/mcu_robot/intake_bridge/command", 10,
+          std::bind(&McuSubsystemSimulator::bridgeCommandCallback, this,
+                    std::placeholders::_1));
+
+  // Arm command subscriber (for camera mast, latches)
+  arm_cmd_sub_ = this->create_subscription<mcu_msgs::msg::ArmCommand>(
+      "/arm_command", 10,
+      std::bind(&McuSubsystemSimulator::armCommandCallback, this,
+                std::placeholders::_1));
+
+  // Intake speed subscriber
+  intake_speed_sub_ = this->create_subscription<std_msgs::msg::Int16>(
+      "/intake_speed", 10,
+      std::bind(&McuSubsystemSimulator::intakeSpeedCallback, this,
+                std::placeholders::_1));
+
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
   // Gazebo ground-truth odometry — used for trajectory tracking in sim
   gz_odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       "/odom", 10,
@@ -245,6 +273,14 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::chrono::milliseconds(50),
       std::bind(&McuSubsystemSimulator::intakePublishCallback, this));
 
+<<<<<<< HEAD
+=======
+  // Bridge @ 20 Hz
+  bridge_publish_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(50),
+      std::bind(&McuSubsystemSimulator::bridgePublishCallback, this));
+
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
   // MiniRobot @ 10 Hz
   mini_robot_publish_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(100),
@@ -796,23 +832,170 @@ void McuSubsystemSimulator::rcPublishCallback() {
   rc_pub_->publish(msg);
 }
 
+<<<<<<< HEAD
 // Intake publish
+=======
+// Intake publish (improved: uses simulated state instead of always IDLE)
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 void McuSubsystemSimulator::intakePublishCallback() {
   auto msg = mcu_msgs::msg::IntakeState();
 
   msg.header.stamp = this->now();
   msg.header.frame_id = "base_link";
 
+<<<<<<< HEAD
   msg.state = mcu_msgs::msg::IntakeState::STATE_IDLE;
   msg.duck_detected = false;
   msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_OFF;
   msg.capture_count = 0;
   msg.jam_count = 0;
   msg.time_in_state_ms = 0;
+=======
+  msg.state = sim_intake_state_;
+  msg.duck_detected = sim_duck_detected_;
+
+  if (sim_intake_speed_ > 0)
+    msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_FORWARD;
+  else if (sim_intake_speed_ < 0)
+    msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_REVERSE;
+  else
+    msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_OFF;
+
+  msg.capture_count = 0;
+  msg.jam_count = 0;
+
+  auto elapsed = std::chrono::steady_clock::now() - intake_state_time_;
+  msg.time_in_state_ms = static_cast<uint32_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 
   intake_pub_->publish(msg);
 }
 
+<<<<<<< HEAD
+=======
+// Intake speed callback
+void McuSubsystemSimulator::intakeSpeedCallback(
+    const std_msgs::msg::Int16::SharedPtr msg) {
+  sim_intake_speed_ = msg->data;
+
+  if (msg->data > 0 && sim_intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE) {
+    sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_SPINNING;
+    intake_state_time_ = std::chrono::steady_clock::now();
+    sim_duck_detected_ = false;
+    RCLCPP_INFO(this->get_logger(), "[SIM] Intake spinning (speed=%d)",
+                msg->data);
+  } else if (msg->data < 0) {
+    sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_EJECTING;
+    intake_state_time_ = std::chrono::steady_clock::now();
+    sim_duck_detected_ = false;
+    RCLCPP_INFO(this->get_logger(), "[SIM] Intake ejecting");
+  } else if (msg->data == 0) {
+    sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_IDLE;
+    intake_state_time_ = std::chrono::steady_clock::now();
+    RCLCPP_INFO(this->get_logger(), "[SIM] Intake off");
+  }
+}
+
+// Bridge command callback
+void McuSubsystemSimulator::bridgeCommandCallback(
+    const mcu_msgs::msg::IntakeBridgeCommand::SharedPtr msg) {
+  bridge_cmd_time_ = std::chrono::steady_clock::now();
+
+  switch (msg->command) {
+    case mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND:
+      if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_STOWED) {
+        sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING;
+        RCLCPP_INFO(this->get_logger(), "[SIM] Bridge extending");
+      }
+      break;
+    case mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT:
+      if (sim_bridge_state_ ==
+              mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED ||
+          sim_bridge_state_ ==
+              mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING) {
+        sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING;
+        bridge_cmd_time_ = std::chrono::steady_clock::now();
+        RCLCPP_INFO(this->get_logger(), "[SIM] Bridge retracting");
+      }
+      break;
+    case mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW:
+    default:
+      sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_STOWED;
+      RCLCPP_INFO(this->get_logger(), "[SIM] Bridge stowed");
+      break;
+  }
+}
+
+// Arm command callback (logs servo commands for camera mast, latches)
+void McuSubsystemSimulator::armCommandCallback(
+    const mcu_msgs::msg::ArmCommand::SharedPtr msg) {
+  RCLCPP_INFO(this->get_logger(),
+              "[SIM] Arm command: joint=%d, position=%d, speed=%d",
+              msg->joint_id, msg->position, msg->speed);
+}
+
+// Bridge publish callback (with time-based state transitions)
+void McuSubsystemSimulator::bridgePublishCallback() {
+  // Time-based state transitions
+  auto elapsed = std::chrono::steady_clock::now() - bridge_cmd_time_;
+  double sec =
+      std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+          .count();
+
+  if (sim_bridge_state_ ==
+          mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING &&
+      sec >= 2.0) {
+    sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED;
+    RCLCPP_INFO(this->get_logger(), "[SIM] Bridge fully extended");
+  } else if (sim_bridge_state_ ==
+                 mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING &&
+             sec >= 2.0) {
+    sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_STOWED;
+    RCLCPP_INFO(this->get_logger(), "[SIM] Bridge fully stowed");
+  }
+
+  auto msg = mcu_msgs::msg::IntakeBridgeState();
+  msg.header.stamp = this->now();
+  msg.header.frame_id = "base_link";
+  msg.state = sim_bridge_state_;
+
+  // Simulate duck detection when extended (auto-detect after 1s for testing)
+  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED) {
+    auto ext_elapsed = std::chrono::steady_clock::now() - bridge_cmd_time_;
+    double ext_sec =
+        std::chrono::duration_cast<std::chrono::duration<double>>(ext_elapsed)
+            .count();
+    msg.duck_detected = (ext_sec >= 1.0);  // auto-detect after 1s in sim
+    msg.tof_distance_mm = msg.duck_detected ? 30 : 200;
+  } else {
+    msg.duck_detected = false;
+    msg.tof_distance_mm = 0;
+  }
+
+  if (sim_bridge_state_ ==
+      mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING)
+    msg.rack_motor_state =
+        mcu_msgs::msg::IntakeBridgeState::MOTOR_EXTENDING;
+  else if (sim_bridge_state_ ==
+           mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING)
+    msg.rack_motor_state =
+        mcu_msgs::msg::IntakeBridgeState::MOTOR_RETRACTING;
+  else
+    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_OFF;
+
+  msg.extend_count = 0;
+  msg.retract_count = 0;
+
+  auto state_elapsed = std::chrono::steady_clock::now() - bridge_cmd_time_;
+  msg.time_in_state_ms = static_cast<uint32_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(state_elapsed)
+          .count());
+
+  bridge_pub_->publish(msg);
+}
+
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 // MiniRobot publish
 void McuSubsystemSimulator::miniRobotPublishCallback() {
   auto msg = mcu_msgs::msg::MiniRobotState();

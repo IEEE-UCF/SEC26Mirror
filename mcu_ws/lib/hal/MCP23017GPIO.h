@@ -8,7 +8,7 @@
 #pragma once
 
 #include "HALPin.h"
-#include "drivers/MCP23017Driver.h"
+#include "MCP23017Driver.h"
 
 namespace HAL {
 

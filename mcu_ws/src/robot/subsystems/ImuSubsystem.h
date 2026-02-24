@@ -11,14 +11,20 @@
 
 #include <BNO085.h>
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 #include <BaseSubsystem.h>
 >>>>>>> 788e3a1a00f0f8138e28a6ee774f71d46d6817ca
+=======
+#include <BaseSubsystem.h>
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
 
-#include "TimedSubsystem.h"
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
 
 namespace Subsystem {
 
@@ -30,10 +36,10 @@ class ImuSubsystemSetup : public Classes::BaseSetup {
 };
 
 class ImuSubsystem : public IMicroRosParticipant,
-                     public Subsystem::TimedSubsystem {
+                     public Classes::BaseSubsystem {
  public:
   explicit ImuSubsystem(const ImuSubsystemSetup& setup)
-      : Subsystem::TimedSubsystem(setup), setup_(setup) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}
@@ -46,6 +52,25 @@ class ImuSubsystem : public IMicroRosParticipant,
   void onDestroy() override;
 
   void publishData();
+
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 20) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<ImuSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 20;
+#endif
 
  private:
   void initCovariances();

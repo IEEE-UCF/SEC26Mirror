@@ -64,8 +64,7 @@ def generate_launch_description():#big side note apparently the ROS2 system DOES
     #using keystrokes
     bridge_config   = os.path.join(
         pkg_share,
-        'config',
-        'ros-gz-bridge.yaml'
+        'config','ros-gz-bridge.yaml',
     )
     bridge = Node (
         package='ros_gz_bridge',

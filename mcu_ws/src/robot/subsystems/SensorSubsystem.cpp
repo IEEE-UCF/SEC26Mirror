@@ -16,9 +16,7 @@ bool SensorSubsystem::init() {
 
 void SensorSubsystem::update() {
   if (!pub_.impl) return;
-  if (everyMs(100)) {  // Publish every 100 ms (10 Hz)
-    publishData();
-  }
+  publishData();
 }
 
 void SensorSubsystem::reset() { pause(); }

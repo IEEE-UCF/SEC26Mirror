@@ -1,0 +1,30 @@
+# Service to control the SSD1306 OLED display on the robot.
+# The 128x64 screen is split into two independent 128x32 zones (top / bottom)
+# so separate subsystems can each own a half without interfering.
+
+# Target display zone
+uint8 ZONE_FULL=0       # Entire 128x64 screen
+uint8 ZONE_TOP=1        # Upper  128x32 half (rows  0-31)
+uint8 ZONE_BOTTOM=2     # Lower  128x32 half (rows 32-63)
+uint8 zone
+
+# Content mode
+uint8 MODE_TEXT=0       # Render UTF-8 text with the default 5x7 font
+uint8 MODE_BITMAP=1     # Write raw 1-bpp pixel data
+uint8 mode
+
+# --- MODE_TEXT ---------------------------------------------------------------
+# UTF-8 string rendered at the top-left of the target zone.
+# Line breaks advance to the next line within the zone.
+# Default font: 6x8 px per char, 21 chars wide, 4 lines per half-screen zone.
+string text
+
+# --- MODE_BITMAP -------------------------------------------------------------
+# Raw 1-bpp horizontal scanline data, MSB = leftmost pixel.
+# ZONE_FULL:               128 * 64 / 8 = 1024 bytes (use all 1024)
+# ZONE_TOP or ZONE_BOTTOM: 128 * 32 / 8 =  512 bytes (trailing 512 ignored)
+uint8[1024] bitmap
+
+---
+bool accepted
+string message

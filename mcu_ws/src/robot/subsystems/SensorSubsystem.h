@@ -15,7 +15,9 @@
 
 #include <vector>
 
-#include "TimedSubsystem.h"
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
 
 namespace Subsystem {
 class SensorSubsystemSetup : public Classes::BaseSetup {
@@ -27,10 +29,10 @@ class SensorSubsystemSetup : public Classes::BaseSetup {
 };
 
 class SensorSubsystem : public IMicroRosParticipant,
-                        public Subsystem::TimedSubsystem {
+                        public Classes::BaseSubsystem {
  public:
   explicit SensorSubsystem(const SensorSubsystemSetup& setup)
-      : Subsystem::TimedSubsystem(setup), setup_(setup) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}
@@ -43,6 +45,25 @@ class SensorSubsystem : public IMicroRosParticipant,
   void onDestroy() override;
 
   void publishData();
+
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 100) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<SensorSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 100;
+#endif
 
  private:
   const SensorSubsystemSetup setup_;

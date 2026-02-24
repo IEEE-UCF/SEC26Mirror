@@ -3,6 +3,10 @@
 #include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
 
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
+#endif
+
 #include "Pose2D.h"
 #include "TimedSubsystem.h"
 #include "mcu_msgs/msg/mini_robot_state.h"
@@ -59,7 +63,11 @@ class MiniRobotSubsystemSetup : public Classes::BaseSetup {
   uint32_t comms_timeout_ms_;    // Time before declaring comms failure
   uint32_t mission_timeout_ms_;  // Max time for a mission before timeout
   float arrival_threshold_m_;    // Distance threshold to consider "arrived"
+<<<<<<< HEAD
   uint8_t esp32_i2c_addr_;       // I2C address of the robotcomms ESP32
+=======
+  uint8_t esp32_i2c_addr_;       // I2C address of the companion ESP32
+>>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 };
 
 /**
@@ -121,6 +129,25 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   Pose2D getCurrentPosition() const { return current_position_; }
   Pose2D getTargetPosition() const { return target_position_; }
   float getDistanceToTarget() const;
+
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+                     uint32_t updateRateMs = 100) {
+    task_delay_ms_ = updateRateMs;
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<MiniRobotSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 100;
+#endif
 
  private:
   // Internal State Machine Logic

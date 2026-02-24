@@ -51,7 +51,8 @@ void ButtonPressTask::start() {
   enterState(State::kSettle);
 
   RCLCPP_INFO(node_->get_logger(),
-              "ButtonPress: Starting (%d presses, drive-based)", cfg_.presses_total);
+              "ButtonPress: Starting (%d presses, drive-based)",
+              cfg_.presses_total);
 }
 
 void ButtonPressTask::step() {
@@ -74,9 +75,8 @@ void ButtonPressTask::step() {
   // Progress: based on presses done + phase within current cycle
   const float total =
       (cfg_.presses_total == 0) ? 1.0f : static_cast<float>(cfg_.presses_total);
-  const float cycle_time =
-      cfg_.approach_s + cfg_.hold_s + cfg_.backup_s + cfg_.adjust_s +
-      cfg_.between_presses_s;
+  const float cycle_time = cfg_.approach_s + cfg_.hold_s + cfg_.backup_s +
+                           cfg_.adjust_s + cfg_.between_presses_s;
   float phase_frac = 0.0f;
   if (cycle_time > 0.001f) {
     float elapsed_in_cycle = 0.0f;
@@ -124,7 +124,8 @@ void ButtonPressTask::step() {
       // Keep gentle pressure on button
       publishVel(cfg_.hold_speed, 0.0f, 0.0f);
       if (t_state >= cfg_.hold_s) {
-        RCLCPP_INFO(node_->get_logger(), "ButtonPress: Backing up from press #%d",
+        RCLCPP_INFO(node_->get_logger(),
+                    "ButtonPress: Backing up from press #%d",
                     presses_done_ + 1);
         enterState(State::kBackup);
       }
@@ -138,8 +139,8 @@ void ButtonPressTask::step() {
 
         if (presses_done_ >= cfg_.presses_total) {
           stopRobot();
-          RCLCPP_INFO(node_->get_logger(),
-                      "ButtonPress: Completed %d presses!", presses_done_);
+          RCLCPP_INFO(node_->get_logger(), "ButtonPress: Completed %d presses!",
+                      presses_done_);
           status_ = TaskStatus::kSucceeded;
           progress_ = 1.0f;
           enterState(State::kDone);

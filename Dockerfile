@@ -70,6 +70,10 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     rm -rf /tmp/sec26mirror && \
     rm -rf /var/lib/apt/lists/*
 
+# Upgrade cmake to 3.29+ — system cmake 3.28 lacks GCC 13.3 compiler feature
+# tables and has a cross-compilation regression for ARM STATIC_LIBRARY builds.
+RUN pip3 install --break-system-packages --upgrade cmake
+
 # Fix permissions so the user/group own their workspace
 RUN chown -R $USER_UID:$USER_GID /home/$USER_NAME || true
 
@@ -119,18 +123,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-lgpio \
     python3-rpi.gpio \
     python3-serial \
-    python3-requests && \
+    python3-requests \
+    ros-$ROS_DISTRO-robot-localization && \
     rm -rf /var/lib/apt/lists/*
 
 # 9. Install onshape-to-robot for URDF/STL export from Onshape CAD
 RUN pip3 install --break-system-packages onshape-to-robot
 
-# 10. Patch cmake 3.28 cross-compilation regression (fatal for STATIC_LIBRARY ARM builds;
-#     fixed in cmake 3.29). ros:jazzy-ros-base ships Ubuntu 24.04 which has cmake 3.28.
-#     The patched macro sets a safe C/CXX standard default instead of fataling when the
-#     ABI-detection binary cannot be run for cross-compilers.
-COPY mcu_ws/libs_external/teensy/micro_ros_platformio/cmake_overrides/Compiler/CMakeCommonCompilerMacros.cmake \
-     /usr/share/cmake-3.28/Modules/Compiler/CMakeCommonCompilerMacros.cmake
+# 10. cmake 3.28 cross-compilation regression is fixed by the pip upgrade above.
+#     The manual patch of CMakeCommonCompilerMacros.cmake is no longer needed.
 
 FROM base AS dev
 
@@ -141,7 +142,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-ros-gz \
     ros-$ROS_DISTRO-rviz2 \
     ros-$ROS_DISTRO-gz-ros2-control \
-    ros-$ROS_DISTRO-robot-localization \
     ros-$ROS_DISTRO-robot-state-publisher \
     ros-$ROS_DISTRO-joint-state-publisher-gui \
     ros-$ROS_DISTRO-xacro \

@@ -1,7 +1,8 @@
 /**
  * @file MinibotLogic.h
  * @author Rafeed Khan
- * @brief Wiring logic for the minibot ESP32 (UWB tag + motor control over micro-ROS WiFi)
+ * @brief Wiring logic for the minibot ESP32 (UWB tag + motor control over
+ * micro-ROS WiFi)
  */
 #pragma once
 
@@ -9,11 +10,11 @@
 #include <SPI.h>
 #include <microros_manager_robot.h>
 
-#include "NativeGPIO.h"
+#include "../MinibotDriveSubsystem.h"
 #include "MotorDriver.h"
+#include "NativeGPIO.h"
 #include "UWBDriver.h"
 #include "UWBSubsystem.h"
-#include "../MinibotDriveSubsystem.h"
 
 using namespace Subsystem;
 
@@ -37,9 +38,10 @@ static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
 
 // UWB Driver and Subsystem
-static Drivers::UWBDriverSetup g_uwb_driver_setup(
-    "uwb_driver", Drivers::UWBMode::TAG, MINIBOT_TAG_ID,
-    UWB_CS_PIN, UWB_RST_PIN);
+static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
+                                                  Drivers::UWBMode::TAG,
+                                                  MINIBOT_TAG_ID, UWB_CS_PIN,
+                                                  UWB_RST_PIN);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver);
@@ -51,17 +53,17 @@ static HAL::NativeGPIO g_left_dir_pin(MOTOR_LEFT_DIR_PIN);
 static HAL::NativeGPIO g_right_pwm_pin(MOTOR_RIGHT_PWM_PIN);
 static HAL::NativeGPIO g_right_dir_pin(MOTOR_RIGHT_DIR_PIN);
 
-static Drivers::MotorDriverSetup g_left_setup(
-    "left_motor", &g_left_pwm_pin, &g_left_dir_pin);
+static Drivers::MotorDriverSetup g_left_setup("left_motor", &g_left_pwm_pin,
+                                              &g_left_dir_pin);
 static Drivers::MotorDriver g_left_motor(g_left_setup);
 
-static Drivers::MotorDriverSetup g_right_setup(
-    "right_motor", &g_right_pwm_pin, &g_right_dir_pin);
+static Drivers::MotorDriverSetup g_right_setup("right_motor", &g_right_pwm_pin,
+                                               &g_right_dir_pin);
 static Drivers::MotorDriver g_right_motor(g_right_setup);
 
 // Drive Subsystem
-static MinibotDriveSubsystemSetup g_drive_setup(
-    "minibot_drive", &g_left_motor, &g_right_motor);
+static MinibotDriveSubsystemSetup g_drive_setup("minibot_drive", &g_left_motor,
+                                                &g_right_motor);
 static MinibotDriveSubsystem g_drive(g_drive_setup);
 
 // Arduino Entry Points

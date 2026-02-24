@@ -17,7 +17,11 @@ bool MicrorosManager::create_entities() {
       RCL_RET_OK)
     return false;
   executor_ = rclc_executor_get_zero_initialized_executor();
-  if (rclc_executor_init(&executor_, &support_.context, 1, &allocator_) !=
+  // Reserve enough executor handles for all subscription/service callbacks.
+  // Publishers do not consume handles — only subscriptions, services, and
+  // timers do.  10 handles supports the current set of subsystems with room
+  // for growth.
+  if (rclc_executor_init(&executor_, &support_.context, 10, &allocator_) !=
       RCL_RET_OK)
     return false;
   // Let registered participants create their pubs/subs
@@ -74,7 +78,11 @@ void MicrorosManager::update() {
                                       ? AGENT_CONNECTED
                                       : AGENT_DISCONNECTED;);
       if (state_ == AGENT_CONNECTED) {
+#ifdef USE_TEENSYTHREADS
+        Threads::Scope guard(mutex_);
+#else
         std::lock_guard<std::mutex> guard(mutex_);
+#endif
         rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(100));
       }
       break;
@@ -108,22 +116,24 @@ void MicrorosManager::registerParticipant(IMicroRosParticipant* participant) {
   }
 }
 
-#ifdef USE_FREERTOS
+#ifdef USE_TEENSYTHREADS
 void MicrorosManager::taskFunction(void* pvParams) {
   auto* self = static_cast<MicrorosManager*>(pvParams);
   self->begin();
   while (true) {
     self->update();
-    vTaskDelay(pdMS_TO_TICKS(10));
+    threads.delay(10);
   }
 }
 
-void MicrorosManager::beginThreaded(uint32_t stackSize, UBaseType_t priority) {
-  xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+void MicrorosManager::beginThreaded(uint32_t stackSize, int /*priority*/) {
+  threads.addThread(taskFunction, this, stackSize);
 }
-#endif
 
+Threads::Mutex& MicrorosManager::getMutex() { return mutex_; }
+#else
 std::mutex& MicrorosManager::getMutex() { return mutex_; }
+#endif
 
 bool MicrorosManager::isConnected() const { return state_ == AGENT_CONNECTED; }
 

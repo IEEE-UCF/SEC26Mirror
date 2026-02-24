@@ -14,8 +14,8 @@
 #include <std_msgs/msg/string.h>
 #include <uxr/client/util/time.h>
 
-#ifdef USE_FREERTOS
-#include "arduino_freertos.h"
+#ifdef USE_TEENSYTHREADS
+#include <TeensyThreads.h>
 #endif
 
 namespace Subsystem {
@@ -66,11 +66,11 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
     node_ = nullptr;
   }
 
-#ifdef USE_FREERTOS
-  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+#ifdef USE_TEENSYTHREADS
+  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 200) {
     task_delay_ms_ = updateRateMs;
-    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+    threads.addThread(taskFunction, this, stackSize);
   }
 
  private:
@@ -79,7 +79,7 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+      threads.delay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 200;

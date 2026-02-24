@@ -2,20 +2,29 @@
  * @file RobotLogic.h
  * @date 12/16/25
  * @author Aldem Pido
- * @brief Main logic for the SEC26 robot — FreeRTOS-based scheduling.
+ * @brief Main logic for the SEC26 robot — TeensyThreads-based scheduling.
+ *
+ * I2C bus layout:
+ *   Wire  (Wire0) — TCA9548A mux (0x70), TCA9555 GPIO expander (0x20),
+ *                   INA219 power sensor (0x40, behind mux ch0)
+ *   Wire1         — BNO085 IMU (0x4A)
+ *   Wire2         — PCA9685 PWM driver #1 (0x40), PCA9685 #2 (0x41)
  */
 
 #pragma once
 
 #include <Arduino.h>
+#include <TeensyThreads.h>
 #include <microros_manager_robot.h>
 
 #include "../RobotConstants.h"
 #include "BNO085.h"
+#include "I2CBusLock.h"
+#include "I2CMuxDriver.h"
 #include "I2CPowerDriver.h"
 #include "PCA9685Manager.h"
+#include "TCA9555Driver.h"
 #include "TOF.h"
-#include "arduino_freertos.h"
 #include "robot/drive-base/DriveSubsystem.h"
 #include "robot/machines/HeartbeatSubsystem.h"
 #include "robot/subsystems/ArmSubsystem.h"
@@ -42,46 +51,61 @@ static MicrorosManager g_mr(g_mr_setup);
 // Software SPI: MOSI=11, CLK=13, DC=9, RST=3, CS=10
 static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
                                        /*mosi*/ 11,
-                                       /*clk*/  13,
-                                       /*dc*/    9,
-                                       /*rst*/   3,
-                                       /*cs*/   10);
+                                       /*clk*/ 13,
+                                       /*dc*/ 9,
+                                       /*rst*/ 3,
+                                       /*cs*/ 10);
 static OLEDSubsystem g_oled(g_oled_setup);
 
 // --- Heartbeat subsystem ---
 static HeartbeatSubsystemSetup g_hb_setup("heartbeat_subsystem");
 static HeartbeatSubsystem g_hb(g_hb_setup);
 
-// --- Battery subsystem ---
-static Drivers::I2CPowerDriverSetup g_power_driver_setup("power_driver", 0x40,
-                                                         10.0f, 0.015f);
+// --- Wire0: I2C mux (TCA9548A) ---
+static Drivers::I2CMuxDriverSetup g_mux_setup("i2c_mux", /*addr*/ 0x70, Wire);
+static Drivers::I2CMuxDriver g_mux(g_mux_setup);
+
+// --- Wire0: GPIO expander (TCA9555) ---
+static Drivers::TCA9555DriverSetup g_gpio_setup("gpio_expander", /*addr*/ 0x20,
+                                                Wire);
+static Drivers::TCA9555Driver g_gpio(g_gpio_setup);
+
+// --- Wire0: Battery subsystem (INA219 on mux channel 0) ---
+static Drivers::I2CPowerDriverSetup g_power_driver_setup("power_driver",
+                                                         /*addr*/ 0x40, &g_mux,
+                                                         /*ch*/ 0, Wire,
+                                                         /*shuntOhm*/ 0.005f);
 static Drivers::I2CPowerDriver g_power_driver(g_power_driver_setup);
 static BatterySubsystemSetup g_battery_setup("battery_subsystem",
                                              &g_power_driver);
 static BatterySubsystem g_battery(g_battery_setup);
 
-// --- Sensor subsystem (TOF) ---
-static Drivers::TOFDriverSetup g_tof_setup("tof_sensor", 500, 0);
+// --- Wire0: Sensor subsystem (TOF, directly on Wire0) ---
+static Drivers::TOFDriverSetup g_tof_setup("tof_sensor", 500, 0, Wire);
 static Drivers::TOFDriver g_tof_driver(g_tof_setup);
 static std::vector<Drivers::TOFDriver*> g_tof_drivers = {&g_tof_driver};
 static SensorSubsystemSetup g_sensor_setup("sensor_subsystem", g_tof_drivers);
 static SensorSubsystem g_sensor(g_sensor_setup);
 
-// --- IMU subsystem (BNO085) ---
-static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver");
+// --- Wire1: IMU subsystem (BNO085) ---
+static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", /*rst*/ -1,
+                                                     Wire1);
 static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
 
-// --- PCA9685 manager (servo driver) ---
+// --- Wire2: PCA9685 PWM manager (servo driver) ---
 static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
 static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
-// create a single PCA device instance; manager owns the driver
+// PCA9685 #1 (default address) and #2 (address + 1) both on Wire2
 static Robot::PCA9685Driver* g_pca0 =
     g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca0", DEFAULT_PCA9685_ADDR, DEFAULT_PCA9685_FREQ));
+        "pca0", DEFAULT_PCA9685_ADDR, DEFAULT_PCA9685_FREQ, Wire2));
+static Robot::PCA9685Driver* g_pca1 =
+    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
+        "pca1", DEFAULT_PCA9685_ADDR + 1, DEFAULT_PCA9685_FREQ, Wire2));
 
-// --- Arm subsystem (pseudo-code) ---
+// --- Arm subsystem ---
 static Drivers::EncoderDriverSetup g_encoder_setup("arm_encoder", /*pin1*/ 1,
                                                    /*pin2*/ 2);
 static Drivers::EncoderDriver g_arm_encoder(g_encoder_setup);
@@ -98,7 +122,8 @@ static IntakeSubsystemSetup g_intake_setup("intake_subsystem", /*pwm*/ 3,
 static IntakeSubsystem g_intake(g_intake_setup);
 
 // --- Intake bridge subsystem (gear-and-rack for pressure plate) ---
-// TODO: confirm rack motor, home switch, and TOF pin numbers with electrical team
+// TODO: confirm rack motor, home switch, and TOF pin numbers with electrical
+// team
 static IntakeBridgeSubsystemSetup g_bridge_setup(
     "intake_bridge_subsystem", /*rack_pwm*/ 6, /*rack_dir*/ 7,
     /*home_switch*/ 9, /*tof_xshut*/ 8, /*tof_addr*/ 0x30,
@@ -116,7 +141,7 @@ static IntakeBridgeSubsystem g_bridge(g_bridge_setup);
 static void pca_task(void*) {
   while (true) {
     g_pca_mgr.update();
-    vTaskDelay(pdMS_TO_TICKS(20));
+    threads.delay(20);
   }
 }
 
@@ -129,13 +154,18 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR(
-      "\r\nSEC26 Robot — FreeRTOS kernel " tskKERNEL_VERSION_NUMBER "\r\n"));
+  Serial.println(PSTR("\r\nSEC26 Robot — TeensyThreads\r\n"));
 
-  // 1. Init all subsystems
+  // 0. Create I2C bus mutexes before any driver uses I2C.
+  I2CBus::initLocks();
+
+  // 1. Init all subsystems — I2C buses are initialised inside each driver.
+  //    Mux must come before battery (INA219 is behind mux ch0).
   g_mr.init();
   g_oled.init();
   g_hb.init();
+  g_mux.init();
+  g_gpio.init();
   g_battery.init();
   g_sensor.init();
   g_imu.init();
@@ -162,22 +192,19 @@ void setup() {
   // 3. Start FreeRTOS tasks
   //                       stackSize  priority  rateMs
   g_mr.beginThreaded(8192, 4);            // highest — ROS agent
-  g_imu.beginThreaded(2048, 3, 20);       // 50Hz sensor fusion
-  g_oled.beginThreaded(2048, 1, 50);      // 20Hz display refresh
+  g_imu.beginThreaded(2048, 3, 20);       // 50 Hz sensor fusion
+  g_oled.beginThreaded(2048, 1, 50);      // 20 Hz display refresh
   g_rc.beginThreaded(1024, 3, 5);         // fast IBUS polling
-  g_arm.beginThreaded(1024, 2, 20);       // 50Hz movement
-  g_battery.beginThreaded(1024, 1, 100);  // 10Hz battery
-  g_sensor.beginThreaded(1024, 1, 100);   // 10Hz TOF
-  g_hb.beginThreaded(512, 1, 200);        // 5Hz heartbeat
-  g_intake.beginThreaded(1024, 2, 20);    // 50Hz intake
-  g_bridge.beginThreaded(1024, 2, 20);   // 50Hz intake bridge
-  // g_drive.beginThreaded( 2048,     3,        20     );  // 50Hz drive control
-  xTaskCreate(pca_task, "pca", 512, nullptr, 2, nullptr);  // 50Hz PWM flush
+  g_arm.beginThreaded(1024, 2, 20);       // 50 Hz movement
+  g_battery.beginThreaded(1024, 1, 100);  // 10 Hz battery
+  g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
+  g_hb.beginThreaded(512, 1, 200);        // 5 Hz heartbeat
+  g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
+  // g_drive.beginThreaded(2048, 3, 20);  // 50 Hz drive control
+  threads.addThread(pca_task, nullptr, 512);  // 50 Hz PWM flush
 
-  Serial.println(PSTR("setup(): starting scheduler..."));
+  Serial.println(PSTR("setup(): threads started."));
   Serial.flush();
-
-  vTaskStartScheduler();
 }
 
-void loop() {}  // never reached
+void loop() { threads.delay(100); }  // yield to subsystem threads

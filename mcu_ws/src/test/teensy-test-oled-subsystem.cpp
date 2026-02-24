@@ -12,10 +12,12 @@
  *   SSD1306 GND       →  GND
  *
  * micro-ROS agent (on host):
- *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 6000000
+ *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b
+ * 6000000
  *
  * Append a line from ROS2:
- *   ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend "text: 'Hello'"
+ *   ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend "text:
+ * 'Hello'"
  *
  * Scroll up (see older lines):
  *   ros2 topic pub --once /mcu_robot/lcd/scroll std_msgs/msg/Int8 "data: -1"
@@ -25,41 +27,41 @@
  */
 
 #include <Arduino.h>
+#include <TeensyThreads.h>
 #include <microros_manager_robot.h>
 #include <robot/subsystems/OLEDSubsystem.h>
 
-#include "arduino_freertos.h"
-
-// ── Pin config (software SPI) ─────────────────────────────────────────────────
+// ── Pin config (software SPI)
+// ─────────────────────────────────────────────────
 
 static constexpr int8_t OLED_MOSI_PIN = 11;
-static constexpr int8_t OLED_CLK_PIN  = 13;
-static constexpr int8_t OLED_DC_PIN   = 9;
-static constexpr int8_t OLED_RST_PIN  = 3;
-static constexpr int8_t OLED_CS_PIN   = 10;
+static constexpr int8_t OLED_CLK_PIN = 13;
+static constexpr int8_t OLED_DC_PIN = 9;
+static constexpr int8_t OLED_RST_PIN = 3;
+static constexpr int8_t OLED_CS_PIN = 10;
 
-// ── Globals ───────────────────────────────────────────────────────────────────
+// ── Globals
+// ───────────────────────────────────────────────────────────────────
 
 static Subsystem::MicrorosManagerSetup g_mr_setup("oled_test_mr");
-static Subsystem::MicrorosManager      g_mr(g_mr_setup);
+static Subsystem::MicrorosManager g_mr(g_mr_setup);
 
 static Subsystem::OLEDSubsystemSetup g_oled_setup("oled_subsystem",
-                                                   OLED_MOSI_PIN,
-                                                   OLED_CLK_PIN,
-                                                   OLED_DC_PIN,
-                                                   OLED_RST_PIN,
-                                                   OLED_CS_PIN);
+                                                  OLED_MOSI_PIN, OLED_CLK_PIN,
+                                                  OLED_DC_PIN, OLED_RST_PIN,
+                                                  OLED_CS_PIN);
 static Subsystem::OLEDSubsystem g_oled(g_oled_setup);
 
-// ── FreeRTOS tasks ────────────────────────────────────────────────────────────
+// ── Threads
+// ───────────────────────────────────────────────────────────────────
 
 static void blink_task(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
     digitalWriteFast(LED_BUILTIN, HIGH);
-    vTaskDelay(pdMS_TO_TICKS(500));
+    threads.delay(500);
     digitalWriteFast(LED_BUILTIN, LOW);
-    vTaskDelay(pdMS_TO_TICKS(500));
+    threads.delay(500);
   }
 }
 
@@ -69,20 +71,21 @@ static void heartbeat_task(void*) {
   uint32_t tick = 0;
 
   while (true) {
-    uint32_t now  = millis();
+    uint32_t now = millis();
     uint32_t secs = now / 1000;
     uint32_t mins = secs / 60;
     secs %= 60;
     const char* ros_state = g_mr.isConnected() ? "ROS:OK" : "ROS:--";
-    snprintf(buf, sizeof(buf), "%s up%02lum%02lus #%lu",
-             ros_state, mins, secs, tick);
+    snprintf(buf, sizeof(buf), "%s up%02lum%02lus #%lu", ros_state, mins, secs,
+             tick);
     g_oled.appendText(buf);
     ++tick;
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    threads.delay(5000);
   }
 }
 
-// ── Arduino entry points ──────────────────────────────────────────────────────
+// ── Arduino entry points
+// ──────────────────────────────────────────────────────
 
 void setup() {
   Serial.begin(921600);
@@ -92,8 +95,7 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR(
-      "\r\nOLED subsystem test — FreeRTOS " tskKERNEL_VERSION_NUMBER "\r\n"));
+  Serial.println(PSTR("\r\nOLED subsystem test — TeensyThreads\r\n"));
 
   g_mr.init();
   if (!g_oled.init()) {
@@ -107,13 +109,11 @@ void setup() {
 
   g_mr.beginThreaded(8192, 4);
   g_oled.beginThreaded(2048, 1, 50);
-  xTaskCreate(heartbeat_task, "hb",    512, nullptr, 2, nullptr);
-  xTaskCreate(blink_task,     "blink", 128, nullptr, 1, nullptr);
+  threads.addThread(heartbeat_task, nullptr, 1024);
+  threads.addThread(blink_task, nullptr, 512);
 
-  Serial.println(PSTR("setup(): starting scheduler..."));
+  Serial.println(PSTR("setup(): threads started."));
   Serial.flush();
-
-  vTaskStartScheduler();
 }
 
-void loop() {}  // never reached
+void loop() { threads.delay(100); }

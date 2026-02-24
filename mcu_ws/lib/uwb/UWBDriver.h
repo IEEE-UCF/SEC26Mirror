@@ -13,6 +13,11 @@
 #include <DW3000.h>
 #include <elapsedMillis.h>
 
+// IRAM_ATTR is ESP32-specific; define as no-op on other platforms
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 namespace Drivers {
 
 // UWB operating modes

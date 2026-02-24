@@ -102,8 +102,9 @@ class MicrorosManager : public Classes::BaseSubsystem {
   rcl_allocator_t allocator_;
   // No publishers owned by the manager; subsystems own their pubs/subs
   // Cached pose/state removed as TF/state publishing is delegated
-  // Registered participants
-  IMicroRosParticipant* participants_[8] = {nullptr};
+  // Registered participants (increase capacity as subsystems are added)
+  static constexpr size_t MAX_PARTICIPANTS = 16;
+  IMicroRosParticipant* participants_[MAX_PARTICIPANTS] = {nullptr};
   size_t participants_count_ = 0;
 
   enum State {

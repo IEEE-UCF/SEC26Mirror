@@ -126,11 +126,12 @@
 | **Mini Robot** | `src/robot/subsystems/MiniRobotSubsystem.*` | DONE | `/mcu_robot/mini_robot/state` | 20ms (prio 2) |
 | **Arm** | `src/robot/subsystems/ArmSubsystem.h` | PSEUDO-CODE | Publisher/service commented out | 20ms (prio 2) |
 | **Drive Base** | `src/robot/drive-base/*` | CODE EXISTS, NOT INTEGRATED | `drive_base/status` | Commented out |
-| **GPIO (TCA9555)** | `lib/robot/TCA9555Driver.*` | DRIVER DONE | No subsystem yet | N/A |
-| **LED** | N/A | NOT STARTED | N/A | N/A |
+| **Servo Manager** | `src/robot/subsystems/ServoSubsystem.h` | DONE | `/mcu_robot/servo/state`, `/mcu_robot/servo/set` (srv) | 50ms (prio 2) |
+| **Motor Manager** | `src/robot/subsystems/MotorManagerSubsystem.h` | DONE | `/mcu_robot/motor/state`, `/mcu_robot/motor/set` (srv) | 50ms (prio 2) |
+| **Buttons (TCA9555)** | `src/robot/subsystems/ButtonSubsystem.h` | DONE | `/mcu_robot/buttons` | 20ms (prio 1) |
+| **DIP Switches (TCA9555)** | `src/robot/subsystems/DipSwitchSubsystem.h` | DONE | `/mcu_robot/dip_switches` | 500ms (prio 1) |
+| **LED** | `src/robot/subsystems/LEDSubsystem.h` | DONE | `/mcu_robot/led/set_all` (sub) | 50ms (prio 1) |
 | **Localization** | N/A | NOT STARTED (EKF) | N/A | N/A |
-| **Crank Servo** | N/A | NOT STARTED | N/A | N/A |
-| **Keypad Servo** | N/A | NOT STARTED | N/A | N/A |
 | **Light Sensor (BH1750)** | N/A | NOT STARTED | N/A | N/A |
 | **IR Subsystem** | N/A (robot-side) | NOT STARTED | N/A | N/A |
 
@@ -283,7 +284,7 @@ IDLE ──startMission()──► DRIVING_TO_TARGET ──arrival──► AT_T
 | **secbot_health** | STUBBED | Placeholder only |
 | **secbot_tf** | STUBBED | Config exists; implementation empty |
 | **secbot_msgs** | DONE | TaskStatus, DuckDetection, DuckDetections |
-| **mcu_msgs** | DONE | 19 msg types, 3 services, shared with MCU |
+| **mcu_msgs** | DONE | 19 msg types, 5 services, shared with MCU |
 
 ### secbot_autonomy - Task Details
 
@@ -341,7 +342,7 @@ IDLE ──startMission()──► DRIVING_TO_TARGET ──arrival──► AT_T
 - State: McuState, BatteryHealth, IntakeState, ArmSubsystem, DroneState, MiniRobotState
 - Sensor: UWBRanging, UWBRange, RC, AntennaMarker, RobotInputs
 - Command: DriveCommand, DriveBase, ArmCommand, MiniRobotControl, DroneControl, LedColor, IRCommand
-- Services: ArmControl, OLEDControl, LCDAppend
+- Services: ArmControl, OLEDControl, LCDAppend, SetServo, SetMotor
 
 **secbot_msgs** (3 messages, 2 services, 2 actions):
 - Messages: TaskStatus, DuckDetection, DuckDetections
@@ -542,6 +543,7 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 | teensy-test-battery-subsystem | Teensy41 | INA219/228 via mux, battery health |
 | teensy-test-sensor-subsystem | Teensy41 | VL53L0X TOF sensors |
 | teensy-test-oled-subsystem | Teensy41 | SSD1306 OLED display + ROS service |
+| teensy-test-all-subsystems | Teensy41 | All subsystems integration (servo, motor, button, dip, LED + existing) |
 | teensy-test-freertos | Teensy41 | TeensyThreads multitasking |
 | teensy-test-microros-freertos | Teensy41 | micro-ROS + TeensyThreads combined |
 | esp32-test-simple-wifi | ESP32 | Basic WiFi connectivity |
@@ -549,7 +551,7 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 
 ### Test Gaps
 
-- No tests for: RC subsystem, arm servos, drive motors, LED subsystem
+- No tests for: RC subsystem, arm servos, drive motors (individual unit tests — all-subsystems integration test exists)
 - No integration tests (multi-MCU, UWB end-to-end)
 - No vision system tests
 - No autonomy/navigation tests
@@ -565,10 +567,10 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 - [ ] **Wire up drive subsystem** - Define motor/encoder pins, update RobotConfig.h with real values, uncomment in RobotLogic.h
 - [ ] **Measure robot dimensions** - Track width, wheel diameter, ticks per revolution
 - [ ] **Complete arm subsystem** - Implement ROS publisher/service (currently pseudo-code)
-- [ ] **Implement crank servo subsystem** - New subsystem for crank 1-DOF servo
-- [ ] **Implement keypad servo subsystem** - New subsystem for keypad gear selector
-- [ ] **Implement GPIO subsystem** - Use TCA9555 driver for buttons/switches
-- [ ] **Implement LED subsystem** - Addressable LED indicators
+- [x] **Implement servo subsystem** - ~~New subsystem for crank 1-DOF servo~~ Generic ServoSubsystem with SetServo service
+- [x] **Implement motor manager subsystem** - ~~New subsystem for keypad gear selector~~ Generic MotorManagerSubsystem with SetMotor service
+- [x] **Implement GPIO subsystem** - ButtonSubsystem (TCA9555 port 1) + DipSwitchSubsystem (TCA9555 port 0)
+- [x] **Implement LED subsystem** - LEDSubsystem with WS2812B + ROS subscription
 - [ ] **Implement on-MCU localization EKF** - Fuse UWB + drive odometry in real-time
 - [ ] **Implement IR subsystem (robot-side)** - Transmit antenna colors to Earth
 

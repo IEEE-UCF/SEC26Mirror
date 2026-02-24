@@ -81,28 +81,7 @@ jobs:
       - name: Build all PlatformIO environments
         working-directory: mcu_ws/
         shell: bash
-        run: |
-          # 1. Install dependencies
-          pio pkg install || true
-          
-          # 2. Extract environments directly from platformio.ini (No Python)
-          # Finds [env:name], strips brackets, filters out test environments
-          envs=$(grep -E "^\[env:" platformio.ini | sed 's/\[env://;s/\]//' | grep -v "^test\|^teensy-test\|^esp32-test")
-          
-          # Collapse newlines into spaces so the loop works correctly
-          envs=$(echo $envs | tr '\n' ' ')
-
-          if [ -z "$envs" ]; then
-            echo "::error::No non-test environments found to build."
-            exit 1
-          fi
-
-          # 3. Build the filtered list
-          for env in $envs; do
-            echo "::group::Building environment: $env"
-            pio run -e "$env"
-            echo "::endgroup::"
-          done
+        run: pio run
 
       - name: Preview MCU artifacts (count + list)
         shell: bash

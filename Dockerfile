@@ -123,7 +123,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-lgpio \
     python3-rpi.gpio \
     python3-serial \
-    python3-requests && \
+    python3-requests \
+    ros-$ROS_DISTRO-robot-localization && \
     rm -rf /var/lib/apt/lists/*
 
 # 9. Install onshape-to-robot for URDF/STL export from Onshape CAD
@@ -141,7 +142,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-ros-gz \
     ros-$ROS_DISTRO-rviz2 \
     ros-$ROS_DISTRO-gz-ros2-control \
-    ros-$ROS_DISTRO-robot-localization \
     ros-$ROS_DISTRO-robot-state-publisher \
     ros-$ROS_DISTRO-joint-state-publisher-gui \
     ros-$ROS_DISTRO-xacro \

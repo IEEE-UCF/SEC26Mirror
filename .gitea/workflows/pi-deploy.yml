@@ -68,7 +68,6 @@ jobs:
         run: |
           echo "::notice::Cache restored from fallback key, cleaning microros"
           pio run -e robot -t clean_microros || true
-          pio run -e robotcomms -t clean_microros || true
 
       - name: Install CMake
         run: |
@@ -78,13 +77,13 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build robot and robotcomms PlatformIO environments
+      - name: Build robot PlatformIO environment
         working-directory: mcu_ws/
         shell: bash
         run: |
           pio pkg install || true
-          # Build only the required environments to speed up CI
-          pio run -e robot -e robotcomms
+          # Build only the required environment to speed up CI
+          pio run -e robot
 
       - name: Preview MCU artifacts (count + list)
         shell: bash
@@ -95,9 +94,6 @@ jobs:
             mcu_ws/.pio/build/robot/firmware.*
             mcu_ws/.pio/build/robot/**/*.hex
             mcu_ws/.pio/build/robot/**/*.elf
-            mcu_ws/.pio/build/robotcomms/firmware.*
-            mcu_ws/.pio/build/robotcomms/**/*.bin
-            mcu_ws/.pio/build/robotcomms/**/*.elf
           )
           echo "Found ${#files[@]} files to upload:";
           for f in "${files[@]}"; do echo " - $f"; done
@@ -110,9 +106,6 @@ jobs:
             mcu_ws/.pio/build/robot/firmware.*
             mcu_ws/.pio/build/robot/**/*.hex
             mcu_ws/.pio/build/robot/**/*.elf
-            mcu_ws/.pio/build/robotcomms/firmware.*
-            mcu_ws/.pio/build/robotcomms/**/*.bin
-            mcu_ws/.pio/build/robotcomms/**/*.elf
           if-no-files-found: ignore
           retention-days: 7
   # 1. Robot Job - Always Runs
@@ -126,6 +119,18 @@ jobs:
         working-directory: /home/ieee/SEC26
 
     steps:
+      - name: 🌐 Check internet connectivity
+        run: |
+          echo "Checking internet connectivity..."
+          if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
+            echo "✅ Internet reachable (ping)"
+          elif curl --max-time 5 -sf https://gitea.syndric.org/api/v1/version >/dev/null 2>&1; then
+            echo "✅ Gitea reachable (curl)"
+          else
+            echo "❌ No internet connectivity — aborting deployment"
+            exit 1
+          fi
+
       - name: 📦 Download MCU build artifacts
         uses: actions/download-artifact@v3
         with:
@@ -139,10 +144,10 @@ jobs:
           ls -R mcu_ws/prebuilt || echo "No prebuilt artifacts found"
       - name: LEDs On
         run: |
-          echo "⚡ LED Flashing (daemonized) during deployment"
-          # Kill any lingering daemonized gpioset processes
-          pkill -f "gpioset.*BOOTLED" || true
-          gpioset -z -C BOOTLED -c gpiochip0 -t 200 17=1
+          echo "⚡ LED Flashing (systemd transient unit) during deployment"
+          sudo systemctl stop sec26-bootled 2>/dev/null || true
+          sudo systemd-run --unit=sec26-bootled \
+            bash -c 'while true; do gpioset -c gpiochip0 17=1; sleep 0.2; gpioset -c gpiochip0 17=0; sleep 0.2; done'
       - name: 📂 Pull Latest Code (Robot)
         run: |
           echo "📂 Navigating to /home/ieee/SEC26..."
@@ -221,7 +226,5 @@ jobs:
         if: ${{ always() }}
         run: |
           echo "⚡ Ensuring BOOTLED process is stopped regardless of job outcome"
-          # Kill any lingering daemonized gpioset processes
-          pkill -f "gpioset.*BOOTLED" || true
-          # Explicitly turn the LED on
-          gpioset -z -C BOOTLED -c gpiochip0 17=1 || true
+          sudo systemctl stop sec26-bootled 2>/dev/null || true
+          gpioset -c gpiochip0 17=1 || true

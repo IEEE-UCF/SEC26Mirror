@@ -69,4 +69,4 @@ mcu_ws/.vscode/*
 # ai agents
 .claude/*
 !.claude/commands/
-
+!.claude/skills/

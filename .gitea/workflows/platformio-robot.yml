@@ -69,12 +69,11 @@ jobs:
         run: |
           echo "::notice::Cache restored from fallback key, cleaning microros"
           pio run -e robot -t clean_microros || true
-          pio run -e robotcomms -t clean_microros || true
 
       - name: Install CMake
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake
+        # Pin to 3.29.x — CMake 3.28 rejects PlatformIO's arm-cortexm7f-eabi-gcc
+        # version "13.20" as unknown; 3.29 fixed that compiler detection issue.
+        run: pip install cmake==3.29.6
 
       - name: Install PlatformIO
         run: pip install platformio
@@ -82,28 +81,7 @@ jobs:
       - name: Build all PlatformIO environments
         working-directory: mcu_ws/
         shell: bash
-        run: |
-          # 1. Install dependencies
-          pio pkg install || true
-          
-          # 2. Extract environments directly from platformio.ini (No Python)
-          # Finds [env:name], strips brackets, filters out anything starting with 'test'
-          envs=$(grep -E "^\[env:" platformio.ini | sed 's/\[env://;s/\]//' | grep -v "^test")
-          
-          # Collapse newlines into spaces so the loop works correctly
-          envs=$(echo $envs | tr '\n' ' ')
-
-          if [ -z "$envs" ]; then
-            echo "::error::No non-test environments found to build."
-            exit 1
-          fi
-
-          # 3. Build the filtered list
-          for env in $envs; do
-            echo "::group::Building environment: $env"
-            pio run -e "$env"
-            echo "::endgroup::"
-          done
+        run: pio run
 
       - name: Preview MCU artifacts (count + list)
         shell: bash

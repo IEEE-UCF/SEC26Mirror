@@ -33,7 +33,7 @@ class BNO085DriverSetup : public Classes::BaseSetup {
       : Classes::BaseSetup(_id), reset_pin(_pin), wire_(wire) {}
 
   const int8_t reset_pin;
-  TwoWire&     wire_;
+  TwoWire& wire_;
 };
 
 struct BNO085DriverData {
@@ -60,8 +60,8 @@ class BNO085Driver : public Classes::BaseDriver {
   explicit BNO085Driver(const BNO085DriverSetup& setup)
       : BaseDriver(setup), setup_(setup), imu_(setup.reset_pin) {}
 
-  bool        init()    override;
-  void        update()  override;
+  bool init() override;
+  void update() override;
   const char* getInfo() override;
 
   BNO085DriverData getData() const { return data_; }
@@ -69,11 +69,11 @@ class BNO085Driver : public Classes::BaseDriver {
   float calculateYaw(float qx, float qy, float qz, float qw);
 
  private:
-  const BNO085DriverSetup  setup_;
-  BNO085DriverData         data_;
-  char                     infoBuffer_[64] = {};
+  const BNO085DriverSetup setup_;
+  BNO085DriverData data_;
+  char infoBuffer_[64] = {};
 
-  Adafruit_BNO08x   imu_;
+  Adafruit_BNO08x imu_;
   sh2_SensorValue_t sensorValue_;
 };
 

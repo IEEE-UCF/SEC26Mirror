@@ -46,11 +46,11 @@ class BatterySubsystem : public IMicroRosParticipant,
       : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   // ── BaseSubsystem lifecycle ───────────────────────────────────────────────
-  bool        init()    override;
-  void        begin()   override {}
-  void        update()  override;
-  void        pause()   override {}
-  void        reset()   override;
+  bool init() override;
+  void begin() override {}
+  void update() override;
+  void pause() override {}
+  void reset() override;
   const char* getInfo() override;
 
   // ── IMicroRosParticipant ──────────────────────────────────────────────────
@@ -68,11 +68,11 @@ class BatterySubsystem : public IMicroRosParticipant,
 #endif
 
  private:
-  const BatterySubsystemSetup  setup_;
-  rcl_publisher_t              pub_{};
+  const BatterySubsystemSetup setup_;
+  rcl_publisher_t pub_{};
   mcu_msgs__msg__BatteryHealth msg_{};
-  rcl_node_t*                  node_            = nullptr;
-  uint32_t                     last_publish_ms_ = 0;
+  rcl_node_t* node_ = nullptr;
+  uint32_t last_publish_ms_ = 0;
 
 #ifdef USE_TEENSYTHREADS
   static void taskFunction(void* pvParams) {

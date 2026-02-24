@@ -10,8 +10,7 @@ bool I2CMuxDriver::init() {
 }
 
 const char* I2CMuxDriver::getInfo() {
-  snprintf(infoBuf_, sizeof(infoBuf_),
-           "I2CMux: ID=%s addr=0x%02X ch=%d",
+  snprintf(infoBuf_, sizeof(infoBuf_), "I2CMux: ID=%s addr=0x%02X ch=%d",
            setup_.getId(), setup_.i2cAddress_, currentChannel_);
   return infoBuf_;
 }

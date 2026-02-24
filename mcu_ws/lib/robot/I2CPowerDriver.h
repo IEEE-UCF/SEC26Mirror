@@ -50,19 +50,19 @@ class I2CPowerDriverSetup : public Classes::BaseSetup {
         _wire(wire),
         _shuntOhm(shuntOhm) {}
 
-  const uint8_t  _address;
-  I2CMuxDriver*  _mux;
-  const uint8_t  _muxChannel;
-  TwoWire&       _wire;
-  const float    _shuntOhm;
+  const uint8_t _address;
+  I2CMuxDriver* _mux;
+  const uint8_t _muxChannel;
+  TwoWire& _wire;
+  const float _shuntOhm;
 };
 
 struct PowerDriverData {
-  float currentmA      = 0.0f;  ///< mA
-  float busVoltage     = 0.0f;  ///< V
+  float currentmA = 0.0f;       ///< mA
+  float busVoltage = 0.0f;      ///< V
   float shuntVoltagemV = 0.0f;  ///< mV
-  float loadVoltage    = 0.0f;  ///< V  (= busVoltage + shuntVoltagemV/1000)
-  float powermW        = 0.0f;  ///< mW
+  float loadVoltage = 0.0f;     ///< V  (= busVoltage + shuntVoltagemV/1000)
+  float powermW = 0.0f;         ///< mW
 };
 
 class I2CPowerDriver : public Classes::BaseDriver {
@@ -94,9 +94,9 @@ class I2CPowerDriver : public Classes::BaseDriver {
 
  private:
   const I2CPowerDriverSetup _setup;
-  PowerDriverData           _data;
-  Adafruit_INA219           _sensor;
-  char                      _infoBuf[128] = {};
+  PowerDriverData _data;
+  Adafruit_INA219 _sensor;
+  char _infoBuf[128] = {};
 };
 
 }  // namespace Drivers

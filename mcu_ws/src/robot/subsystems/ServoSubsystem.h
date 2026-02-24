@@ -37,7 +37,7 @@ class ServoSubsystemSetup : public Classes::BaseSetup {
    */
   ServoSubsystemSetup(const char* _id, Robot::PCA9685Driver* driver,
                       uint8_t oePin = 255, uint8_t numServos = 8,
-                      const char* stateTopic  = "/mcu_robot/servo/state",
+                      const char* stateTopic = "/mcu_robot/servo/state",
                       const char* serviceName = "/mcu_robot/servo/set")
       : Classes::BaseSetup(_id),
         driver_(driver),
@@ -46,19 +46,19 @@ class ServoSubsystemSetup : public Classes::BaseSetup {
         stateTopic_(stateTopic),
         serviceName_(serviceName) {}
 
-  Robot::PCA9685Driver* driver_      = nullptr;
-  uint8_t               oePin_       = 255;
-  uint8_t               numServos_   = 8;
-  const char*           stateTopic_  = "/mcu_robot/servo/state";
-  const char*           serviceName_ = "/mcu_robot/servo/set";
+  Robot::PCA9685Driver* driver_ = nullptr;
+  uint8_t oePin_ = 255;
+  uint8_t numServos_ = 8;
+  const char* stateTopic_ = "/mcu_robot/servo/state";
+  const char* serviceName_ = "/mcu_robot/servo/set";
 };
 
 class ServoSubsystem : public IMicroRosParticipant,
                        public Classes::BaseSubsystem {
  public:
-  static constexpr uint8_t  MAX_SERVOS = 8;
-  static constexpr uint16_t PWM_MIN    = 102;  // ~500 us at 50 Hz
-  static constexpr uint16_t PWM_MAX    = 512;  // ~2500 us at 50 Hz
+  static constexpr uint8_t MAX_SERVOS = 8;
+  static constexpr uint16_t PWM_MIN = 102;  // ~500 us at 50 Hz
+  static constexpr uint16_t PWM_MAX = 512;  // ~2500 us at 50 Hz
 
   explicit ServoSubsystem(const ServoSubsystemSetup& setup)
       : Classes::BaseSubsystem(setup), setup_(setup) {
@@ -98,8 +98,8 @@ class ServoSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     node_ = node;
 
-    pub_msg_.data.data     = pub_data_;
-    pub_msg_.data.size     = setup_.numServos_;
+    pub_msg_.data.data = pub_data_;
+    pub_msg_.data.size = setup_.numServos_;
     pub_msg_.data.capacity = MAX_SERVOS;
 
     if (rclc_publisher_init_best_effort(
@@ -110,15 +110,14 @@ class ServoSubsystem : public IMicroRosParticipant,
     }
 
     if (rclc_service_init_default(
-            &srv_, node_,
-            ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, SetServo),
+            &srv_, node_, ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, SetServo),
             setup_.serviceName_) != RCL_RET_OK) {
       return false;
     }
 
     if (rclc_executor_add_service_with_context(
-            executor, &srv_, &srv_req_, &srv_res_,
-            &ServoSubsystem::srvCallback, this) != RCL_RET_OK) {
+            executor, &srv_, &srv_req_, &srv_res_, &ServoSubsystem::srvCallback,
+            this) != RCL_RET_OK) {
       return false;
     }
 
@@ -126,8 +125,8 @@ class ServoSubsystem : public IMicroRosParticipant,
   }
 
   void onDestroy() override {
-    pub_  = rcl_get_zero_initialized_publisher();
-    srv_  = rcl_get_zero_initialized_service();
+    pub_ = rcl_get_zero_initialized_publisher();
+    srv_ = rcl_get_zero_initialized_service();
     node_ = nullptr;
   }
 
@@ -180,8 +179,8 @@ class ServoSubsystem : public IMicroRosParticipant,
 
   static void srvCallback(const void* req, void* res, void* ctx) {
     auto* self = static_cast<ServoSubsystem*>(ctx);
-    auto* r    = static_cast<const mcu_msgs__srv__SetServo_Request*>(req);
-    auto* rsp  = static_cast<mcu_msgs__srv__SetServo_Response*>(res);
+    auto* r = static_cast<const mcu_msgs__srv__SetServo_Request*>(req);
+    auto* rsp = static_cast<mcu_msgs__srv__SetServo_Response*>(res);
     if (r->index < self->setup_.numServos_) {
       self->setAngle(r->index, r->angle);
       rsp->success = true;
@@ -195,16 +194,16 @@ class ServoSubsystem : public IMicroRosParticipant,
   const ServoSubsystemSetup setup_;
   float angles_[MAX_SERVOS] = {};
 
-  rcl_publisher_t                  pub_{};
+  rcl_publisher_t pub_{};
   std_msgs__msg__Float32MultiArray pub_msg_{};
-  float                            pub_data_[MAX_SERVOS] = {};
+  float pub_data_[MAX_SERVOS] = {};
 
-  rcl_service_t                    srv_{};
-  mcu_msgs__srv__SetServo_Request  srv_req_{};
+  rcl_service_t srv_{};
+  mcu_msgs__srv__SetServo_Request srv_req_{};
   mcu_msgs__srv__SetServo_Response srv_res_{};
 
-  rcl_node_t* node_            = nullptr;
-  uint32_t    last_publish_ms_ = 0;
+  rcl_node_t* node_ = nullptr;
+  uint32_t last_publish_ms_ = 0;
 };
 
 }  // namespace Subsystem

@@ -35,7 +35,7 @@ class I2CMuxDriverSetup : public Classes::BaseSetup {
       : Classes::BaseSetup(_id), i2cAddress_(_i2cAddress), wire_(wire) {}
 
   const uint8_t i2cAddress_;
-  TwoWire&      wire_;
+  TwoWire& wire_;
 };
 
 class I2CMuxDriver : public Classes::BaseDriver {
@@ -48,8 +48,8 @@ class I2CMuxDriver : public Classes::BaseDriver {
         setup_(setup),
         currentChannel_(255) {}
 
-  bool        init()    override;
-  void        update()  override {}
+  bool init() override;
+  void update() override {}
   const char* getInfo() override;
 
   uint8_t getCurrentChannel() const { return currentChannel_; }
@@ -59,10 +59,10 @@ class I2CMuxDriver : public Classes::BaseDriver {
   bool deselectAll();
 
  private:
-  TCA9548                   mux_;
-  const I2CMuxDriverSetup&  setup_;
-  char                      infoBuf_[64] = {};
-  uint8_t                   currentChannel_;
+  TCA9548 mux_;
+  const I2CMuxDriverSetup& setup_;
+  char infoBuf_[64] = {};
+  uint8_t currentChannel_;
 };
 
 }  // namespace Drivers

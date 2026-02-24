@@ -86,9 +86,10 @@ class UWBSubsystem : public IMicroRosParticipant,
   void updateRangingMessage();
   void publishPeerRanges();
 
-  static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;       // 10 Hz (TAG mode)
-  static constexpr uint32_t RANGING_INTERVAL_MS = 50;        // 20 Hz (TAG mode)
-  static constexpr uint32_t PEER_PUBLISH_INTERVAL_MS = 500;  // 2 Hz (inter-beacon)
+  static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;  // 10 Hz (TAG mode)
+  static constexpr uint32_t RANGING_INTERVAL_MS = 50;   // 20 Hz (TAG mode)
+  static constexpr uint32_t PEER_PUBLISH_INTERVAL_MS =
+      500;                                     // 2 Hz (inter-beacon)
   static constexpr uint8_t MAX_PEER_PUBS = 2;  // max peers per beacon
 
   const UWBSubsystemSetup setup_;

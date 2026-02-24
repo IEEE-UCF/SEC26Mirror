@@ -51,15 +51,15 @@ class TOFDriver : public Classes::BaseDriver {
 
   ~TOFDriver() override = default;
 
-  bool          init()   override;
-  void          update() override;
-  TOFDriverData read()   { return range_; }
-  const char*   getInfo() override;
+  bool init() override;
+  void update() override;
+  TOFDriverData read() { return range_; }
+  const char* getInfo() override;
 
  private:
   const TOFDriverSetup setup_;
-  VL53L0X              sensor_;
-  TOFDriverData        range_;
+  VL53L0X sensor_;
+  TOFDriverData range_;
 };
 
 }  // namespace Drivers

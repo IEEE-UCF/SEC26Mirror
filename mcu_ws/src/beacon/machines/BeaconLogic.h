@@ -71,11 +71,14 @@ void setup() {
   // Step 1: WiFi transport first — must match esp32-test-microros-wifi pattern.
   // begin() calls set_microros_transports() which connects WiFi and configures
   // the UDP transport to the agent. All other init must follow this.
-  Serial.println("[DBG] g_mr.init"); Serial.flush();
+  Serial.println("[DBG] g_mr.init");
+  Serial.flush();
   g_mr.init();
-  Serial.println("[DBG] g_mr.begin (WiFi connect)"); Serial.flush();
+  Serial.println("[DBG] g_mr.begin (WiFi connect)");
+  Serial.flush();
   g_mr.begin();
-  Serial.println("[DBG] g_mr.begin done"); Serial.flush();
+  Serial.println("[DBG] g_mr.begin done");
+  Serial.flush();
 
   Serial.printf("WiFi status: %d (3=connected)\n", WiFi.status());
   Serial.flush();
@@ -84,8 +87,8 @@ void setup() {
   SPI.begin();
 
   // Step 3: Configure inter-beacon ranging BEFORE g_uwb.init() so hasPeers()
-  // is correct during subsystem init (determines if peer publishers are created).
-  // Lower-ID beacon always initiates ranging to higher-ID peers.
+  // is correct during subsystem init (determines if peer publishers are
+  // created). Lower-ID beacon always initiates ranging to higher-ID peers.
   g_num_peers = 0;
   for (uint8_t i = 0; i < NUM_ALL_BEACONS; i++) {
     if (ALL_BEACON_IDS[i] > BEACON_ID) {
@@ -120,7 +123,8 @@ void setup() {
   // Step 7: Power savings — set after WiFi is already connected.
   // Drop to 80 MHz (minimum that keeps WiFi alive), saves ~30 mA.
   setCpuFrequencyMhz(80);
-  // Reduce TX power to 10 dBm (default 20 dBm). Adjust up if beacon is far from AP.
+  // Reduce TX power to 10 dBm (default 20 dBm). Adjust up if beacon is far from
+  // AP.
   esp_wifi_set_max_tx_power(40);
   // NOTE: WIFI_PS_MAX_MODEM is intentionally NOT enabled here. Max modem sleep
   // causes the WiFi modem to miss micro-ROS UDP pings, triggering spurious

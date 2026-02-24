@@ -33,9 +33,9 @@ class PCA9685DriverSetup : public Classes::BaseSetup {
         freq_hz_(freq_hz),
         wire_(wire) {}
 
-  const uint8_t  i2c_addr_;
+  const uint8_t i2c_addr_;
   const uint16_t freq_hz_;
-  TwoWire&       wire_;
+  TwoWire& wire_;
 };
 
 class PCA9685Driver : public Classes::BaseDriver {
@@ -43,7 +43,7 @@ class PCA9685Driver : public Classes::BaseDriver {
   explicit PCA9685Driver(const PCA9685DriverSetup& setup);
   ~PCA9685Driver() override = default;
 
-  bool        init()    override;
+  bool init() override;
   const char* getInfo() override { return setup_.getId(); }
 
   // ── Immediate I2C operations ──────────────────────────────────────────────
@@ -60,9 +60,9 @@ class PCA9685Driver : public Classes::BaseDriver {
 
  private:
   const PCA9685DriverSetup setup_;
-  Adafruit_PWMServoDriver  pwm_;
-  uint16_t                 buffer_[16];
-  bool                     buffer_dirty_[16];
+  Adafruit_PWMServoDriver pwm_;
+  uint16_t buffer_[16];
+  bool buffer_dirty_[16];
 };
 
 }  // namespace Robot

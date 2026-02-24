@@ -45,12 +45,12 @@ class TCA9555DriverSetup : public Classes::BaseSetup {
       : Classes::BaseSetup(_id), address_(address), wire_(wire) {}
 
   const uint8_t address_;
-  TwoWire&      wire_;
+  TwoWire& wire_;
 };
 
 struct TCA9555DriverData {
-  uint8_t inputPort0  = 0x00;  ///< Cached Port 0 input state
-  uint8_t inputPort1  = 0x00;  ///< Cached Port 1 input state
+  uint8_t inputPort0 = 0x00;   ///< Cached Port 0 input state
+  uint8_t inputPort1 = 0x00;   ///< Cached Port 1 input state
   uint8_t outputPort0 = 0xFF;  ///< Port 0 output shadow register
   uint8_t outputPort1 = 0xFF;  ///< Port 1 output shadow register
   uint8_t configPort0 = 0xFF;  ///< Port 0 direction (1=in, 0=out)
@@ -108,12 +108,12 @@ class TCA9555Driver : public Classes::BaseDriver {
   bool configurePort(uint8_t port, uint8_t mask);
 
  private:
-  bool    writeReg(uint8_t reg, uint8_t value);
+  bool writeReg(uint8_t reg, uint8_t value);
   uint8_t readReg(uint8_t reg);
 
   const TCA9555DriverSetup setup_;
-  TCA9555DriverData        data_;
-  char                     infoBuf_[64] = {};
+  TCA9555DriverData data_;
+  char infoBuf_[64] = {};
 };
 
 }  // namespace Drivers

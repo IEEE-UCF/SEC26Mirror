@@ -102,9 +102,9 @@ void setup() {
 
   // 3. Start threads
   //                                      stack  pri  rate(ms)
-  g_mr.beginThreaded(8192, 4);                          // ROS agent
-  g_motor.beginThreaded(1024, 2, 50);                    // 20 Hz state pub
-  threads.addThread(pca_task, nullptr, 512);             // PWM flush @ 50 Hz
+  g_mr.beginThreaded(8192, 4);                // ROS agent
+  g_motor.beginThreaded(1024, 2, 50);         // 20 Hz state pub
+  threads.addThread(pca_task, nullptr, 512);  // PWM flush @ 50 Hz
   threads.addThread(print_task, nullptr, 1024);
   threads.addThread(blink_task, nullptr, 512);
 

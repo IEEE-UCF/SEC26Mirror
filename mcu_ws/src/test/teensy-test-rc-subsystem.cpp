@@ -63,8 +63,8 @@ void setup() {
   g_mr.registerParticipant(&g_rc);
 
   // 3. Start threads
-  g_mr.beginThreaded(8192, 4);       // ROS agent (highest priority)
-  g_rc.beginThreaded(1024, 3, 5);    // IBUS polling @ 200 Hz
+  g_mr.beginThreaded(8192, 4);     // ROS agent (highest priority)
+  g_rc.beginThreaded(1024, 3, 5);  // IBUS polling @ 200 Hz
   threads.addThread(print_task, nullptr, 1024);
   threads.addThread(blink_task, nullptr, 512);
 

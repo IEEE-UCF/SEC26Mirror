@@ -28,8 +28,8 @@
 // Pin 9: Encoder channel
 
 // ── UWB Module (SPI) ──────────────────────────────────────────────────
-constexpr uint8_t PIN_UWB_CS   = 12;
-constexpr uint8_t PIN_UWB_CLK  = 13;  // SPI SCK
+constexpr uint8_t PIN_UWB_CS = 12;
+constexpr uint8_t PIN_UWB_CLK = 13;  // SPI SCK
 constexpr uint8_t PIN_UWB_MISO = 14;
 
 // ── I2C Bus: Wire0 — Sensors / Mux / GPIO expander ───────────────────
@@ -61,25 +61,26 @@ constexpr uint8_t PIN_MUX_RESET = 23;  // TCA9548A active-LOW reset
 
 // ── Display (SSD1306 SPI) ───────────────────────────────────────────
 constexpr uint8_t PIN_DISP_MOSI = 26;
-constexpr uint8_t PIN_DISP_CLK  = 27;
-constexpr uint8_t PIN_DISP_CS   = 38;
-constexpr uint8_t PIN_DISP_DC   = 37;  // Data / Command
+constexpr uint8_t PIN_DISP_CLK = 27;
+constexpr uint8_t PIN_DISP_CS = 38;
+constexpr uint8_t PIN_DISP_DC = 37;  // Data / Command
 
 // ── Misc GPIO ───────────────────────────────────────────────────────
 constexpr uint8_t PIN_BUTTON_INTERRUPT = 36;  // Standalone reset button
-constexpr uint8_t PIN_RGB_LEDS         = 35;  // WS2812B data line
-constexpr uint8_t PIN_RC_RX            = 34;  // FlySky IBUS receiver (Serial8 RX)
+constexpr uint8_t PIN_RGB_LEDS = 35;          // WS2812B data line
+constexpr uint8_t PIN_RC_RX = 34;  // FlySky IBUS receiver (Serial8 RX)
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  I2C device addresses
 // ═══════════════════════════════════════════════════════════════════════════
 
-constexpr uint8_t I2C_ADDR_MUX   = 0x70;  // TCA9548A mux (Wire0)
-constexpr uint8_t I2C_ADDR_GPIO  = 0x20;  // TCA9555 GPIO expander (Wire0)
-constexpr uint8_t I2C_ADDR_POWER = 0x40;  // INA219 power sensor (Wire0, mux ch0)
+constexpr uint8_t I2C_ADDR_MUX = 0x70;   // TCA9548A mux (Wire0)
+constexpr uint8_t I2C_ADDR_GPIO = 0x20;  // TCA9555 GPIO expander (Wire0)
+constexpr uint8_t I2C_ADDR_POWER =
+    0x40;  // INA219 power sensor (Wire0, mux ch0)
 constexpr uint8_t I2C_ADDR_SERVO = 0x40;  // PCA9685 #0 — servos (Wire2)
 constexpr uint8_t I2C_ADDR_MOTOR = 0x41;  // PCA9685 #1 — motors (Wire2)
-constexpr uint8_t I2C_ADDR_IMU   = 0x4A;  // BNO085 (Wire1)
+constexpr uint8_t I2C_ADDR_IMU = 0x4A;    // BNO085 (Wire1)
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  TCA9548A mux channel assignments
@@ -124,8 +125,8 @@ constexpr uint8_t MUX_CH_BATTERY = 0;  // INA219 power sensor
 //  Peripheral configuration constants
 // ═══════════════════════════════════════════════════════════════════════════
 
-constexpr uint8_t NUM_SERVOS   = 8;
-constexpr uint8_t NUM_MOTORS   = 8;
+constexpr uint8_t NUM_SERVOS = 8;
+constexpr uint8_t NUM_MOTORS = 8;
 constexpr uint8_t NUM_RGB_LEDS = 5;
 
 constexpr float SHUNT_RESISTANCE_OHM = 0.005f;  // INA219 shunt resistor

@@ -21,7 +21,8 @@ bool UWBSubsystem::init() {
     return false;
   }
 
-  // Detect mode: tags publish ranging arrays, anchors with peers publish per-pair ranges
+  // Detect mode: tags publish ranging arrays, anchors with peers publish
+  // per-pair ranges
   const auto& driver_data = setup_.driver->getData();
   is_tag_mode_ = (driver_data.mode == Drivers::UWBMode::TAG);
   has_peer_ranging_ = !is_tag_mode_ && setup_.driver->hasPeers();
@@ -137,7 +138,8 @@ bool UWBSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
               &peer_pubs_[i], node,
               ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, UWBRange),
               peer_topic_names_[i]) != RCL_RET_OK) {
-        Serial.printf("[UWB] peer pub %d (%s) FAILED\n", i, peer_topic_names_[i]);
+        Serial.printf("[UWB] peer pub %d (%s) FAILED\n", i,
+                      peer_topic_names_[i]);
         Serial.flush();
         return false;
       }

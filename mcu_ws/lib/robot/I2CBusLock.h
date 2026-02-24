@@ -34,7 +34,8 @@ extern Threads::Mutex wire0;  ///< Wire  — TCA9548A, TCA9555, INA219
 extern Threads::Mutex wire1;  ///< Wire1 — BNO085
 extern Threads::Mutex wire2;  ///< Wire2 — PCA9685 #1 & #2
 
-/// No-op: Threads::Mutex is self-initialising. Kept so existing call sites compile.
+/// No-op: Threads::Mutex is self-initialising. Kept so existing call sites
+/// compile.
 inline void initLocks() {}
 
 /// Return the mutex for the given Wire bus instance.
@@ -46,7 +47,7 @@ struct Lock {
   explicit Lock(TwoWire& wire) : m_(mutexFor(wire)) { m_.lock(); }
   ~Lock() { m_.unlock(); }
 
-  Lock(const Lock&)            = delete;
+  Lock(const Lock&) = delete;
   Lock& operator=(const Lock&) = delete;
 
  private:

@@ -855,7 +855,8 @@ void McuSubsystemSimulator::intakeSpeedCallback(
     const std_msgs::msg::Int16::SharedPtr msg) {
   sim_intake_speed_ = msg->data;
 
-  if (msg->data > 0 && sim_intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE) {
+  if (msg->data > 0 &&
+      sim_intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE) {
     sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_SPINNING;
     intake_state_time_ = std::chrono::steady_clock::now();
     sim_duck_detected_ = false;
@@ -919,8 +920,7 @@ void McuSubsystemSimulator::bridgePublishCallback() {
       std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
           .count();
 
-  if (sim_bridge_state_ ==
-          mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING &&
+  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING &&
       sec >= 2.0) {
     sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED;
     RCLCPP_INFO(this->get_logger(), "[SIM] Bridge fully extended");
@@ -949,14 +949,11 @@ void McuSubsystemSimulator::bridgePublishCallback() {
     msg.tof_distance_mm = 0;
   }
 
-  if (sim_bridge_state_ ==
-      mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING)
-    msg.rack_motor_state =
-        mcu_msgs::msg::IntakeBridgeState::MOTOR_EXTENDING;
+  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING)
+    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_EXTENDING;
   else if (sim_bridge_state_ ==
            mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING)
-    msg.rack_motor_state =
-        mcu_msgs::msg::IntakeBridgeState::MOTOR_RETRACTING;
+    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_RETRACTING;
   else
     msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_OFF;
 

@@ -10,7 +10,8 @@ bool I2CPowerDriver::init() {
 
   // Route I2C through the mux channel if one is configured.
   // selectChannel() also acquires the bus lock (recursive mutex — safe).
-  if (_setup._mux != nullptr && !_setup._mux->selectChannel(_setup._muxChannel)) {
+  if (_setup._mux != nullptr &&
+      !_setup._mux->selectChannel(_setup._muxChannel)) {
     initSuccess_ = false;
     return initSuccess_;
   }
@@ -39,21 +40,21 @@ void I2CPowerDriver::update() {
   }
 
   _data.shuntVoltagemV = _sensor.getShuntVoltage_mV();
-  _data.busVoltage     = _sensor.getBusVoltage_V();
+  _data.busVoltage = _sensor.getBusVoltage_V();
 
   // Derive current and power from raw shunt voltage so the result is correct
   // for any shunt resistor, not just the 0.1 Ω assumed by the library.
   //   I (A)  = V_shunt (V)  / R_shunt (Ω)
   //   I (mA) = V_shunt (mV) / R_shunt (Ω)
   //   P (mW) = V_bus  (V)   * I (mA)      [V × mA = mW]
-  _data.currentmA   = _data.shuntVoltagemV / _setup._shuntOhm;
-  _data.powermW     = _data.busVoltage * _data.currentmA;
+  _data.currentmA = _data.shuntVoltagemV / _setup._shuntOhm;
+  _data.powermW = _data.busVoltage * _data.currentmA;
   _data.loadVoltage = _data.busVoltage + (_data.shuntVoltagemV / 1000.0f);
 }
 
-float I2CPowerDriver::getVoltage()        const { return _data.loadVoltage; }
-float I2CPowerDriver::getCurrentmA()      const { return _data.currentmA; }
-float I2CPowerDriver::getPowermW()        const { return _data.powermW; }
+float I2CPowerDriver::getVoltage() const { return _data.loadVoltage; }
+float I2CPowerDriver::getCurrentmA() const { return _data.currentmA; }
+float I2CPowerDriver::getPowermW() const { return _data.powermW; }
 float I2CPowerDriver::getShuntVoltagemV() const { return _data.shuntVoltagemV; }
 
 const char* I2CPowerDriver::getInfo() {

@@ -39,7 +39,7 @@ class MotorManagerSubsystemSetup : public Classes::BaseSetup {
    */
   MotorManagerSubsystemSetup(const char* _id, Robot::PCA9685Driver* driver,
                              uint8_t oePin = 255, uint8_t numMotors = 8,
-                             const char* stateTopic  = "/mcu_robot/motor/state",
+                             const char* stateTopic = "/mcu_robot/motor/state",
                              const char* serviceName = "/mcu_robot/motor/set")
       : Classes::BaseSetup(_id),
         driver_(driver),
@@ -48,18 +48,18 @@ class MotorManagerSubsystemSetup : public Classes::BaseSetup {
         stateTopic_(stateTopic),
         serviceName_(serviceName) {}
 
-  Robot::PCA9685Driver* driver_      = nullptr;
-  uint8_t               oePin_       = 255;
-  uint8_t               numMotors_   = 8;
-  const char*           stateTopic_  = "/mcu_robot/motor/state";
-  const char*           serviceName_ = "/mcu_robot/motor/set";
+  Robot::PCA9685Driver* driver_ = nullptr;
+  uint8_t oePin_ = 255;
+  uint8_t numMotors_ = 8;
+  const char* stateTopic_ = "/mcu_robot/motor/state";
+  const char* serviceName_ = "/mcu_robot/motor/set";
 };
 
 class MotorManagerSubsystem : public IMicroRosParticipant,
                               public Classes::BaseSubsystem {
  public:
-  static constexpr uint8_t  MAX_MOTORS = 8;
-  static constexpr uint16_t MAX_PWM    = 4095;
+  static constexpr uint8_t MAX_MOTORS = 8;
+  static constexpr uint16_t MAX_PWM = 4095;
 
   explicit MotorManagerSubsystem(const MotorManagerSubsystemSetup& setup)
       : Classes::BaseSubsystem(setup), setup_(setup) {}
@@ -99,8 +99,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     node_ = node;
 
-    pub_msg_.data.data     = pub_data_;
-    pub_msg_.data.size     = setup_.numMotors_;
+    pub_msg_.data.data = pub_data_;
+    pub_msg_.data.size = setup_.numMotors_;
     pub_msg_.data.capacity = MAX_MOTORS;
 
     if (rclc_publisher_init_best_effort(
@@ -111,8 +111,7 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     }
 
     if (rclc_service_init_default(
-            &srv_, node_,
-            ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, SetMotor),
+            &srv_, node_, ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, SetMotor),
             setup_.serviceName_) != RCL_RET_OK) {
       return false;
     }
@@ -127,8 +126,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   }
 
   void onDestroy() override {
-    pub_  = rcl_get_zero_initialized_publisher();
-    srv_  = rcl_get_zero_initialized_service();
+    pub_ = rcl_get_zero_initialized_publisher();
+    srv_ = rcl_get_zero_initialized_service();
     node_ = nullptr;
   }
 
@@ -140,8 +139,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     uint8_t pwmCh = motor * 2;
     uint8_t dirCh = motor * 2 + 1;
 
-    bool     forward = (speed >= 0.0f);
-    uint16_t duty    = (uint16_t)(fabsf(speed) * MAX_PWM);
+    bool forward = (speed >= 0.0f);
+    uint16_t duty = (uint16_t)(fabsf(speed) * MAX_PWM);
 
     setup_.driver_->bufferDigital(dirCh, forward);
     setup_.driver_->bufferPWM(pwmCh, duty);
@@ -180,16 +179,15 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 
  private:
   void publishState() {
-    for (uint8_t i = 0; i < setup_.numMotors_; i++)
-      pub_data_[i] = speeds_[i];
+    for (uint8_t i = 0; i < setup_.numMotors_; i++) pub_data_[i] = speeds_[i];
     pub_msg_.data.size = setup_.numMotors_;
     (void)rcl_publish(&pub_, &pub_msg_, NULL);
   }
 
   static void srvCallback(const void* req, void* res, void* ctx) {
     auto* self = static_cast<MotorManagerSubsystem*>(ctx);
-    auto* r    = static_cast<const mcu_msgs__srv__SetMotor_Request*>(req);
-    auto* rsp  = static_cast<mcu_msgs__srv__SetMotor_Response*>(res);
+    auto* r = static_cast<const mcu_msgs__srv__SetMotor_Request*>(req);
+    auto* rsp = static_cast<mcu_msgs__srv__SetMotor_Response*>(res);
     if (r->index < self->setup_.numMotors_) {
       self->setSpeed(r->index, r->speed);
       rsp->success = true;
@@ -203,16 +201,16 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   const MotorManagerSubsystemSetup setup_;
   float speeds_[MAX_MOTORS] = {};
 
-  rcl_publisher_t                  pub_{};
+  rcl_publisher_t pub_{};
   std_msgs__msg__Float32MultiArray pub_msg_{};
-  float                            pub_data_[MAX_MOTORS] = {};
+  float pub_data_[MAX_MOTORS] = {};
 
-  rcl_service_t                    srv_{};
-  mcu_msgs__srv__SetMotor_Request  srv_req_{};
+  rcl_service_t srv_{};
+  mcu_msgs__srv__SetMotor_Request srv_req_{};
   mcu_msgs__srv__SetMotor_Response srv_res_{};
 
-  rcl_node_t* node_            = nullptr;
-  uint32_t    last_publish_ms_ = 0;
+  rcl_node_t* node_ = nullptr;
+  uint32_t last_publish_ms_ = 0;
 };
 
 }  // namespace Subsystem

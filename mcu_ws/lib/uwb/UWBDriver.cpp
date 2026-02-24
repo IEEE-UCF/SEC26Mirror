@@ -9,7 +9,8 @@
 
 #include <SPI.h>
 
-// Global IRQ flag — set by hardware ISR, cleared by the driver after consuming the event.
+// Global IRQ flag — set by hardware ISR, cleared by the driver after consuming
+// the event.
 volatile bool g_uwb_irq_fired = false;
 
 void IRAM_ATTR uwb_irq_handler() { g_uwb_irq_fired = true; }
@@ -312,8 +313,10 @@ void UWBDriver::updateAnchorMode() {
     // When anchor is idle and the interval has elapsed, start a peer exchange.
     // Must force DW3000 to IDLE first: standardRX() leaves the chip in RX
     // mode, and TX fast commands require IDLE state.
-    if (anchor_stage_ == 0 && inter_beacon_timer_ >= inter_beacon_interval_ms_) {
-      Serial.printf("[UWB] IB start: peer=%d\n", peer_beacons_[current_peer_index_]);
+    if (anchor_stage_ == 0 &&
+        inter_beacon_timer_ >= inter_beacon_interval_ms_) {
+      Serial.printf("[UWB] IB start: peer=%d\n",
+                    peer_beacons_[current_peer_index_]);
       Serial.flush();
       dw3000ForceIdle();
       DW3000.setDestinationID(peer_beacons_[current_peer_index_]);
@@ -365,7 +368,8 @@ void UWBDriver::processAnchorStage() {
       // example case 1: ranging received, send response
       // Capture sender ID *before* TX so the response is addressed correctly.
       // Without setDestinationID() the DW3000 destination defaults to 0 and
-      // the initiator's frame filter rejects frame 2, causing a stage=2 timeout.
+      // the initiator's frame filter rejects frame 2, causing a stage=2
+      // timeout.
       data_.last_range.peer_id = DW3000.getSenderID();
       DW3000.setDestinationID(data_.last_range.peer_id);
       DW3000.ds_sendFrame(2);
@@ -417,7 +421,8 @@ void UWBDriver::processAnchorStage() {
   }
 }
 
-// ---- Inter-beacon initiator — copied from dw3000_doublesided_ranging_ping.ino ----
+// ---- Inter-beacon initiator — copied from dw3000_doublesided_ranging_ping.ino
+// ----
 //
 // Beacon with lower ID plays TAG role toward higher-ID peers.
 // stage mapping vs example:
@@ -434,7 +439,8 @@ void UWBDriver::processInterBeaconStage() {
     Serial.printf("[UWB] IB timeout: peer=%d stage=%d\n",
                   peer_beacons_[current_peer_index_], inter_beacon_stage_);
     Serial.flush();
-    peer_ranges_[current_peer_index_].peer_id = peer_beacons_[current_peer_index_];
+    peer_ranges_[current_peer_index_].peer_id =
+        peer_beacons_[current_peer_index_];
     peer_ranges_[current_peer_index_].valid = false;
     peer_ranges_[current_peer_index_].error_code = 1;
     current_peer_index_ = (current_peer_index_ + 1) % num_peer_beacons_;
@@ -536,7 +542,8 @@ void UWBDriver::processInterBeaconStage() {
       r.error_code = 0;
       num_peer_ranges_++;
       data_.ranging_count++;
-      Serial.printf("[UWB] IB range: peer=%d dist=%.1fcm\n", r.peer_id, distance);
+      Serial.printf("[UWB] IB range: peer=%d dist=%.1fcm\n", r.peer_id,
+                    distance);
       Serial.flush();
 
       current_peer_index_ = (current_peer_index_ + 1) % num_peer_beacons_;

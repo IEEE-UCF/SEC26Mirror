@@ -14,6 +14,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <TeensyThreads.h>
 #include <microros_manager_robot.h>
 
 #include "../RobotConstants.h"
@@ -24,7 +25,6 @@
 #include "PCA9685Manager.h"
 #include "TCA9555Driver.h"
 #include "TOF.h"
-#include <TeensyThreads.h>
 #include "robot/drive-base/DriveSubsystem.h"
 #include "robot/machines/HeartbeatSubsystem.h"
 #include "robot/subsystems/ArmSubsystem.h"
@@ -51,10 +51,10 @@ static MicrorosManager g_mr(g_mr_setup);
 // Software SPI: MOSI=11, CLK=13, DC=9, RST=3, CS=10
 static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
                                        /*mosi*/ 11,
-                                       /*clk*/  13,
-                                       /*dc*/    9,
-                                       /*rst*/   3,
-                                       /*cs*/   10);
+                                       /*clk*/ 13,
+                                       /*dc*/ 9,
+                                       /*rst*/ 3,
+                                       /*cs*/ 10);
 static OLEDSubsystem g_oled(g_oled_setup);
 
 // --- Heartbeat subsystem ---
@@ -66,18 +66,18 @@ static Drivers::I2CMuxDriverSetup g_mux_setup("i2c_mux", /*addr*/ 0x70, Wire);
 static Drivers::I2CMuxDriver g_mux(g_mux_setup);
 
 // --- Wire0: GPIO expander (TCA9555) ---
-static Drivers::TCA9555DriverSetup g_gpio_setup("gpio_expander", /*addr*/ 0x20, Wire);
+static Drivers::TCA9555DriverSetup g_gpio_setup("gpio_expander", /*addr*/ 0x20,
+                                                Wire);
 static Drivers::TCA9555Driver g_gpio(g_gpio_setup);
 
 // --- Wire0: Battery subsystem (INA219 on mux channel 0) ---
 static Drivers::I2CPowerDriverSetup g_power_driver_setup("power_driver",
-                                                         /*addr*/      0x40,
-                                                         &g_mux,
-                                                         /*ch*/        0,
-                                                         Wire,
-                                                         /*shuntOhm*/  0.005f);
+                                                         /*addr*/ 0x40, &g_mux,
+                                                         /*ch*/ 0, Wire,
+                                                         /*shuntOhm*/ 0.005f);
 static Drivers::I2CPowerDriver g_power_driver(g_power_driver_setup);
-static BatterySubsystemSetup g_battery_setup("battery_subsystem", &g_power_driver);
+static BatterySubsystemSetup g_battery_setup("battery_subsystem",
+                                             &g_power_driver);
 static BatterySubsystem g_battery(g_battery_setup);
 
 // --- Wire0: Sensor subsystem (TOF, directly on Wire0) ---
@@ -88,7 +88,8 @@ static SensorSubsystemSetup g_sensor_setup("sensor_subsystem", g_tof_drivers);
 static SensorSubsystem g_sensor(g_sensor_setup);
 
 // --- Wire1: IMU subsystem (BNO085) ---
-static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", /*rst*/ -1, Wire1);
+static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", /*rst*/ -1,
+                                                     Wire1);
 static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
@@ -121,7 +122,8 @@ static IntakeSubsystemSetup g_intake_setup("intake_subsystem", /*pwm*/ 3,
 static IntakeSubsystem g_intake(g_intake_setup);
 
 // --- Intake bridge subsystem (gear-and-rack for pressure plate) ---
-// TODO: confirm rack motor, home switch, and TOF pin numbers with electrical team
+// TODO: confirm rack motor, home switch, and TOF pin numbers with electrical
+// team
 static IntakeBridgeSubsystemSetup g_bridge_setup(
     "intake_bridge_subsystem", /*rack_pwm*/ 6, /*rack_dir*/ 7,
     /*home_switch*/ 9, /*tof_xshut*/ 8, /*tof_addr*/ 0x30,
@@ -132,8 +134,8 @@ static IntakeBridgeSubsystem g_bridge(g_bridge_setup);
 // --- Drive subsystem ---
 // TODO: Replace placeholder pin values with actual hardware wiring config
 // static DriveBaseSetup g_drive_base_setup( ... encoder/motor configs ... );
-// static DriveSubsystemSetup g_drive_setup("drive_subsystem", g_drive_base_setup);
-// static DriveSubsystem g_drive(g_drive_setup);
+// static DriveSubsystemSetup g_drive_setup("drive_subsystem",
+// g_drive_base_setup); static DriveSubsystem g_drive(g_drive_setup);
 
 // --- PCA9685 flush task ---
 static void pca_task(void*) {

@@ -9,7 +9,8 @@
  *   Battery load connected across INA219 IN+ / IN- with shunt
  *
  * micro-ROS agent (on host):
- *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+ *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b
+ * 921600
  *
  * Monitor battery topic:
  *   ros2 topic echo /mcu_robot/battery_health
@@ -22,30 +23,33 @@
 #include <microros_manager_robot.h>
 #include <robot/subsystems/BatterySubsystem.h>
 
-// ── Hardware config ───────────────────────────────────────────────────────────
+// ── Hardware config
+// ───────────────────────────────────────────────────────────
 
-static constexpr uint8_t MUX_ADDR    = 0x70;  // TCA9548A default address
+static constexpr uint8_t MUX_ADDR = 0x70;     // TCA9548A default address
 static constexpr uint8_t MUX_CHANNEL = 0;     // Channel the INA219 is on
 static constexpr uint8_t INA219_ADDR = 0x40;  // INA219 default address
 
-// ── Globals ───────────────────────────────────────────────────────────────────
+// ── Globals
+// ───────────────────────────────────────────────────────────────────
 
 static Subsystem::MicrorosManagerSetup g_mr_setup("battery_test_mr");
-static Subsystem::MicrorosManager      g_mr(g_mr_setup);
+static Subsystem::MicrorosManager g_mr(g_mr_setup);
 
-static Drivers::I2CMuxDriverSetup   g_mux_setup("i2c_mux", MUX_ADDR, Wire);
-static Drivers::I2CMuxDriver        g_mux(g_mux_setup);
+static Drivers::I2CMuxDriverSetup g_mux_setup("i2c_mux", MUX_ADDR, Wire);
+static Drivers::I2CMuxDriver g_mux(g_mux_setup);
 
 static Drivers::I2CPowerDriverSetup g_power_setup("power_sensor", INA219_ADDR,
-                                                   &g_mux, MUX_CHANNEL, Wire,
-                                                   /*shuntOhm*/ 0.005f);
-static Drivers::I2CPowerDriver      g_power_driver(g_power_setup);
+                                                  &g_mux, MUX_CHANNEL, Wire,
+                                                  /*shuntOhm*/ 0.005f);
+static Drivers::I2CPowerDriver g_power_driver(g_power_setup);
 
 static Subsystem::BatterySubsystemSetup g_battery_setup("battery_subsystem",
-                                                         &g_power_driver);
-static Subsystem::BatterySubsystem      g_battery(g_battery_setup);
+                                                        &g_power_driver);
+static Subsystem::BatterySubsystem g_battery(g_battery_setup);
 
-// ── Threads ───────────────────────────────────────────────────────────────────
+// ── Threads
+// ───────────────────────────────────────────────────────────────────
 
 static void blink_task(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -64,19 +68,17 @@ static void print_task(void*) {
 
   while (true) {
     const char* ros_state = g_mr.isConnected() ? "ROS:OK" : "ROS:--";
-    snprintf(buf, sizeof(buf),
-             "[%s #%lu] V=%.3fV  I=%.1fmA  P=%.1fmW",
-             ros_state, tick,
-             g_power_driver.getVoltage(),
-             g_power_driver.getCurrentmA(),
-             g_power_driver.getPowermW());
+    snprintf(buf, sizeof(buf), "[%s #%lu] V=%.3fV  I=%.1fmA  P=%.1fmW",
+             ros_state, tick, g_power_driver.getVoltage(),
+             g_power_driver.getCurrentmA(), g_power_driver.getPowermW());
     Serial.println(buf);
     ++tick;
     threads.delay(5000);
   }
 }
 
-// ── Arduino entry points ──────────────────────────────────────────────────────
+// ── Arduino entry points
+// ──────────────────────────────────────────────────────
 
 void setup() {
   Serial.begin(921600);
@@ -98,14 +100,15 @@ void setup() {
   }
 
   if (!g_battery.init()) {
-    Serial.println(PSTR("ERROR: INA219 init failed — check mux channel/address"));
+    Serial.println(
+        PSTR("ERROR: INA219 init failed — check mux channel/address"));
   }
 
   g_mr.registerParticipant(&g_battery);
 
   //                            stackSize  priority  rateMs
-  g_mr.beginThreaded(           8192,      4         );
-  g_battery.beginThreaded(      1024,      1,    100  );
+  g_mr.beginThreaded(8192, 4);
+  g_battery.beginThreaded(1024, 1, 100);
   threads.addThread(print_task, nullptr, 1024);
   threads.addThread(blink_task, nullptr, 512);
 

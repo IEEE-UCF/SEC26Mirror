@@ -34,7 +34,7 @@ class DipSwitchSubsystemSetup : public Classes::BaseSetup {
                           const char* topic = "/mcu_robot/dip_switches")
       : Classes::BaseSetup(_id), driver_(driver), topic_(topic) {}
   Drivers::TCA9555Driver* driver_ = nullptr;
-  const char*             topic_  = "/mcu_robot/dip_switches";
+  const char* topic_ = "/mcu_robot/dip_switches";
 };
 
 class DipSwitchSubsystem : public IMicroRosParticipant,
@@ -75,13 +75,12 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     (void)executor;
     node_ = node;
     return rclc_publisher_init_best_effort(
-               &pub_, node_,
-               ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
+               &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
                setup_.topic_) == RCL_RET_OK;
   }
 
   void onDestroy() override {
-    pub_  = rcl_get_zero_initialized_publisher();
+    pub_ = rcl_get_zero_initialized_publisher();
     node_ = nullptr;
   }
 
@@ -111,10 +110,10 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
  private:
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
   const DipSwitchSubsystemSetup setup_;
-  rcl_publisher_t              pub_{};
-  std_msgs__msg__UInt8         msg_{};
-  rcl_node_t*                  node_            = nullptr;
-  uint32_t                     last_publish_ms_ = 0;
+  rcl_publisher_t pub_{};
+  std_msgs__msg__UInt8 msg_{};
+  rcl_node_t* node_ = nullptr;
+  uint32_t last_publish_ms_ = 0;
 };
 
 }  // namespace Subsystem

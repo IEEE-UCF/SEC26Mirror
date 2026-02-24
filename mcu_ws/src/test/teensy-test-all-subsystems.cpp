@@ -75,10 +75,10 @@ static MicrorosManager g_mr(g_mr_setup);
 // --- OLED display (SSD1306 128x64, software SPI) ---
 static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
                                        /*mosi*/ PIN_DISP_MOSI,
-                                       /*clk*/  PIN_DISP_CLK,
-                                       /*dc*/   PIN_DISP_DC,
-                                       /*rst*/  -1,  // no reset pin
-                                       /*cs*/   PIN_DISP_CS);
+                                       /*clk*/ PIN_DISP_CLK,
+                                       /*dc*/ PIN_DISP_DC,
+                                       /*rst*/ -1,  // no reset pin
+                                       /*cs*/ PIN_DISP_CS);
 static OLEDSubsystem g_oled(g_oled_setup);
 
 // --- Heartbeat ---
@@ -90,15 +90,14 @@ static Drivers::I2CMuxDriverSetup g_mux_setup("i2c_mux", I2C_ADDR_MUX, Wire);
 static Drivers::I2CMuxDriver g_mux(g_mux_setup);
 
 // --- Wire0: GPIO expander (TCA9555) ---
-static Drivers::TCA9555DriverSetup g_gpio_setup("gpio_expander",
-                                                I2C_ADDR_GPIO, Wire);
+static Drivers::TCA9555DriverSetup g_gpio_setup("gpio_expander", I2C_ADDR_GPIO,
+                                                Wire);
 static Drivers::TCA9555Driver g_gpio(g_gpio_setup);
 
 // --- Wire0: Battery subsystem (INA219 on mux ch0) ---
 static Drivers::I2CPowerDriverSetup g_power_setup("power_driver",
-                                                  I2C_ADDR_POWER,
-                                                  &g_mux, MUX_CH_BATTERY,
-                                                  Wire,
+                                                  I2C_ADDR_POWER, &g_mux,
+                                                  MUX_CH_BATTERY, Wire,
                                                   SHUNT_RESISTANCE_OHM);
 static Drivers::I2CPowerDriver g_power_driver(g_power_setup);
 static BatterySubsystemSetup g_battery_setup("battery_subsystem",
@@ -113,8 +112,8 @@ static SensorSubsystemSetup g_sensor_setup("sensor_subsystem", g_tof_drivers);
 static SensorSubsystem g_sensor(g_sensor_setup);
 
 // --- Wire1: IMU (BNO085) ---
-static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver",
-                                                     PIN_GYRO_RST, Wire1);
+static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", PIN_GYRO_RST,
+                                                     Wire1);
 static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
@@ -153,9 +152,8 @@ static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
 static ServoSubsystem g_servo(g_servo_setup);
 
 // --- Motor manager subsystem (PCA9685 #1, OE = pin 21) ---
-static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem",
-                                                g_pca_motor, PIN_MOTOR_OE,
-                                                NUM_MOTORS);
+static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
+                                                PIN_MOTOR_OE, NUM_MOTORS);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
 // --- PCA9685 flush task ---
@@ -227,19 +225,19 @@ void setup() {
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);                           // ROS agent
-  g_imu.beginThreaded(2048, 3, 20);                      // 50 Hz
-  g_rc.beginThreaded(1024, 3, 5);                         // IBUS polling
-  g_servo.beginThreaded(1024, 2, 50);                     // 20 Hz state pub
-  g_motor.beginThreaded(1024, 2, 50);                     // 20 Hz state pub
-  g_oled.beginThreaded(2048, 1, 50);                      // 20 Hz display
-  g_battery.beginThreaded(1024, 1, 100);                  // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);                   // 10 Hz TOF
-  g_dip.beginThreaded(512, 1, 500);                       // 2 Hz
-  g_btn.beginThreaded(1024, 1, 20);                       // 50 Hz
-  g_led.beginThreaded(512, 1, 50);                        // 20 Hz
-  g_hb.beginThreaded(512, 1, 200);                        // 5 Hz
-  threads.addThread(pca_task, nullptr, 512);              // PWM flush
+  g_mr.beginThreaded(8192, 4);                // ROS agent
+  g_imu.beginThreaded(2048, 3, 20);           // 50 Hz
+  g_rc.beginThreaded(1024, 3, 5);             // IBUS polling
+  g_servo.beginThreaded(1024, 2, 50);         // 20 Hz state pub
+  g_motor.beginThreaded(1024, 2, 50);         // 20 Hz state pub
+  g_oled.beginThreaded(2048, 1, 50);          // 20 Hz display
+  g_battery.beginThreaded(1024, 1, 100);      // 10 Hz
+  g_sensor.beginThreaded(1024, 1, 100);       // 10 Hz TOF
+  g_dip.beginThreaded(512, 1, 500);           // 2 Hz
+  g_btn.beginThreaded(1024, 1, 20);           // 50 Hz
+  g_led.beginThreaded(512, 1, 50);            // 20 Hz
+  g_hb.beginThreaded(512, 1, 200);            // 5 Hz
+  threads.addThread(pca_task, nullptr, 512);  // PWM flush
 
   Serial.println(PSTR("setup(): all subsystem threads started."));
   Serial.flush();

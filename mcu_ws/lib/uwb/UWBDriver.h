@@ -122,7 +122,8 @@ class UWBDriver : public Classes::BaseDriver {
            inter_beacon_stage_ == 0;
   }
   // Milliseconds until the next scheduled inter-beacon ranging event.
-  // Returns a large value when there are no peers (sleep indefinitely, wake on IRQ).
+  // Returns a large value when there are no peers (sleep indefinitely, wake on
+  // IRQ).
   uint32_t timeUntilNextEventMs() const {
     if (num_peer_beacons_ == 0) return 60000;
     uint32_t elapsed = (uint32_t)inter_beacon_timer_;

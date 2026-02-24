@@ -59,6 +59,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/UWBRange.msg"
   "msg/UWBRanging.msg"
   "srv/ArmControl.srv"
+  "srv/LCDAppend.srv"
+  "srv/OLEDControl.srv"
   DEPENDENCIES std_msgs geometry_msgs
 )
 

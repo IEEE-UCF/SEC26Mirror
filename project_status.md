@@ -25,7 +25,6 @@
 | Field Elements (6) | Mature | button, controller, crank, earth, keypad, pressure |
 | UWB Beacons (2) | Mature | DW3000, micro-ROS |
 | Drone | Minimal | Basic main.cpp only |
-| robotcomms | Deprecated | Kept for manual builds; removed from CI/deploy |
 | **ROS2 Packages** | | |
 | secbot_autonomy | Implemented | Task state machines for all competition elements |
 | secbot_vision | Implemented | antenna_led_detector, duck_detector, teleop_pid |
@@ -146,7 +145,7 @@ Button press (BCM 22) / git push to prod
 
 ## Recent Changes (feat/pi-deploy branch)
 
-- Removed `robotcomms` from all CI/CD pipelines and deploy scripts (deprecated)
+- Removed `robotcomms` entirely (source, env definition, all CI/deploy references)
 - Split `platformio.ini` lib_deps into targeted groups (`lib_core` / `lib_robot`)
 - Added internet connectivity check to button daemon and workflow
 - Replaced fragile `gpioset -z` LED control with `systemd-run` transient unit

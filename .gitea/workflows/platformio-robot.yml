@@ -86,8 +86,8 @@ jobs:
           pio pkg install || true
           
           # 2. Extract environments directly from platformio.ini (No Python)
-          # Finds [env:name], strips brackets, filters out anything starting with 'test'
-          envs=$(grep -E "^\[env:" platformio.ini | sed 's/\[env://;s/\]//' | grep -v "^test\|^robotcomms")
+          # Finds [env:name], strips brackets, filters out test environments
+          envs=$(grep -E "^\[env:" platformio.ini | sed 's/\[env://;s/\]//' | grep -v "^test\|^teensy-test\|^esp32-test")
           
           # Collapse newlines into spaces so the loop works correctly
           envs=$(echo $envs | tr '\n' ' ')

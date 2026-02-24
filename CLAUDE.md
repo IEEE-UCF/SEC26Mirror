@@ -15,7 +15,7 @@ The codebase is split into two workspaces:
 
 ### MCU Workspace (`mcu_ws/`)
 
-- **Platforms**: ESP32 (field elements, beacons, drone, robotcomms) and Teensy41 (main robot controller)
+- **Platforms**: ESP32 (field elements, beacons, drone) and Teensy41 (main robot controller)
 - **Framework**: Arduino with PlatformIO build system
 - **Micro-ROS**: Robot and beacons use micro-ROS for ROS2 communication (stored in `libs_external/`)
 - **Source organization**:

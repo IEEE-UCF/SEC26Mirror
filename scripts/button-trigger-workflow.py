@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import subprocess
 import time
 import requests
 from gpiozero import Button
@@ -20,6 +21,29 @@ if not TOKEN:
     raise SystemExit("GITEA_TOKEN environment variable is required")
 
 button = Button(BUTTON_PIN, pull_up=True, bounce_time=0.05)
+
+
+def check_connectivity():
+    """Return True if internet is reachable (ping or Gitea API)."""
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "1", "-W", "3", "8.8.8.8"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if result.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        result = subprocess.run(
+            ["curl", "--max-time", "5", "-sf", f"{GITEA_URL}/api/v1/version"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if result.returncode == 0:
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def dispatch_workflow():
@@ -46,7 +70,10 @@ def on_press():
     while button.is_pressed and time.time() - start < 0.3:
         time.sleep(0.01)
     if button.is_pressed:
-        dispatch_workflow()
+        if check_connectivity():
+            dispatch_workflow()
+        else:
+            print("⚠️ Dispatch skipped — no internet connectivity")
 
 
 button.when_pressed = on_press

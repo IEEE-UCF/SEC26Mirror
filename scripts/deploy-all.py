@@ -23,17 +23,12 @@ def stage_prebuilt_artifacts():
         return
 
     robot_build_dir = MCU_WS / ".pio" / "build" / "robot"
-    robotcomms_build_dir = MCU_WS / ".pio" / "build" / "robotcomms"
     robot_build_dir.mkdir(parents=True, exist_ok=True)
-    robotcomms_build_dir.mkdir(parents=True, exist_ok=True)
 
     # Search broadly in PREBUILT_DIR to handle nested paths from artifact download
     robot_candidates = []
-    robotcomms_candidates = []
     for pattern in ["**/robot/firmware.*", "**/robot/**/*.hex", "**/robot/**/*.elf"]:
         robot_candidates.extend(PREBUILT_DIR.glob(pattern))
-    for pattern in ["**/robotcomms/firmware.*", "**/robotcomms/**/*.bin", "**/robotcomms/**/*.elf"]:
-        robotcomms_candidates.extend(PREBUILT_DIR.glob(pattern))
 
     staged = False
     if robot_candidates:
@@ -44,19 +39,8 @@ def stage_prebuilt_artifacts():
         target.write_bytes(preferred.read_bytes())
         staged = True
 
-    if robotcomms_candidates:
-        # Prefer firmware.bin for ESP32; fall back to firmware.elf if needed
-        preferred = next((p for p in robotcomms_candidates if p.suffix == ".bin" and p.name.startswith("firmware")), None)
-        if preferred is None:
-            preferred = next((p for p in robotcomms_candidates if p.name == "firmware.elf"), robotcomms_candidates[0])
-        # Keep original extension
-        target = robotcomms_build_dir / preferred.name
-        print(f"📦 Staging Comm ESP32 artifact: {preferred} -> {target}")
-        target.write_bytes(preferred.read_bytes())
-        staged = True
-
     if staged:
-        print("✅ Prebuilt artifacts staged into .pio/build/{robot,robotcomms}")
+        print("✅ Prebuilt Teensy artifact staged into .pio/build/robot")
     else:
         print("ℹ️ No matching prebuilt artifacts found; will fall back to normal build")
 
@@ -168,7 +152,7 @@ def flash_mcu():
         sys.exit(1)
     # Stage artifacts (if any) before flashing, to enable upload without rebuild
     stage_prebuilt_artifacts()
-    print("🚀 Flashing MCU (Teensy + Comm ESP32)...")
+    print("🚀 Flashing MCU (Teensy)...")
     run(["bash", str(script)])
     print("✅ MCU flashing completed")
 

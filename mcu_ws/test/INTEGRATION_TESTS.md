@@ -158,7 +158,7 @@ Verify communication and coordination between multiple robots (if applicable).
 Verify micro-ROS communication between MCUs and ROS2 nodes.
 
 ### Hardware Required
-- 1x Teensy41 (robot) or ESP32 (robotcomms)
+- 1x Teensy41 (robot)
 - Computer running ROS2 agent
 - USB or network connection
 

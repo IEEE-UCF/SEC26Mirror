@@ -13,6 +13,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(secbot_msgs REQUIRED)
 find_package(mcu_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -55,6 +56,20 @@ ament_target_dependencies(autonomy_node
   mcu_msgs
 )
 
+# Mission node executable
+add_executable(mission_node
+  src/mission_node.cpp
+)
+
+ament_target_dependencies(mission_node
+  rclcpp
+  std_msgs
+  geometry_msgs
+  nav_msgs
+  secbot_msgs
+  mcu_msgs
+)
+
 # Install targets
 install(TARGETS
   secbot_tasks
@@ -65,6 +80,7 @@ install(TARGETS
 
 install(TARGETS
   autonomy_node
+  mission_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -91,7 +107,9 @@ ament_export_dependencies(
   rclcpp_action
   std_msgs
   geometry_msgs
+  nav_msgs
   secbot_msgs
+  mcu_msgs
 )
 
 ament_package()

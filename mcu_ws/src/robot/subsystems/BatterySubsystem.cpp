@@ -1,7 +1,5 @@
 #include "BatterySubsystem.h"
 
-#include <micro_ros_utilities/type_utilities.h>
-
 namespace Subsystem {
 
 bool BatterySubsystem::init() { return setup_.driver_->init(); }
@@ -28,7 +26,7 @@ bool BatterySubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   (void)executor;
   node_ = node;
   if (rclc_publisher_init_best_effort(
-          &pub_, node,
+          &pub_, node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, BatteryHealth),
           "/mcu_robot/battery_health") != RCL_RET_OK) {
     return false;
@@ -37,22 +35,29 @@ bool BatterySubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void BatterySubsystem::onDestroy() {
-  if (pub_.impl) {
-    (void)rcl_publisher_fini(&pub_, node_);
-  }
-  node_ = nullptr;
+  // destroy_entities() finalises the rcl_node before calling onDestroy, so
+  // rcl_publisher_fini would see node->impl == NULL and return an error while
+  // leaving pub_.impl non-NULL.  On the next onCreate that stale impl causes
+  // rclc_publisher_init_best_effort to fail (publisher already initialised).
+  // The DDS resources are freed by rclc_support_fini — just reset local state.
+  pub_   = rcl_get_zero_initialized_publisher();
+  node_  = nullptr;
 }
 
 void BatterySubsystem::publishData() {
   if (!pub_.impl || !setup_.driver_) return;
 
-  // Get battery data from driver
-  msg.voltage = setup_.driver_->getVoltage();
-  msg.current = setup_.driver_->getCurrentmA();
-  msg.power = setup_.driver_->getPowermW();
-  msg.temperature = setup_.driver_->getTemp();
+  // INA219 data — convert driver units (mA, mV, mW) to SI (A, V, W).
+  msg_.voltage       = setup_.driver_->getVoltage();                       // V
+  msg_.shunt_voltage = setup_.driver_->getShuntVoltagemV() / 1000.0f;     // V
+  msg_.current       = setup_.driver_->getCurrentmA()      / 1000.0f;     // A
+  msg_.power         = setup_.driver_->getPowermW()         / 1000.0f;    // W
+  // INA219 has no die-temp sensor or energy/charge accumulators.
+  msg_.temperature   = 0.0f;
+  msg_.energy        = 0.0f;
+  msg_.charge_use    = 0.0f;
 
-  (void)rcl_publish(&pub_, &msg, NULL);
+  (void)rcl_publish(&pub_, &msg_, NULL);
 }
 
 }  // namespace Subsystem

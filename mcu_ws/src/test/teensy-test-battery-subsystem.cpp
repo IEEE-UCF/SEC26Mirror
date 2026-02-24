@@ -1,304 +1,116 @@
 /**
  * @file teensy-test-battery-subsystem.cpp
- * @brief MCU test for BatterySubsystem on Teensy41
- * @date 12/22/2025
+ * @brief Smoke-test for BatterySubsystem (INA219 via TCA9548A mux) on Teensy41.
  *
- * Test Requirements:
- * - Teensy 4.1 board
- * - INA228 power sensor connected via I2C
- * - Battery connected to sensor
+ * Wiring:
+ *   Teensy SDA (pin 18) / SCL (pin 19) → TCA9548A SDA/SCL
+ *   TCA9548A address: 0x70 (A0=A1=A2=GND)
+ *   INA219 on TCA9548A channel 0 (SD0/SC0), address 0x40
+ *   Battery load connected across INA219 IN+ / IN- with shunt
  *
- * Test Procedure:
- * 1. Verifies subsystem exists and can be instantiated
- * 2. Tests init() returns true (sensor responds)
- * 3. Runs update() cycles
- * 4. Verifies voltage, current, power readings are sensible
- * 5. Prints results to Serial
+ * micro-ROS agent (on host):
+ *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+ *
+ * Monitor battery topic:
+ *   ros2 topic echo /mcu_robot/battery_health
  */
 
 #include <Arduino.h>
-#include <I2CPowerDriver.h>
+#include <I2CBusLock.h>
+#include <I2CMuxDriver.h>
+#include <TeensyThreads.h>
+#include <microros_manager_robot.h>
 #include <robot/subsystems/BatterySubsystem.h>
 
-// Test configuration
-const uint32_t TEST_DURATION_MS = 10000;  // Run test for 10 seconds
-const uint32_t UPDATE_INTERVAL_MS = 100;  // Update every 100ms
+// ── Hardware config ───────────────────────────────────────────────────────────
 
-// Test state
-bool testsPassed = true;
-uint32_t testStartTime = 0;
-uint32_t lastUpdateTime = 0;
-uint32_t updateCount = 0;
+static constexpr uint8_t MUX_ADDR    = 0x70;  // TCA9548A default address
+static constexpr uint8_t MUX_CHANNEL = 0;     // Channel the INA219 is on
+static constexpr uint8_t INA219_ADDR = 0x40;  // INA219 default address
 
-// Driver and subsystem
-Drivers::I2CPowerDriverSetup driverSetup("battery_power_sensor", 0x40, 10.0f,
-                                         0.015f);
-Drivers::I2CPowerDriver* powerDriver = nullptr;
-Subsystem::BatterySubsystem* batterySubsystem = nullptr;
+// ── Globals ───────────────────────────────────────────────────────────────────
 
-void printTestHeader(const char* testName) {
-  Serial.println();
-  Serial.println("================================================");
-  Serial.print("TEST: ");
-  Serial.println(testName);
-  Serial.println("================================================");
-}
+static Subsystem::MicrorosManagerSetup g_mr_setup("battery_test_mr");
+static Subsystem::MicrorosManager      g_mr(g_mr_setup);
 
-void printTestResult(const char* testName, bool passed) {
-  Serial.print("[");
-  Serial.print(passed ? "PASS" : "FAIL");
-  Serial.print("] ");
-  Serial.println(testName);
+static Drivers::I2CMuxDriverSetup   g_mux_setup("i2c_mux", MUX_ADDR, Wire);
+static Drivers::I2CMuxDriver        g_mux(g_mux_setup);
 
-  if (!passed) {
-    testsPassed = false;
+static Drivers::I2CPowerDriverSetup g_power_setup("power_sensor", INA219_ADDR,
+                                                   &g_mux, MUX_CHANNEL, Wire,
+                                                   /*shuntOhm*/ 0.005f);
+static Drivers::I2CPowerDriver      g_power_driver(g_power_setup);
+
+static Subsystem::BatterySubsystemSetup g_battery_setup("battery_subsystem",
+                                                         &g_power_driver);
+static Subsystem::BatterySubsystem      g_battery(g_battery_setup);
+
+// ── Threads ───────────────────────────────────────────────────────────────────
+
+static void blink_task(void*) {
+  pinMode(LED_BUILTIN, OUTPUT);
+  while (true) {
+    digitalWriteFast(LED_BUILTIN, HIGH);
+    threads.delay(500);
+    digitalWriteFast(LED_BUILTIN, LOW);
+    threads.delay(500);
   }
 }
 
-void testSubsystemExists() {
-  printTestHeader("Subsystem Existence");
+// Prints battery readings and ROS connection status every 5 s.
+static void print_task(void*) {
+  char buf[80];
+  uint32_t tick = 0;
 
-  // Create driver
-  powerDriver = new Drivers::I2CPowerDriver(driverSetup);
-  bool driverExists = (powerDriver != nullptr);
-  printTestResult("I2CPowerDriver instantiated", driverExists);
-
-  // Create subsystem
-  Subsystem::BatterySubsystemSetup setup("battery_subsystem", powerDriver);
-  batterySubsystem = new Subsystem::BatterySubsystem(setup);
-  bool subsystemExists = (batterySubsystem != nullptr);
-  printTestResult("BatterySubsystem instantiated", subsystemExists);
-
-  // Check getInfo()
-  if (batterySubsystem) {
-    const char* info = batterySubsystem->getInfo();
-    bool hasInfo = (info != nullptr && strlen(info) > 0);
-    printTestResult("getInfo() returns valid string", hasInfo);
-    if (hasInfo) {
-      Serial.print("  Info: ");
-      Serial.println(info);
-    }
+  while (true) {
+    const char* ros_state = g_mr.isConnected() ? "ROS:OK" : "ROS:--";
+    snprintf(buf, sizeof(buf),
+             "[%s #%lu] V=%.3fV  I=%.1fmA  P=%.1fmW",
+             ros_state, tick,
+             g_power_driver.getVoltage(),
+             g_power_driver.getCurrentmA(),
+             g_power_driver.getPowermW());
+    Serial.println(buf);
+    ++tick;
+    threads.delay(5000);
   }
 }
 
-void testSubsystemInit() {
-  printTestHeader("Subsystem Initialization");
-
-  if (!batterySubsystem) {
-    printTestResult("BatterySubsystem init() - subsystem null", false);
-    return;
-  }
-
-  // Test init
-  bool initSuccess = batterySubsystem->init();
-  printTestResult("init() returns true", initSuccess);
-
-  if (initSuccess) {
-    Serial.println("  Sensor initialized successfully");
-    Serial.print("  I2C Address: 0x");
-    Serial.println(driverSetup._address, HEX);
-  } else {
-    Serial.println("  ERROR: Sensor failed to initialize");
-    Serial.println("  Check:");
-    Serial.println("    - INA228 sensor is connected");
-    Serial.println("    - I2C wiring is correct (SDA, SCL)");
-    Serial.println("    - I2C address matches (default 0x40)");
-    Serial.println("    - Sensor has power");
-  }
-}
-
-void testSubsystemUpdate() {
-  printTestHeader("Subsystem Update");
-
-  if (!batterySubsystem) {
-    printTestResult("BatterySubsystem update() - subsystem null", false);
-    return;
-  }
-
-  // Run multiple update cycles
-  Serial.println("Running update cycles...");
-  const int numCycles = 10;
-
-  for (int i = 0; i < numCycles; i++) {
-    batterySubsystem->update();
-    delay(150);  // Allow time for readings
-
-    // Print progress
-    if (i % 2 == 0) {
-      Serial.print(".");
-    }
-  }
-  Serial.println();
-
-  printTestResult("update() executes without crashing", true);
-  Serial.print("  Completed ");
-  Serial.print(numCycles);
-  Serial.println(" update cycles");
-}
-
-void testSubsystemFunctionality() {
-  printTestHeader("Subsystem Functionality");
-
-  if (!powerDriver) {
-    printTestResult("Power driver functionality - driver null", false);
-    return;
-  }
-
-  // Update driver to get latest readings
-  powerDriver->update();
-  delay(100);
-
-  // Get readings
-  float voltage = powerDriver->getVoltage();
-  float current = powerDriver->getCurrentmA();
-  float power = powerDriver->getPowermW();
-  float temp = powerDriver->getTemp();
-
-  // Print readings
-  Serial.println("Sensor Readings:");
-  Serial.print("  Voltage: ");
-  Serial.print(voltage);
-  Serial.println(" V");
-
-  Serial.print("  Current: ");
-  Serial.print(current);
-  Serial.println(" mA");
-
-  Serial.print("  Power: ");
-  Serial.print(power);
-  Serial.println(" mW");
-
-  Serial.print("  Temperature: ");
-  Serial.print(temp);
-  Serial.println(" C");
-
-  // Validate readings are in reasonable ranges
-  bool voltageValid =
-      (voltage >= 0.0f && voltage < 30.0f);  // Typical battery range
-  printTestResult("Voltage reading is reasonable (0-30V)", voltageValid);
-
-  bool currentValid = (current >= -20000.0f && current < 20000.0f);  // ±20A
-  printTestResult("Current reading is reasonable (±20A)", currentValid);
-
-  bool powerValid = (power >= -600000.0f && power < 600000.0f);  // ±600W
-  printTestResult("Power reading is reasonable (±600W)", powerValid);
-
-  bool tempValid = (temp >= -40.0f && temp < 125.0f);  // Sensor range
-  printTestResult("Temperature reading is reasonable (-40-125C)", tempValid);
-
-  // Check if readings are not stuck at zero (indicates sensor is working)
-  bool notAllZero = (voltage != 0.0f || current != 0.0f || power != 0.0f);
-  if (voltage > 1.0f) {  // If battery connected, voltage should be > 1V
-    printTestResult("Sensor producing non-zero readings", notAllZero);
-  } else {
-    Serial.println("[INFO] Voltage < 1V - battery may not be connected");
-  }
-}
-
-void testSubsystemReset() {
-  printTestHeader("Subsystem Reset");
-
-  if (!batterySubsystem) {
-    printTestResult("BatterySubsystem reset() - subsystem null", false);
-    return;
-  }
-
-  batterySubsystem->reset();
-  printTestResult("reset() executes without crashing", true);
-}
-
-void printSummary() {
-  Serial.println();
-  Serial.println("================================================");
-  Serial.println("TEST SUMMARY");
-  Serial.println("================================================");
-
-  Serial.print("Total Updates: ");
-  Serial.println(updateCount);
-
-  Serial.print("Test Duration: ");
-  Serial.print((millis() - testStartTime) / 1000.0f);
-  Serial.println(" seconds");
-
-  Serial.println();
-  if (testsPassed) {
-    Serial.println("✓ ALL TESTS PASSED");
-  } else {
-    Serial.println("✗ SOME TESTS FAILED");
-  }
-  Serial.println("================================================");
-}
+// ── Arduino entry points ──────────────────────────────────────────────────────
 
 void setup() {
-  // Initialize Serial
-  Serial.begin(115200);
-  while (!Serial && millis() < 3000);  // Wait up to 3s for serial
-
-  delay(1000);
-
-  Serial.println();
-  Serial.println("================================================");
-  Serial.println("BATTERY SUBSYSTEM MCU TEST");
-  Serial.println("Teensy 4.1");
-  Serial.println("================================================");
-  Serial.println();
-
-  testStartTime = millis();
-
-  // Run tests sequentially
-  testSubsystemExists();
-  delay(500);
-
-  testSubsystemInit();
-  delay(500);
-
-  testSubsystemUpdate();
-  delay(500);
-
-  testSubsystemFunctionality();
-  delay(500);
-
-  testSubsystemReset();
-  delay(500);
-
-  printSummary();
-
-  lastUpdateTime = millis();
-}
-
-void loop() {
-  uint32_t now = millis();
-
-  // Continue running updates to demonstrate continuous operation
-  if (now - lastUpdateTime >= UPDATE_INTERVAL_MS) {
-    if (batterySubsystem) {
-      batterySubsystem->update();
-      updateCount++;
-
-      // Print periodic status
-      if (updateCount % 50 == 0) {
-        Serial.print("Running... Updates: ");
-        Serial.println(updateCount);
-
-        if (powerDriver) {
-          Serial.print("  V=");
-          Serial.print(powerDriver->getVoltage());
-          Serial.print("V, I=");
-          Serial.print(powerDriver->getCurrentmA());
-          Serial.print("mA, P=");
-          Serial.print(powerDriver->getPowermW());
-          Serial.println("mW");
-        }
-      }
-    }
-
-    lastUpdateTime = now;
+  Serial.begin(921600);
+  if (CrashReport) {
+    Serial.print(CrashReport);
+    Serial.println();
+    Serial.flush();
   }
 
-  // Blink LED to show test is running
-  static uint32_t lastBlink = 0;
-  if (now - lastBlink >= 500) {
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    lastBlink = now;
+  Serial.println(PSTR("\r\nBattery subsystem test — TeensyThreads\r\n"));
+  Serial.println(PSTR("Hardware: INA219 on TCA9548A mux ch0"));
+
+  I2CBus::initLocks();
+
+  g_mr.init();
+
+  if (!g_mux.init()) {
+    Serial.println(PSTR("ERROR: TCA9548A init failed — check I2C wiring"));
   }
+
+  if (!g_battery.init()) {
+    Serial.println(PSTR("ERROR: INA219 init failed — check mux channel/address"));
+  }
+
+  g_mr.registerParticipant(&g_battery);
+
+  //                            stackSize  priority  rateMs
+  g_mr.beginThreaded(           8192,      4         );
+  g_battery.beginThreaded(      1024,      1,    100  );
+  threads.addThread(print_task, nullptr, 1024);
+  threads.addThread(blink_task, nullptr, 512);
+
+  Serial.println(PSTR("setup(): threads started."));
+  Serial.flush();
 }
+
+void loop() { threads.delay(100); }

@@ -15,11 +15,6 @@ OLEDSubsystem::OLEDSubsystem(const OLEDSubsystemSetup& setup)
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 bool OLEDSubsystem::init() {
-#ifdef USE_FREERTOS
-  mutex_ = xSemaphoreCreateMutex();
-  if (!mutex_) return false;
-#endif
-
   if (!display_.begin(SSD1306_SWITCHCAPVCC)) {
     return false;
   }
@@ -98,13 +93,13 @@ void OLEDSubsystem::renderLines() {
 }
 
 void OLEDSubsystem::flushDisplay() {
-#ifdef USE_FREERTOS
-  // Software SPI is bit-banged; a FreeRTOS task switch mid-transfer shifts the
-  // SPI clock phase by one bit, manifesting as a 1-pixel display shake.
-  // The full framebuffer transfer is ~150 µs at Teensy 4.1 speeds — safe.
-  taskENTER_CRITICAL();
+#ifdef USE_TEENSYTHREADS
+  // Software SPI is bit-banged; a context switch mid-transfer shifts the SPI
+  // clock phase by one bit, manifesting as a 1-pixel display shake.
+  // Disabling interrupts for the ~150 µs framebuffer transfer is safe.
+  noInterrupts();
   display_.display();
-  taskEXIT_CRITICAL();
+  interrupts();
 #else
   display_.display();
 #endif
@@ -152,8 +147,10 @@ bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void OLEDSubsystem::onDestroy() {
-  if (lcd_srv_.impl)    rcl_service_fini(&lcd_srv_,    node_);
-  if (scroll_sub_.impl) rcl_subscription_fini(&scroll_sub_, node_);
+  // destroy_entities() finalises the rcl_node before calling onDestroy, so
+  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
+  lcd_srv_    = rcl_get_zero_initialized_service();
+  scroll_sub_ = rcl_get_zero_initialized_subscription();
   node_ = nullptr;
 }
 

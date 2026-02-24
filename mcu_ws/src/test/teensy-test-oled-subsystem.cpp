@@ -25,10 +25,9 @@
  */
 
 #include <Arduino.h>
+#include <TeensyThreads.h>
 #include <microros_manager_robot.h>
 #include <robot/subsystems/OLEDSubsystem.h>
-
-#include "arduino_freertos.h"
 
 // ── Pin config (software SPI) ─────────────────────────────────────────────────
 
@@ -51,15 +50,15 @@ static Subsystem::OLEDSubsystemSetup g_oled_setup("oled_subsystem",
                                                    OLED_CS_PIN);
 static Subsystem::OLEDSubsystem g_oled(g_oled_setup);
 
-// ── FreeRTOS tasks ────────────────────────────────────────────────────────────
+// ── Threads ───────────────────────────────────────────────────────────────────
 
 static void blink_task(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
     digitalWriteFast(LED_BUILTIN, HIGH);
-    vTaskDelay(pdMS_TO_TICKS(500));
+    threads.delay(500);
     digitalWriteFast(LED_BUILTIN, LOW);
-    vTaskDelay(pdMS_TO_TICKS(500));
+    threads.delay(500);
   }
 }
 
@@ -78,7 +77,7 @@ static void heartbeat_task(void*) {
              ros_state, mins, secs, tick);
     g_oled.appendText(buf);
     ++tick;
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    threads.delay(5000);
   }
 }
 
@@ -92,8 +91,7 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR(
-      "\r\nOLED subsystem test — FreeRTOS " tskKERNEL_VERSION_NUMBER "\r\n"));
+  Serial.println(PSTR("\r\nOLED subsystem test — TeensyThreads\r\n"));
 
   g_mr.init();
   if (!g_oled.init()) {
@@ -107,13 +105,11 @@ void setup() {
 
   g_mr.beginThreaded(8192, 4);
   g_oled.beginThreaded(2048, 1, 50);
-  xTaskCreate(heartbeat_task, "hb",    512, nullptr, 2, nullptr);
-  xTaskCreate(blink_task,     "blink", 128, nullptr, 1, nullptr);
+  threads.addThread(heartbeat_task, nullptr, 1024);
+  threads.addThread(blink_task,     nullptr, 512);
 
-  Serial.println(PSTR("setup(): starting scheduler..."));
+  Serial.println(PSTR("setup(): threads started."));
   Serial.flush();
-
-  vTaskStartScheduler();
 }
 
-void loop() {}  // never reached
+void loop() { threads.delay(100); }

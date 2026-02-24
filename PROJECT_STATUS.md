@@ -544,6 +544,9 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 | teensy-test-sensor-subsystem | Teensy41 | VL53L0X TOF sensors |
 | teensy-test-oled-subsystem | Teensy41 | SSD1306 OLED display + ROS service |
 | teensy-test-all-subsystems | Teensy41 | All subsystems integration (servo, motor, button, dip, LED + existing) |
+| teensy-test-rc-subsystem | Teensy41 | FlySky IBUS receiver → micro-ROS `/mcu_robot/rc` (publish-only) |
+| teensy-test-arm-servos | Teensy41 | PCA9685 servo control via micro-ROS SetServo service |
+| teensy-test-drive-motors | Teensy41 | PCA9685 motor control via micro-ROS SetMotor service |
 | teensy-test-freertos | Teensy41 | TeensyThreads multitasking |
 | teensy-test-microros-freertos | Teensy41 | micro-ROS + TeensyThreads combined |
 | esp32-test-simple-wifi | ESP32 | Basic WiFi connectivity |
@@ -551,7 +554,7 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 
 ### Test Gaps
 
-- No tests for: RC subsystem, arm servos, drive motors (individual unit tests — all-subsystems integration test exists)
+- RC, servo, and motor subsystems have dedicated hardware tests (teensy-test-rc-subsystem, teensy-test-arm-servos, teensy-test-drive-motors)
 - No integration tests (multi-MCU, UWB end-to-end)
 - No vision system tests
 - No autonomy/navigation tests
@@ -615,9 +618,9 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 - [ ] **Implement firmware version tagging** - Track what's deployed on robot
 
 #### Testing
-- [ ] **Add RC subsystem hardware test** - Verify FlySky IBUS parsing
-- [ ] **Add arm subsystem hardware test** - Verify PCA9685 servo control
-- [ ] **Add drive subsystem hardware test** - Verify motor/encoder operation
+- [x] **Add RC subsystem hardware test** - `teensy-test-rc-subsystem` publishes `/mcu_robot/rc`
+- [x] **Add arm subsystem hardware test** - `teensy-test-arm-servos` with SetServo micro-ROS service
+- [x] **Add drive subsystem hardware test** - `teensy-test-drive-motors` with SetMotor micro-ROS service
 - [ ] **Add UWB end-to-end test** - Verify tag-anchor ranging pipeline
 - [ ] **Add vision system tests** - Unit tests for duck detection
 - [ ] **Add navigation integration tests** - Verify path planning + following

@@ -184,7 +184,7 @@ pio device monitor -e teensy-test-battery-subsystem       # Watch output
 pio run -e teensy-test-all-subsystems --target upload     # Flash all-subsystems test
 ```
 
-Hardware test environments: `teensy-test-oled-raw`, `teensy-test-teensythreads`, `teensy-test-microros-teensythreads`, `teensy-test-microros-subsystem`, `teensy-test-battery-subsystem`, `teensy-test-sensor-subsystem`, `teensy-test-oled-subsystem`, `teensy-test-all-subsystems`, `esp32-test-microros-wifi`, `esp32-test-simple-wifi`.
+Hardware test environments: `teensy-test-oled-raw`, `teensy-test-teensythreads`, `teensy-test-microros-teensythreads`, `teensy-test-microros-subsystem`, `teensy-test-battery-subsystem`, `teensy-test-sensor-subsystem`, `teensy-test-oled-subsystem`, `teensy-test-all-subsystems`, `teensy-test-rc-subsystem`, `teensy-test-arm-servos`, `teensy-test-drive-motors`, `esp32-test-microros-wifi`, `esp32-test-simple-wifi`.
 
 See `mcu_ws/test/README.md` for detailed test documentation.
 

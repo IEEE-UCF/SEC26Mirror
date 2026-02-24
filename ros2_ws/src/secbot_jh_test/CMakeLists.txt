@@ -11,6 +11,8 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(mcu_msgs REQUIRED)
+find_package(gz-transport13 QUIET REQUIRED OPTIONAL_COMPONENTS log)
+
 #[==[
 If you need files from another workspace like RAFEEDS PID CONTROLLER you can do the whole
 set MCU_WS_DIR schmone but for now we are just testing the rclcpp and msg stuff, plus adding the executable for compiling!
@@ -30,6 +32,28 @@ add_executable(keystroke_translator_node
 	src/keystroke-translator-gazebo.cpp
 	${MCU_SOURCES}
 )
+#================================executable for tag-node#================================
+add_executable(uwb_tag_node_cmake
+	src/uwb-test.cpp
+	${MCU_SOURCES}
+)
+target_include_directories(uwb_tag_node_cmake PUBLIC
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+	$<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(uwb_tag_node_cmake
+	rclcpp
+	geometry_msgs
+	std_msgs
+	sensor_msgs
+	mcu_msgs
+)
+target_link_libraries(uwb_tag_node_cmake
+	gz-transport13::gz-transport13
+	gz-msgs10::gz-msgs10
+)
+#=========================================================================================
 target_include_directories(keystroke_publish_node PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 	$<INSTALL_INTERFACE:include>
@@ -72,6 +96,8 @@ install(DIRECTORY
 install (TARGETS
 	keystroke_publish_node
 	keystroke_translator_node
+	keystroke_publish_node
+	uwb_tag_node_cmake
 	# keystroke_subscribe_node
 	DESTINATION lib/${PROJECT_NAME}
 )

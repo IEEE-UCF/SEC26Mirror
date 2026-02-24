@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <sdf version="1.5">
-  <model name="11">
-    <static>true</static>
+  <model name="moving_anchor">
+    <static>false</static>
     <!-- Pose: x y z roll pitch yaw (in meters/radians) -->
     <pose>0 0 0 0 0 0</pose>
 
@@ -22,16 +22,16 @@
     <link name="link">
       <collision name="collision">
         <geometry>
-          <box>
-            <size>1 1 1</size>
-          </box>
+          <sphere>
+            <radius>.5</radius>
+          </sphere>
         </geometry>
       </collision>
       <visual name="visual">
         <geometry>
-          <box>
-            <size>1 1 1</size>
-          </box>
+          <sphere>
+            <radius>.5</radius>
+          </sphere>
         </geometry>
         <material>
           <ambient>0 0 0 1</ambient>

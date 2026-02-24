@@ -129,8 +129,8 @@ RUN pip3 install --break-system-packages onshape-to-robot
 #     fixed in cmake 3.29). ros:jazzy-ros-base ships Ubuntu 24.04 which has cmake 3.28.
 #     The patched macro sets a safe C/CXX standard default instead of fataling when the
 #     ABI-detection binary cannot be run for cross-compilers.
-COPY mcu_ws/libs_external/teensy/micro_ros_platformio/cmake_overrides/Compiler/CMakeCommonCompilerMacros.cmake \
-     /usr/share/cmake-3.28/Modules/Compiler/CMakeCommonCompilerMacros.cmake
+#COPY mcu_ws/libs_external/teensy/micro_ros_platformio/cmake_overrides/Compiler/CMakeCommonCompilerMacros.cmake \
+#     /usr/share/cmake-3.28/Modules/Compiler/CMakeCommonCompilerMacros.cmake
 
 FROM base AS dev
 

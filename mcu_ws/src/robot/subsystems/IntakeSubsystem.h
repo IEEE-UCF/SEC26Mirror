@@ -3,8 +3,8 @@
 #include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
 
-#ifdef USE_FREERTOS
-#include "arduino_freertos.h"
+#ifdef USE_TEENSYTHREADS
+#include <TeensyThreads.h>
 #endif
 
 #include "TimedSubsystem.h"
@@ -95,11 +95,11 @@ class IntakeSubsystem : public IMicroRosParticipant,
   bool hasDuck() const { return state_ == IntakeState::CAPTURED; }
   bool isJammed() const { return state_ == IntakeState::JAMMED; }
 
-#ifdef USE_FREERTOS
-  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+#ifdef USE_TEENSYTHREADS
+  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
-    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+    threads.addThread(taskFunction, this, stackSize);
   }
 
  private:
@@ -108,7 +108,7 @@ class IntakeSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+      threads.delay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 20;

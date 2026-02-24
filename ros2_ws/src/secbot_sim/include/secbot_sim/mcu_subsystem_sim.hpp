@@ -14,19 +14,26 @@
 #include <cmath>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <mcu_msgs/msg/arm_command.hpp>
 #include <mcu_msgs/msg/battery_health.hpp>
 #include <mcu_msgs/msg/drive_base.hpp>
+<<<<<<< HEAD
 <<<<<<< HEAD
 #include <mcu_msgs/msg/intake_state.hpp>
 #include <mcu_msgs/msg/mcu_state.hpp>
 =======
 #include <mcu_msgs/msg/arm_command.hpp>
+=======
+>>>>>>> 24148fbc914056c80cc70e98718723a719880f53
 #include <mcu_msgs/msg/intake_bridge_command.hpp>
 #include <mcu_msgs/msg/intake_bridge_state.hpp>
 #include <mcu_msgs/msg/intake_state.hpp>
 #include <mcu_msgs/msg/mcu_state.hpp>
+<<<<<<< HEAD
 #include <std_msgs/msg/int16.hpp>
 >>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
+=======
+>>>>>>> 24148fbc914056c80cc70e98718723a719880f53
 #include <mcu_msgs/msg/mini_robot_state.hpp>
 #include <mcu_msgs/msg/rc.hpp>
 #include <memory>
@@ -35,6 +42,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
+#include <std_msgs/msg/int16.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <vector>
 

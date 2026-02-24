@@ -82,9 +82,9 @@ bool MiniRobotSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void MiniRobotSubsystem::onDestroy() {
-  if (state_pub_.impl) {
-    (void)rcl_publisher_fini(&state_pub_, node_);
-  }
+  // destroy_entities() finalises the rcl_node before calling onDestroy, so
+  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
+  state_pub_ = rcl_get_zero_initialized_publisher();
   mcu_msgs__msg__MiniRobotState__fini(&state_msg_);
   node_ = nullptr;
 }

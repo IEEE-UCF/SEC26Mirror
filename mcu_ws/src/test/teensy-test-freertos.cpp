@@ -1,54 +1,30 @@
-/*
- * This file is part of the FreeRTOS port to Teensy boards.
- * Copyright (c) 2020-2024 Timo Sandmann
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library. If not, see <http://www.gnu.org/licenses/>.
- */
-
 /**
- * @file    main.cpp
- * @brief   FreeRTOS example for Teensy boards
- * @author  Timo Sandmann
- * @date    17.05.2020
+ * @file teensy-test-teensythreads.cpp
+ * @brief TeensyThreads blink + serial example for Teensy boards.
  */
 
-#include "arduino_freertos.h"
+#include <Arduino.h>
+#include <TeensyThreads.h>
 
 static void task1(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
     digitalWriteFast(LED_BUILTIN, LOW);
-    vTaskDelay(pdMS_TO_TICKS(500));
+    threads.delay(500);
 
     digitalWriteFast(LED_BUILTIN, HIGH);
-    vTaskDelay(pdMS_TO_TICKS(500));
+    threads.delay(500);
   }
-
-  vTaskDelete(nullptr);
 }
 
 static void task2(void*) {
-  Serial.begin(0);
   while (true) {
     Serial.println("TICK");
-    vTaskDelay(pdMS_TO_TICKS(1'000));
+    threads.delay(1000);
 
     Serial.println("TOCK");
-    vTaskDelay(pdMS_TO_TICKS(1'000));
+    threads.delay(1000);
   }
-
-  vTaskDelete(nullptr);
 }
 
 void setup() {
@@ -59,17 +35,14 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR("\r\nBooting FreeRTOS kernel " tskKERNEL_VERSION_NUMBER
-                      ". Built by gcc " __VERSION__ " (newlib " _NEWLIB_VERSION
-                      ") on " __DATE__ ". ***\r\n"));
+  Serial.println(PSTR("\r\nBooting TeensyThreads. Built by gcc " __VERSION__
+                      " on " __DATE__ ".\r\n"));
 
-  xTaskCreate(task1, "task1", 128, nullptr, 2, nullptr);
-  xTaskCreate(task2, "task2", 128, nullptr, 2, nullptr);
+  threads.addThread(task1, nullptr, 512);
+  threads.addThread(task2, nullptr, 512);
 
-  Serial.println(PSTR("setup(): starting scheduler..."));
+  Serial.println(PSTR("setup(): threads started."));
   Serial.flush();
-
-  vTaskStartScheduler();
 }
 
-void loop() {}
+void loop() { threads.delay(100); }

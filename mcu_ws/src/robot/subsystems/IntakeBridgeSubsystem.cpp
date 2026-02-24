@@ -1,7 +1,7 @@
 #include "IntakeBridgeSubsystem.h"
 
-#include <Arduino.h>
 #include <Adafruit_VL53L0X.h>
+#include <Arduino.h>
 
 namespace Subsystem {
 
@@ -54,9 +54,7 @@ bool IntakeBridgeSubsystem::init() {
   return true;
 }
 
-void IntakeBridgeSubsystem::begin() {
-  transitionTo(IntakeBridgeState::STOWED);
-}
+void IntakeBridgeSubsystem::begin() { transitionTo(IntakeBridgeState::STOWED); }
 
 void IntakeBridgeSubsystem::update() {
   // Read home switch (active LOW -- 0 means at home)
@@ -240,10 +238,9 @@ void IntakeBridgeSubsystem::updateStateMachine() {
       setMotorOff();
       // Stay here until commanded to retract
       // Update duck detection from TOF
-      duck_detected_ =
-          s_tof_initialized &&
-          (tof_distance_mm_ < setup_.duck_detect_threshold_mm_) &&
-          (tof_distance_mm_ > 0);
+      duck_detected_ = s_tof_initialized &&
+                       (tof_distance_mm_ < setup_.duck_detect_threshold_mm_) &&
+                       (tof_distance_mm_ > 0);
       break;
 
     case IntakeBridgeState::RETRACTING:

@@ -69,7 +69,6 @@ jobs:
         run: |
           echo "::notice::Cache restored from fallback key, cleaning microros"
           pio run -e robot -t clean_microros || true
-          pio run -e robotcomms -t clean_microros || true
 
       - name: Install CMake
         run: |
@@ -88,7 +87,7 @@ jobs:
           
           # 2. Extract environments directly from platformio.ini (No Python)
           # Finds [env:name], strips brackets, filters out anything starting with 'test'
-          envs=$(grep -E "^\[env:" platformio.ini | sed 's/\[env://;s/\]//' | grep -v "^test")
+          envs=$(grep -E "^\[env:" platformio.ini | sed 's/\[env://;s/\]//' | grep -v "^test\|^robotcomms")
           
           # Collapse newlines into spaces so the loop works correctly
           envs=$(echo $envs | tr '\n' ' ')

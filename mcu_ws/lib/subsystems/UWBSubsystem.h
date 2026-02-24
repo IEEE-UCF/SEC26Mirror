@@ -13,6 +13,7 @@
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
+#include <stdio.h>
 
 #include "TimedSubsystem.h"
 #include "UWBDriver.h"
@@ -60,18 +61,29 @@ class UWBSubsystem : public IMicroRosParticipant,
  private:
   void publishRanging();
   void updateRangingMessage();
+  void publishPeerRanges();
 
-  static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;  // Publish at 10 Hz
-  static constexpr uint32_t RANGING_INTERVAL_MS = 50;   // Range at 20 Hz
+  static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;       // 10 Hz (TAG mode)
+  static constexpr uint32_t RANGING_INTERVAL_MS = 50;        // 20 Hz (TAG mode)
+  static constexpr uint32_t PEER_PUBLISH_INTERVAL_MS = 500;  // 2 Hz (inter-beacon)
+  static constexpr uint8_t MAX_PEER_PUBS = 2;  // max peers per beacon
 
   const UWBSubsystemSetup setup_;
 
+  // TAG mode publisher
   rcl_publisher_t pub_{};
   mcu_msgs__msg__UWBRanging msg_{};
   rcl_node_t* node_ = nullptr;
 
   bool is_tag_mode_ = false;
   elapsedMillis ranging_timer_;
+
+  // Inter-beacon peer publishers (ANCHOR mode with peers)
+  bool has_peer_ranging_ = false;
+  rcl_publisher_t peer_pubs_[MAX_PEER_PUBS] = {};
+  mcu_msgs__msg__UWBRange peer_msgs_[MAX_PEER_PUBS] = {};
+  char peer_topic_names_[MAX_PEER_PUBS][32] = {};
+  uint8_t num_peer_pubs_ = 0;
 };
 
 }  // namespace Subsystem

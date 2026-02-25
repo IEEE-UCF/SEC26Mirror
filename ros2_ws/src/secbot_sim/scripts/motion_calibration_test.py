@@ -14,6 +14,7 @@ Run with sim already started:
 
 Or directly from source:
   python3 scripts/motion_calibration_test.py [--speed 0.20] [--turn-speed 0.50]
+  uses normal shit
 """
 
 import argparse
@@ -21,34 +22,71 @@ import math
 import sys
 import threading
 import time
+import os
+import yaml
 
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, Imu
+from ament_index_python.packages import get_package_share_directory
+
 
 # ─────────────────────────────────────────────────────────────
-# Defaults — tweak these or pass as CLI args
+# Defaults / Global Params (Will be overridden by YAML if present)
 # ─────────────────────────────────────────────────────────────
-DEFAULT_SPEED       = 0.20   # m/s  linear travel speed
-DEFAULT_TURN_SPEED  = 0.50   # rad/s  angular travel speed
-DEFAULT_SETTLE_TIME = 2.0    # s   pause between tests (let robot fully stop)
-DEFAULT_CMD_TOPIC   = "/cmd_vel"        # direct to Gazebo DiffDrive (bypasses MCU S-curve/PID)
-DEFAULT_TOLERANCE   = 0.05   # m or rad — error threshold for PASS/FAIL
+DEFAULT_SPEED       = 0.20   # m/s
+DEFAULT_TURN_SPEED  = 0.50   # rad/s
+DEFAULT_SETTLE_TIME = 2.0    # s
+DEFAULT_CMD_TOPIC   = "/cmd_vel"
+DEFAULT_TOLERANCE   = 0.05   # 5%
 
-# Robot physical constants (must match launch params)
-WHEEL_DIAMETER     = 3.25 * 0.0254   # inches → meters (3.25 in) — physical reality ✓
-TRACK_WIDTH        = 11.93 * 0.0254  # inches → meters (11.93 in) — matches URDF wheel_separation (0.3030m)
-TICKS_PER_REV      = 2048
-GEAR_RATIO         = 0.6             # 36T gear on motor -> 60T gear on wheel axel
+# Initialization placeholders
+TRACK_WIDTH      = 0.303022
+WHEEL_DIAMETER   = 0.08255
+TICKS_PER_REV    = 104.0
+GEAR_RATIO       = 0.6
+
+def load_global_config():
+    global TRACK_WIDTH, WHEEL_DIAMETER, TICKS_PER_REV, GEAR_RATIO
+    global DEFAULT_SPEED, DEFAULT_TURN_SPEED, DEFAULT_SETTLE_TIME, DEFAULT_TOLERANCE, DEFAULT_CMD_TOPIC
+    
+    try:
+        pkg_path = get_package_share_directory('my_robot_description')
+        config_path = os.path.join(pkg_path, 'config', 'motion_config.yaml')
+        
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                cfg = yaml.safe_load(f)
+                
+                # Robot params
+                rob = cfg.get('robot_parameters', {})
+                TRACK_WIDTH    = rob.get('track_width', TRACK_WIDTH)
+                WHEEL_DIAMETER = rob.get('wheel_diameter', WHEEL_DIAMETER)
+                TICKS_PER_REV  = rob.get('encoder_ticks_per_rev', TICKS_PER_REV)
+                GEAR_RATIO     = rob.get('gear_ratio', GEAR_RATIO)
+                
+                # Calibration defaults
+                cal = cfg.get('calibration_defaults', {})
+                DEFAULT_SPEED       = cal.get('default_speed', DEFAULT_SPEED)
+                DEFAULT_TURN_SPEED  = cal.get('default_turn_speed', DEFAULT_TURN_SPEED)
+                DEFAULT_SETTLE_TIME = cal.get('settle_time', DEFAULT_SETTLE_TIME)
+                DEFAULT_TOLERANCE   = cal.get('tolerance', DEFAULT_TOLERANCE)
+                DEFAULT_CMD_TOPIC   = cal.get('cmd_topic', DEFAULT_CMD_TOPIC)
+                
+    except Exception as e:
+        print(f"Warning: Could not load central config: {e}. Using hardcoded defaults.")
+
+load_global_config()
 
 WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER
-TICKS_PER_METER    = TICKS_PER_REV * GEAR_RATIO / WHEEL_CIRCUMFERENCE
+TICKS_PER_METER    = TICKS_PER_REV / (GEAR_RATIO * WHEEL_CIRCUMFERENCE)
 
 # Publish rate while driving
 PUBLISH_HZ = 20.0
+
 
 # ─────────────────────────────────────────────────────────────
 
@@ -58,7 +96,19 @@ class CalibResult:
         self.commanded   = commanded
         self.gz_measured = gz_measured
         self.enc_measured = enc_measured
+        self.imu_measured = None  # To be filled if applicable
         self.units       = units
+
+    @property
+    def imu_error(self):
+        if self.imu_measured is None: return 0.0
+        return self.imu_measured - self.commanded
+
+    @property
+    def imu_pct(self):
+        if self.imu_measured is None or abs(self.commanded) < 1e-9:
+            return 0.0
+        return 100.0 * self.imu_error / abs(self.commanded)
 
     @property
     def gz_error(self):
@@ -83,15 +133,23 @@ class CalibResult:
 
 class MotionCalibrationNode(Node):
 
-    def __init__(self, args):
+    def __init__(self,
+                 speed: float = DEFAULT_SPEED,
+                 turn_speed: float = DEFAULT_TURN_SPEED,
+                 settle_time: float = DEFAULT_SETTLE_TIME,
+                 topic: str = DEFAULT_CMD_TOPIC,
+                 tolerance: float = DEFAULT_TOLERANCE,
+                 closed_loop: bool = False):
         super().__init__("motion_calibration_test")
 
-        # CLI params
-        self.speed        = args.speed
-        self.turn_speed   = args.turn_speed
-        self.settle_time  = args.settle_time
-        self.cmd_topic    = args.topic
-        self.tolerance    = args.tolerance
+        # Configuration
+        self.speed        = speed
+        self.turn_speed   = turn_speed
+        self.settle_time  = settle_time
+        self.cmd_topic    = topic
+        self.tolerance    = tolerance
+        self.closed_loop  = closed_loop
+
 
         # Latest sensor readings (protected by lock)
         self._lock = threading.Lock()
@@ -104,6 +162,10 @@ class MotionCalibrationNode(Node):
         self._gt_yaw = None              # wrapped yaw [-pi, pi]
         self._gt_yaw_prev = None         # previous yaw (for unwrapping)
         self._gt_cumulative_yaw = 0.0    # unwrapped cumulative yaw (fixes 180° boundary)
+
+        self._imu_yaw = None
+        self._imu_yaw_prev = None
+        self._imu_cumulative_yaw = 0.0
 
         self._lf_rad = None   # frontleftwheel
         self._lb_rad = None   # backleftwheel
@@ -121,6 +183,8 @@ class MotionCalibrationNode(Node):
             Odometry, "/odom/ground_truth", self._gt_cb, 10)
         self._joint_sub = self.create_subscription(
             JointState, "/joint_states", self._joint_cb, 10)
+        self._imu_sub = self.create_subscription(
+            Imu, "/imu", self._imu_cb, 10)
 
         # Use sim time so drive durations match Gazebo's clock
         self.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
@@ -160,6 +224,21 @@ class MotionCalibrationNode(Node):
                 self._gt_cumulative_yaw += delta
             self._gt_yaw_prev = yaw
 
+    def _imu_cb(self, msg: Imu):
+        """IMU callback - extracts yaw from orientation quaternion."""
+        qz = msg.orientation.z
+        qw = msg.orientation.w
+        # This assumes the IMU is upright!
+        yaw = 2.0 * math.atan2(qz, qw)
+        with self._lock:
+            self._imu_yaw = yaw
+            if self._imu_yaw_prev is not None:
+                delta = yaw - self._imu_yaw_prev
+                if delta >  math.pi: delta -= 2 * math.pi
+                if delta < -math.pi: delta += 2 * math.pi
+                self._imu_cumulative_yaw += delta
+            self._imu_yaw_prev = yaw
+
     def _joint_cb(self, msg: JointState):
         with self._lock:
             for i, name in enumerate(msg.name):
@@ -183,7 +262,8 @@ class MotionCalibrationNode(Node):
             with self._lock:
                 ready = (self._gt_x is not None and
                          self._gz_x is not None and
-                         self._lf_rad is not None)
+                         self._lf_rad is not None and
+                         self._imu_yaw is not None)
             if ready:
                 self.get_logger().info("All topics received ✓")
                 # Warm up the publisher — DDS needs time to fully connect
@@ -198,7 +278,8 @@ class MotionCalibrationNode(Node):
             "Timed out waiting for topics!\n"
             f"  /odom/ground_truth: {'OK' if self._gt_x is not None else 'MISSING'}\n"
             f"  /odom:              {'OK' if self._gz_x is not None else 'MISSING'}\n"
-            f"  /joint_states:      {'OK' if self._lf_rad is not None else 'MISSING'}"
+            f"  /joint_states:      {'OK' if self._lf_rad is not None else 'MISSING'}\n"
+            f"  /imu:               {'OK' if self._imu_yaw is not None else 'MISSING'}"
         )
         return False
 
@@ -215,6 +296,9 @@ class MotionCalibrationNode(Node):
                 "gz_x":    self._gz_x,
                 "gz_y":    self._gz_y,
                 "gz_yaw":  self._gz_yaw,
+                # IMU orientation
+                "imu_yaw":     self._imu_yaw,
+                "imu_cum_yaw": self._imu_cumulative_yaw,
                 # Raw joint angles — used for encoder-formula distance
                 # Left side (frontleft/backleft) and Right side (frontright/backright)
                 # Note: naming in URDF swapped vs physical sides due to chassis orientation
@@ -243,6 +327,43 @@ class MotionCalibrationNode(Node):
             self._cmd_pub.publish(msg)
             rclpy.spin_once(self, timeout_sec=period)
         self._stop()
+
+    def _drive_until_angle(self, ang_z: float, target_rel_angle: float):
+        """
+        Drive with angular velocity ang_z until imu_cum_yaw changes by target_rel_angle.
+        Uses sim-time to avoid real-time scheduling issues.
+        """
+        start_yaw = self._imu_cumulative_yaw
+        target_total = start_yaw + target_rel_angle
+        sign = 1.0 if target_rel_angle >= 0 else -1.0
+        
+        msg = Twist()
+        msg.linear.x  = 0.0
+        msg.angular.z = float(ang_z)
+        period = 1.0 / PUBLISH_HZ
+        
+        # Timeout safety (2x expected time)
+        timeout = abs(target_rel_angle) / abs(ang_z) * 2.0 if abs(ang_z) > 0 else 10.0
+        deadline = self._now_sec() + timeout
+
+        self.get_logger().info(f"   [feedback] target_rel={target_rel_angle:+.4f} rad | timeout={timeout:.1f}s")
+
+        while rclpy.ok() and self._now_sec() < deadline:
+            current_yaw = self._imu_cumulative_yaw
+            diff = current_yaw - start_yaw
+            
+            # Check if we've reached or exceeded the target relative angle
+            if sign > 0:
+                if diff >= target_rel_angle: break
+            else:
+                if diff <= target_rel_angle: break
+                
+            self._cmd_pub.publish(msg)
+            rclpy.spin_once(self, timeout_sec=period)
+        
+        self._stop()
+        if self._now_sec() >= deadline:
+            self.get_logger().warn("   [feedback] TIMEOUT reached during closed-loop turn")
 
     def _settle(self):
         """Wait settle_time SIM-seconds while spinning for fresh callbacks."""
@@ -302,6 +423,11 @@ class MotionCalibrationNode(Node):
         dr = ( (end["lf_rad"] - start["lf_rad"]) + (end["lb_rad"] - start["lb_rad"]) ) / 2.0
         return (dr - dl) * r / TRACK_WIDTH
 
+    @staticmethod
+    def _imu_delta_angle(start, end):
+        """Signed angular displacement from cumulative IMU yaw."""
+        return end["imu_cum_yaw"] - start["imu_cum_yaw"]
+
     # ── Individual test runners ───────────────────────────────
 
     def _run_linear_test(self, name: str, distance_m: float) -> CalibResult:
@@ -350,7 +476,10 @@ class MotionCalibrationNode(Node):
             f"{'─'*55}")
 
         start = self._snapshot()
-        self._drive(0.0, ang_vel, duration)
+        if self.closed_loop:
+            self._drive_until_angle(ang_vel, angle_rad)
+        else:
+            self._drive(0.0, ang_vel, duration)
         self._settle()
         end = self._snapshot()
 
@@ -362,13 +491,18 @@ class MotionCalibrationNode(Node):
             f"   ground_truth: {gz_angle:+.4f} rad  \u2190 physics GT (independent)\n"
             f"   encoder_calc: {enc_angle:+.4f} rad  \u2190 (d_right-d_left)/TRACK_WIDTH")
 
-        return CalibResult(name, angle_rad, gz_angle, enc_angle, units="rad")
+        res = CalibResult(name, angle_rad, gz_angle, enc_angle, units="rad")
+        res.imu_measured = self._imu_delta_angle(start, end)
+        self.get_logger().info(
+            f"   imu_measured: {res.imu_measured:+.4f} rad"
+        )
+        return res
 
     # ── Main test runner ──────────────────────────────────────
 
-    def run_all_tests(self):
+    def run_all_tests(self) -> list[CalibResult]:
         if not self._wait_for_topics():
-            return
+            return []
 
         # Let sim fully settle before first test
         self._settle()
@@ -393,7 +527,8 @@ class MotionCalibrationNode(Node):
         results.append(self._run_turn_test("Turn  180° CCW",  math.pi))
         self._settle()
 
-        self._print_report(results)
+        return results
+
 
     # ── Report ────────────────────────────────────────────────
 
@@ -408,7 +543,8 @@ class MotionCalibrationNode(Node):
         line = "─" * (w_name + 68)
         hdr  = (f"{'Test':<{w_name}}  {'Cmd':>8}  {'GzOdom':>8}  "
                 f"{'GzErr':>7}  {'GzErr%':>7}  {'EncOdom':>8}  "
-                f"{'EncErr':>7}  {'EncErr%':>7}  Status")
+                f"{'EncErr':>7}  {'EncErr%':>7}  "
+                f"{'ImuOdom':>8}  {'ImuErr%':>7}  Status")
 
         report = [
             "",
@@ -426,7 +562,15 @@ class MotionCalibrationNode(Node):
             u = r.units
             gz_pass  = abs(r.gz_pct / 100) <= tol   # relative: within tol% of commanded
             enc_pass = abs(r.enc_pct / 100) <= tol  # relative: within tol% of commanded
-            status   = "PASS" if (gz_pass and enc_pass) else ("FAIL_GZ" if not gz_pass else "FAIL_ENC")
+            imu_pass = True
+            if r.units == "rad":
+                imu_pass = abs(r.imu_pct / 100) <= tol
+            
+            status   = "PASS" if (gz_pass and enc_pass and imu_pass) else (
+                "FAIL_GZ" if not gz_pass else (
+                    "FAIL_ENC" if not enc_pass else "FAIL_IMU"
+                )
+            )
             if status != "PASS":
                 all_pass = False
 
@@ -439,6 +583,8 @@ class MotionCalibrationNode(Node):
                 f"{r.enc_measured:>+8.4f}{u}  "
                 f"{r.enc_error:>+7.4f}{u}  "
                 f"{r.enc_pct:>+6.1f}%  "
+                f"{r.imu_measured if r.imu_measured is not None else 0.0:>+8.4f}{u}  "
+                f"{r.imu_pct:>+6.1f}%  "
                 f"{status}"
             )
             report.append(row)
@@ -497,6 +643,15 @@ class MotionCalibrationNode(Node):
         else:
             report.append(" ✓  Encoder odometry errors are within tolerance")
 
+        # Check IMU errors
+        imu_errs = [r for r in results if r.units == "rad" and abs(r.imu_error) > tol]
+        if imu_errs:
+            report.append(" ⚠  IMU orientation errors detected:")
+            report.append("    • Rotation significantly different from ground truth.")
+            report.append("    • Possible noise, mounting offset, or update rate issues.")
+        else:
+            report.append(" ✓  IMU orientation checks passed")
+
         report.append(line)
         report.append(
             "\n CURRENT CONSTANTS (scripts/motion_calibration_test.py):\n"
@@ -529,6 +684,8 @@ def parse_args():
                         help=f"cmd_vel topic (default {DEFAULT_CMD_TOPIC})")
     parser.add_argument("--tolerance",   type=float, default=DEFAULT_TOLERANCE,
                         help=f"Pass/fail absolute threshold m or rad (default {DEFAULT_TOLERANCE})")
+    parser.add_argument("--closed-loop", action="store_true",
+                        help="Use IMU feedback for turn tests instead of timing")
     # rclpy passes through ROS args; strip them before argparse sees them
     ros_args = rclpy.utilities.remove_ros_args(sys.argv[1:])
     return parser.parse_args(ros_args)
@@ -537,12 +694,22 @@ def parse_args():
 def main():
     rclpy.init()
     args = parse_args()
-    node = MotionCalibrationNode(args)
+    node = MotionCalibrationNode(
+        speed=args.speed,
+        turn_speed=args.turn_speed,
+        settle_time=args.settle_time,
+        topic=args.topic,
+        tolerance=args.tolerance,
+        closed_loop=args.closed_loop
+    )
     try:
-        node.run_all_tests()
+        results = node.run_all_tests()
+        if results:
+            node._print_report(results)
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 
 if __name__ == "__main__":

@@ -177,6 +177,29 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}]
     )
 
+    # Load central motion config
+    motion_config_path = os.path.join(get_package_share_directory('my_robot_description'), 'config', 'motion_config.yaml')
+    motion_params = {}
+    if os.path.exists(motion_config_path):
+        with open(motion_config_path, 'r') as f:
+            cfg = yaml.safe_load(f)
+            rob = cfg.get('robot_parameters', {})
+            M_TO_IN = 1.0 / 0.0254
+            motion_params = {
+                'track_width': float(rob.get('track_width', 0.303022) * M_TO_IN),
+                'wheel_diameter': float(rob.get('wheel_diameter', 0.08255) * M_TO_IN),
+                'encoder_ticks_per_rev': int(rob.get('encoder_ticks_per_rev', 104)),
+                'gear_ratio': float(rob.get('gear_ratio', 0.6)),
+                'max_velocity': float(rob.get('max_velocity', 0.6096) * M_TO_IN),
+                'max_angular_velocity': float(rob.get('max_angular_velocity', 3.0)),
+                'linear_v_max': float(rob.get('max_velocity', 0.6096) * M_TO_IN),
+                'linear_a_max': float(rob.get('max_acceleration', 0.3048) * M_TO_IN),
+                'linear_j_max': float(rob.get('max_jerk', 1.2192) * M_TO_IN),
+                'angular_v_max': float(rob.get('max_angular_velocity', 3.0)),
+                'angular_a_max': float(rob.get('angular_a_max', 6.0)),
+                'angular_j_max': float(rob.get('angular_j_max', 24.0)),
+            }
+
     # MCU Subsystem Sim =================================
     mcu_subsystem = Node(
         package='secbot_sim',
@@ -186,13 +209,7 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time':            True,
             'num_tof_sensors':         4,
-            'track_width':             12.0,
-            'wheel_diameter':          4.0,
-            'encoder_ticks_per_rev':   2048,
-            'gear_ratio':              1,
-            'max_velocity':            24.0,
-            'max_angular_velocity':    3.0,
-            'max_wheel_velocity':      48.0,
+            **motion_params,
             'pid_kp':                  0.8,
             'pid_ki':                  0.1,
             'pid_kd':                  0.05,
@@ -201,19 +218,12 @@ def generate_launch_description():
             'pid_i_min':               -50.0,
             'pid_i_max':               50.0,
             'pid_d_filter_alpha':      0.1,
-            'linear_v_max':            24.0,
-            'linear_a_max':            12.0,
-            'linear_d_max':            12.0,
-            'linear_j_max':            48.0,
-            'angular_v_max':           3.0,
-            'angular_a_max':           6.0,
-            'angular_d_max':           6.0,
-            'angular_j_max':           24.0,
         }],
         remappings=[
             ('/cmd_vel_out', '/cmd_vel'),
         ]
     )
+
 
     # EKF node (commented out until tuned) ==============
     # ekf_node = Node(

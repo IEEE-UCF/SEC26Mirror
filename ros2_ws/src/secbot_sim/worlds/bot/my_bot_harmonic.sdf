@@ -28,7 +28,7 @@
           <geometry>
             <plane>
               <normal>0 0 1</normal>
-              <size>100 100</size>
+              <size>1000 1000</size>
             </plane>
           </geometry>
         </collision>
@@ -36,7 +36,7 @@
           <geometry>
             <plane>
               <normal>0 0 1</normal>
-              <size>100 100</size>
+              <size>1000 1000</size>
             </plane>
           </geometry>
           <material>
@@ -70,9 +70,9 @@
 
     
     <!-- ===== Obstacles from arena_layout.yaml ===== -->
-    <model name="wall_top">
+    <!-- <model name="wall_top">
       <static>true</static>
-      <pose>0.0 4.1 0.15 0 0 0</pose> <!-- center: x=-8+16/2=0, y=3.9+0.4/2=4.1 -->
+      <pose>0.0 4.1 0.15 0 0 0</pose> 
       <link name="link">
         <collision name="col">
           <geometry><box><size>16.0 0.4 0.3</size></box></geometry>
@@ -85,7 +85,7 @@
 
     <model name="wall_bottom">
       <static>true</static>
-      <pose>0.0 -4.1 0.15 0 0 0</pose> <!-- y=-4.3+0.4/2=-4.1 -->
+      <pose>0.0 -4.1 0.15 0 0 0</pose> 
       <link name="link">
         <collision name="col">
           <geometry><box><size>16.0 0.4 0.3</size></box></geometry>
@@ -98,7 +98,7 @@
 
     <model name="wall_left">
       <static>true</static>
-      <pose>-8.1 0.0 0.15 0 0 0</pose> <!-- x=-8.3+0.4/2=-8.1, y=-4+8/2=0 -->
+      <pose>-8.1 0.0 0.15 0 0 0</pose> 
       <link name="link">
         <collision name="col">
           <geometry><box><size>0.4 8.0 0.3</size></box></geometry>
@@ -111,7 +111,7 @@
 
     <model name="wall_right">
       <static>true</static>
-      <pose>8.1 0.0 0.15 0 0 0</pose> <!-- x=7.9+0.4/2=8.1 -->
+      <pose>8.1 0.0 0.15 0 0 0</pose> 
       <link name="link">
         <collision name="col">
           <geometry><box><size>0.4 8.0 0.3</size></box></geometry>
@@ -120,7 +120,7 @@
           <geometry><box><size>0.4 8.0 0.3</size></box></geometry>
         </visual>
       </link>
-    </model>
+    </model> -->
 
     <!-- <model name="obstacle_0">
       <static>true</static>

@@ -30,9 +30,13 @@ namespace Subsystem {
 class UWBSubsystemSetup : public Classes::BaseSetup {
  public:
   Drivers::UWBDriver* driver;
+  const char* ranging_topic;
 
-  UWBSubsystemSetup(const char* _id, Drivers::UWBDriver* _driver)
-      : Classes::BaseSetup(_id), driver(_driver) {}
+  UWBSubsystemSetup(const char* _id, Drivers::UWBDriver* _driver,
+                    const char* _ranging_topic = "mcu_uwb/ranging")
+      : Classes::BaseSetup(_id),
+        driver(_driver),
+        ranging_topic(_ranging_topic) {}
 };
 
 /**

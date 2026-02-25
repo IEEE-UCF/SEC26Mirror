@@ -116,7 +116,7 @@ bool UWBSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 
     if (rclc_publisher_init_best_effort(
             &pub_, node, ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, UWBRanging),
-            "mcu_uwb/ranging") != RCL_RET_OK) {
+            setup_.ranging_topic) != RCL_RET_OK) {
       free(msg_.ranges.data);
       msg_.ranges.data = nullptr;
       return false;

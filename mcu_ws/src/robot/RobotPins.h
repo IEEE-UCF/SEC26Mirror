@@ -84,7 +84,7 @@ constexpr uint8_t I2C_ADDR_POWER =
     0x40;  // INA219 power sensor (Wire0, mux ch0)
 constexpr uint8_t I2C_ADDR_SERVO = 0x40;  // PCA9685 #0 — servos (Wire2)
 constexpr uint8_t I2C_ADDR_MOTOR = 0x41;  // PCA9685 #1 — motors (Wire2)
-constexpr uint8_t I2C_ADDR_IMU = 0x4A;    // BNO085 (Wire1)
+constexpr uint8_t I2C_ADDR_IMU = 0x4B;    // BNO085 (Wire1)
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  TCA9548A mux channel assignments

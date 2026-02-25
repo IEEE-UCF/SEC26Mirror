@@ -123,28 +123,28 @@ void OLEDSubsystem::flushDisplay() {
 #endif
 }
 
-// ── micro-ROS: LCD append service
-// ─────────────────────────────────────────────
+// ── micro-ROS: LCD append subscription
+// ─────────────────────────────────────────
 
 bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   node_ = node;
 
-  // Wire pre-allocated buffer into the service request string field.
-  lcd_req_.text.data = lcd_text_buf_;
-  lcd_req_.text.capacity = sizeof(lcd_text_buf_);
-  lcd_req_.text.size = 0;
+  // Wire pre-allocated buffer into the subscription message string field.
+  lcd_msg_.data.data = lcd_text_buf_;
+  lcd_msg_.data.capacity = sizeof(lcd_text_buf_);
+  lcd_msg_.data.size = 0;
   lcd_text_buf_[0] = '\0';
 
-  if (rclc_service_init_default(
-          &lcd_srv_, node_,
-          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, LCDAppend),
+  if (rclc_subscription_init_default(
+          &lcd_sub_, node_,
+          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
           "/mcu_robot/lcd/append") != RCL_RET_OK) {
     return false;
   }
 
-  if (rclc_executor_add_service_with_context(
-          executor, &lcd_srv_, &lcd_req_, &lcd_res_,
-          &OLEDSubsystem::appendServiceCallback, this) != RCL_RET_OK) {
+  if (rclc_executor_add_subscription_with_context(
+          executor, &lcd_sub_, &lcd_msg_,
+          &OLEDSubsystem::appendCallback, this, ON_NEW_DATA) != RCL_RET_OK) {
     return false;
   }
 
@@ -166,31 +166,21 @@ bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 void OLEDSubsystem::onDestroy() {
   // destroy_entities() finalises the rcl_node before calling onDestroy, so
   // rcl_*_fini would leave impl non-NULL on error; reset local state only.
-  lcd_srv_ = rcl_get_zero_initialized_service();
+  lcd_sub_ = rcl_get_zero_initialized_subscription();
   scroll_sub_ = rcl_get_zero_initialized_subscription();
   node_ = nullptr;
 }
 
-void OLEDSubsystem::appendServiceCallback(const void* req, void* res,
-                                          void* ctx) {
+void OLEDSubsystem::appendCallback(const void* msg, void* ctx) {
   auto* self = static_cast<OLEDSubsystem*>(ctx);
-  self->handleAppend(static_cast<const mcu_msgs__srv__LCDAppend_Request*>(req),
-                     static_cast<mcu_msgs__srv__LCDAppend_Response*>(res));
-}
-
-void OLEDSubsystem::handleAppend(const mcu_msgs__srv__LCDAppend_Request* req,
-                                 mcu_msgs__srv__LCDAppend_Response* res) {
-  if (!takeMutex()) {
-    res->accepted = false;
-    return;
-  }
+  const auto* m = static_cast<const std_msgs__msg__String*>(msg);
+  if (!self->takeMutex()) return;
 
   const char* text =
-      (req->text.data && req->text.size > 0) ? req->text.data : "";
-  appendText(text);
+      (m->data.data && m->data.size > 0) ? m->data.data : "";
+  self->appendText(text);
 
-  giveMutex();
-  res->accepted = true;
+  self->giveMutex();
 }
 
 // ── micro-ROS: scroll topic

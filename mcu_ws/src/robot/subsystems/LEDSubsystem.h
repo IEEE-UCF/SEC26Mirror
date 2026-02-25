@@ -3,9 +3,10 @@
  * @brief WS2812B addressable RGB LED subsystem (FastLED).
  * @date 2026-02-25
  *
- * Drives a strip of WS2812B LEDs using FastLED with DMA-based output on
- * Teensy 4.x.  Unlike Adafruit NeoPixel, FastLED does not require disabling
- * interrupts for show(), making it safe to use with TeensyThreads.
+ * Drives a strip of WS2812B LEDs using FastLED on Teensy 4.x.
+ * WS2812B output requires precise bit timing; context switches during
+ * show() corrupt the signal, so interrupts are briefly disabled (~150µs
+ * for 5 LEDs).
  *
  * -- ROS2 interface (defaults) ---------------------------------------------
  *   /mcu_robot/led/set_all   subscription   mcu_msgs/msg/LedColor
@@ -54,6 +55,10 @@ class LEDSubsystem : public IMicroRosParticipant,
   bool init() override {
     num_leds_ = (setup_.numLeds_ <= LED_MAX_COUNT) ? setup_.numLeds_
                                                     : LED_MAX_COUNT;
+    // Force pin 35 to GPIO output mode.  Serial8.begin() (called by IBusBM
+    // for IBUS RC) sets pin 35's IOMUX to UART8-TX, stealing it from
+    // FastLED.  IBUS is RX-only (pin 34), so releasing TX is safe.
+    pinMode(35, OUTPUT);
     // FastLED requires a compile-time pin for addLeds<>.  Pin 35 matches
     // PIN_RGB_LEDS in RobotPins.h (the only WS2812B data pin on our PCB).
     // If the hardware pin changes, update this template argument to match.
@@ -66,7 +71,16 @@ class LEDSubsystem : public IMicroRosParticipant,
 
   void update() override {
     if (dirty_) {
+#ifdef USE_TEENSYTHREADS
+      // WS2812B bit-bang requires precise timing (~1.25µs per bit).
+      // A TeensyThreads context switch mid-show() corrupts the signal.
+      // Briefly disable interrupts for the duration of show() (~30µs/LED).
+      noInterrupts();
       FastLED.show();
+      interrupts();
+#else
+      FastLED.show();
+#endif
       dirty_ = false;
     }
   }

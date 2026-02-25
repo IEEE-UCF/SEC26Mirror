@@ -7,7 +7,7 @@
  * I2C bus layout:
  *   Wire  (Wire0) — TCA9548A mux (0x70), TCA9555 GPIO expander (0x20),
  *                   INA219 power sensor (0x40, behind mux ch0)
- *   Wire1         — BNO085 IMU (0x4A)
+ *   Wire1         — BNO085 IMU (0x4B)
  *   Wire2         — PCA9685 PWM driver #1 (0x40), PCA9685 #2 (0x41)
  */
 

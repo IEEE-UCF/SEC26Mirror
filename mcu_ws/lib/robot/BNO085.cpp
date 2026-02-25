@@ -8,7 +8,7 @@ bool BNO085Driver::init() {
 
   initSuccess_ = true;
 
-  if (!imu_.begin_I2C(BNO08x_I2CADDR_DEFAULT, &setup_.wire_)) {
+  if (!imu_.begin_I2C(setup_.addr_, &setup_.wire_)) {
     initSuccess_ = false;
     return initSuccess_;
   }

@@ -23,11 +23,11 @@
  *   /mcu_robot/motor/state        std_msgs/Float32Multi..  5 Hz
  *
  * micro-ROS services:
- *   /mcu_robot/lcd/append         mcu_msgs/srv/LCDAppend
  *   /mcu_robot/servo/set          mcu_msgs/srv/SetServo
  *   /mcu_robot/motor/set          mcu_msgs/srv/SetMotor
  *
  * micro-ROS subscriptions:
+ *   /mcu_robot/lcd/append         std_msgs/String
  *   /mcu_robot/lcd/scroll         std_msgs/Int8
  *   /mcu_robot/led/set_all        mcu_msgs/LedColor
  */
@@ -203,8 +203,9 @@ void setup() {
   g_servo.init();
   g_motor.init();
 
-  // 2a. Startup LED flash (green)
+  // 2a. Startup LED flash (green) — show immediately before threads start
   g_led.setAll(0, 32, 0);
+  FastLED.show();
 
   // 2b. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);

@@ -9,12 +9,18 @@
 
 namespace Subsystem {
 
-bool RCSubsystem::init() { return true; }
+bool RCSubsystem::init() {
+  // Initialize IBUS communication on the specified serial port.
+  // Done in init() (not begin()) so Serial8.begin() runs synchronously
+  // before LED init — Serial8 TX shares pin 35 with WS2812B, and
+  // FastLED.addLeds must run after to reclaim the pin for GPIO.
+  // IBUS is RX-only so losing TX on pin 35 is fine.
+  ibus_.begin(*setup_.serial, IBUSBM_NOTIMER);
+  return true;
+}
 
 void RCSubsystem::begin() {
-  // Initialize IBUS communication on the specified serial port
-  // IBUSBM_NOTIMER means we handle timing ourselves
-  ibus_.begin(*setup_.serial, IBUSBM_NOTIMER);
+  // Serial already started in init(); nothing to do here.
 }
 
 void RCSubsystem::update() {

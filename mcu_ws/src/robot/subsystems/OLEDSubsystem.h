@@ -108,6 +108,13 @@ class OLEDSubsystem : public IMicroRosParticipant,
    */
   void scrollBy(int8_t delta);
 
+  /**
+   * Set a persistent status line displayed at the top of the screen (row 0).
+   * When set, the scrollable terminal area shifts to rows 1–7.
+   * Pass nullptr or "" to clear the status line and reclaim the full display.
+   */
+  void setStatusLine(const char* text);
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 50) {
@@ -117,6 +124,10 @@ class OLEDSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  // ── Status line (persistent top row) ─────────────────────────────────────
+  char status_line_[MAX_LINE_LEN + 1] = {};
+  bool has_status_line_ = false;
+
   // ── Ring buffer ───────────────────────────────────────────────────────────
   char lines_[MAX_LINES][MAX_LINE_LEN + 1] = {};
   int next_write_ = 0;     // next write index in ring

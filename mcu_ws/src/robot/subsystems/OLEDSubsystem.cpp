@@ -83,17 +83,29 @@ void OLEDSubsystem::renderLines() {
   display_.setTextSize(1);
   display_.setTextColor(SSD1306_WHITE);
 
+  int first_row = 0;  // first row available for terminal content
+  int visible = LINES_VISIBLE;
+
+  // Persistent status line at row 0 (e.g. battery info)
+  if (has_status_line_) {
+    display_.setCursor(0, 0);
+    display_.print(status_line_);
+    first_row = 1;
+    visible = LINES_VISIBLE - 1;  // 7 terminal rows at y=8,16,...,56
+  }
+
   int count = total_written_ < MAX_LINES ? total_written_ : MAX_LINES;
 
-  // Row 0 = oldest visible, row (LINES_VISIBLE-1) = newest visible.
+  // Terminal rows: oldest visible at first_row, newest at bottom.
   // from_end=0 is the most-recently appended line; larger = older.
-  for (int row = 0; row < LINES_VISIBLE; ++row) {
-    int from_end = view_offset_ + (LINES_VISIBLE - 1 - row);
+  for (int row = 0; row < visible; ++row) {
+    int from_end = view_offset_ + (visible - 1 - row);
     if (from_end >= count) continue;
 
     int idx =
         ((next_write_ - 1 - from_end) % MAX_LINES + MAX_LINES) % MAX_LINES;
-    display_.setCursor(0, row * 8);
+    int y = has_status_line_ ? (8 + row * 8) : (row * 8);
+    display_.setCursor(0, y);
     display_.print(lines_[idx]);
   }
 }
@@ -208,7 +220,8 @@ void OLEDSubsystem::appendText(const char* text) {
 
 void OLEDSubsystem::scrollBy(int8_t delta) {
   int count = total_written_ < MAX_LINES ? total_written_ : MAX_LINES;
-  int max_scroll = count > LINES_VISIBLE ? count - LINES_VISIBLE : 0;
+  int visible = has_status_line_ ? (LINES_VISIBLE - 1) : LINES_VISIBLE;
+  int max_scroll = count > visible ? count - visible : 0;
 
   // -1 = up (older), +1 = down (newer)
   view_offset_ -= delta;
@@ -216,6 +229,24 @@ void OLEDSubsystem::scrollBy(int8_t delta) {
   if (view_offset_ > max_scroll) view_offset_ = max_scroll;
 
   dirty_ = true;
+}
+
+void OLEDSubsystem::setStatusLine(const char* text) {
+  if (!takeMutex()) return;
+
+  if (text && text[0] != '\0') {
+    int n = strlen(text);
+    if (n > MAX_LINE_LEN) n = MAX_LINE_LEN;
+    memcpy(status_line_, text, n);
+    status_line_[n] = '\0';
+    has_status_line_ = true;
+  } else {
+    status_line_[0] = '\0';
+    has_status_line_ = false;
+  }
+  dirty_ = true;
+
+  giveMutex();
 }
 
 }  // namespace Subsystem

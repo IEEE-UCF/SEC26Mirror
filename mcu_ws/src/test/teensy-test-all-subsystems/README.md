@@ -8,6 +8,12 @@ Wires **every** robot subsystem together in a single firmware image. Useful for 
 | **Hardware** | Full robot hardware (see below) |
 | **micro-ROS** | Yes (serial) |
 
+## Known Issues
+
+- **LED subsystem**: WS2812B LEDs not working properly — to be investigated
+- **RC subsystem (IBUS)**: FlySky receiver not reading correctly — to be investigated
+- **IMU**: BNO085 not initializing correctly
+
 ## Required Hardware
 
 | Bus | Device | Address / Pin |

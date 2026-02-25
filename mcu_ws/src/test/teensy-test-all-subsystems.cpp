@@ -203,12 +203,11 @@ void setup() {
   g_servo.init();
   g_motor.init();
 
-  // 2a. Example button callbacks (optional, for debugging)
-  g_btn.onPress(0, [] { Serial.println("Button 0 pressed"); });
-  g_btn.onPress(1, [] { Serial.println("Button 1 pressed"); });
-
-  // 2b. Startup LED flash (green)
+  // 2a. Startup LED flash (green)
   g_led.setAll(0, 32, 0);
+
+  // 2b. Wire battery → OLED status line
+  g_battery.setOLED(&g_oled);
 
   // 3. Register micro-ROS participants
   g_mr.registerParticipant(&g_oled);
@@ -239,8 +238,6 @@ void setup() {
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
 
-  Serial.println(PSTR("setup(): all subsystem threads started."));
-  Serial.flush();
 }
 
 void loop() { threads.delay(100); }

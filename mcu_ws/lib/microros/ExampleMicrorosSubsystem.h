@@ -53,13 +53,11 @@ class ExampleSubsystem : public IMicroRosParticipant,
     return true;
   }
   void onDestroy() override {
-    if (pub_.impl) {
-      rcl_ret_t ret = rcl_publisher_fini(&pub_, node_);
-      (void)ret;
-    }
+    pub_ = rcl_get_zero_initialized_publisher();
     if (msg_.data.data) {
       micro_ros_string_utilities_destroy(&msg_.data);
     }
+    node_ = nullptr;
   }
   // Simple API to publish a status update
   void publishStatus(const char* text) {

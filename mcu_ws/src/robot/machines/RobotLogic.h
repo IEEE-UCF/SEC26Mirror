@@ -177,6 +177,9 @@ void setup() {
   g_bridge.init();
   // g_drive.init();  // TODO: uncomment when DriveSubsystem is configured
 
+  // 1a. Wire battery → OLED status line
+  g_battery.setOLED(&g_oled);
+
   // 2. Register micro-ROS participants
   g_mr.registerParticipant(&g_oled);
   g_mr.registerParticipant(&g_hb);
@@ -203,8 +206,6 @@ void setup() {
   // g_drive.beginThreaded(2048, 3, 20);  // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
 
-  Serial.println(PSTR("setup(): threads started."));
-  Serial.flush();
 }
 
 void loop() { threads.delay(100); }  // yield to subsystem threads

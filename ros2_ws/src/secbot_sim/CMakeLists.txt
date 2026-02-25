@@ -89,6 +89,7 @@ install(DIRECTORY
 
 install(PROGRAMS
   scripts/convert_vision_to_goal.py
+  scripts/motion_calibration_test.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

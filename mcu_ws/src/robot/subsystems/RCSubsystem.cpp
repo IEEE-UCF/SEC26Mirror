@@ -121,7 +121,13 @@ void RCSubsystem::publishRC() {
   if (!pub_.impl) return;
 
   updateRCMessage();
+#ifdef USE_TEENSYTHREADS
+  { Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

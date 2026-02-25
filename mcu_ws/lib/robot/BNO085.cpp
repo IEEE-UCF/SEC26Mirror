@@ -23,6 +23,7 @@ bool BNO085Driver::init() {
 }
 
 void BNO085Driver::update() {
+  if (!initSuccess_) return;
   I2CBus::Lock lock(setup_.wire_);
 
   while (imu_.getSensorEvent(&sensorValue_)) {

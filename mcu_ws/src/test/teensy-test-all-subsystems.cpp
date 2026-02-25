@@ -77,7 +77,7 @@ static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
                                        /*mosi*/ PIN_DISP_MOSI,
                                        /*clk*/ PIN_DISP_CLK,
                                        /*dc*/ PIN_DISP_DC,
-                                       /*rst*/ -1,  // no reset pin
+                                       /*rst*/ PIN_DISP_RST,
                                        /*cs*/ PIN_DISP_CS);
 static OLEDSubsystem g_oled(g_oled_setup);
 
@@ -233,11 +233,11 @@ void setup() {
   g_oled.beginThreaded(2048, 1, 50);          // 20 Hz display
   g_battery.beginThreaded(1024, 1, 100);      // 10 Hz
   g_sensor.beginThreaded(1024, 1, 100);       // 10 Hz TOF
-  g_dip.beginThreaded(512, 1, 500);           // 2 Hz
-  g_btn.beginThreaded(1024, 1, 20);           // 50 Hz
-  g_led.beginThreaded(512, 1, 50);            // 20 Hz
-  g_hb.beginThreaded(512, 1, 200);            // 5 Hz
-  threads.addThread(pca_task, nullptr, 512);  // PWM flush
+  g_dip.beginThreaded(1024, 1, 500);           // 2 Hz
+  g_btn.beginThreaded(1024, 1, 20);            // 50 Hz
+  g_led.beginThreaded(1024, 1, 50);            // 20 Hz
+  g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
+  threads.addThread(pca_task, nullptr, 1024);  // PWM flush
 
   Serial.println(PSTR("setup(): all subsystem threads started."));
   Serial.flush();

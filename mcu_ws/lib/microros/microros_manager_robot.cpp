@@ -5,31 +5,45 @@
 #include <micro_ros_utilities/type_utilities.h>
 #include <uxr/client/util/time.h>
 
+#ifdef USE_TEENSYTHREADS
+Threads::Mutex g_microros_mutex;
+#endif
+
 namespace Subsystem {
 
 MicrorosManager* MicrorosManager::s_instance_ = nullptr;
 
 bool MicrorosManager::create_entities() {
   allocator_ = rcl_get_default_allocator();
-  if (rclc_support_init(&support_, 0, NULL, &allocator_) != RCL_RET_OK)
+  if (rclc_support_init(&support_, 0, NULL, &allocator_) != RCL_RET_OK) {
+    Serial.println("[MR] ERROR: rclc_support_init failed");
     return false;
+  }
   if (rclc_node_init_default(&node_, "robot_manager", "", &support_) !=
-      RCL_RET_OK)
+      RCL_RET_OK) {
+    Serial.println("[MR] ERROR: rclc_node_init_default failed");
     return false;
+  }
   executor_ = rclc_executor_get_zero_initialized_executor();
   // Reserve enough executor handles for all subscription/service callbacks.
   // Publishers do not consume handles — only subscriptions, services, and
   // timers do.  10 handles supports the current set of subsystems with room
   // for growth.
   if (rclc_executor_init(&executor_, &support_.context, 10, &allocator_) !=
-      RCL_RET_OK)
+      RCL_RET_OK) {
+    Serial.println("[MR] ERROR: rclc_executor_init failed");
     return false;
+  }
   // Let registered participants create their pubs/subs
   for (size_t i = 0; i < participants_count_; ++i) {
     if (participants_[i] && !participants_[i]->onCreate(&node_, &executor_)) {
+      Serial.printf("[MR] ERROR: participant %u onCreate failed\n",
+                    (unsigned)i);
       return false;
     }
   }
+  Serial.printf("[MR] OK: %u participants created\n",
+                (unsigned)participants_count_);
   return true;
 }
 
@@ -59,17 +73,29 @@ void MicrorosManager::begin() {
 }
 
 void MicrorosManager::update() {
+#ifdef USE_TEENSYTHREADS
+  Threads::Scope guard(g_microros_mutex);
+#else
+  std::lock_guard<std::mutex> guard(mutex_);
+#endif
+
   switch (state_) {
     case WAITING_AGENT:
       EXECUTE_EVERY_N_MS(500,
                          state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 1))
                                       ? AGENT_AVAILABLE
                                       : WAITING_AGENT;);
+      if (state_ == AGENT_AVAILABLE) {
+        Serial.println("[MR] Agent found — creating entities...");
+      }
       break;
     case AGENT_AVAILABLE:
       state_ = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
       if (state_ == WAITING_AGENT) {
+        Serial.println("[MR] create_entities FAILED — tearing down");
         destroy_entities();
+      } else {
+        Serial.println("[MR] CONNECTED");
       }
       break;
     case AGENT_CONNECTED:
@@ -78,15 +104,11 @@ void MicrorosManager::update() {
                                       ? AGENT_CONNECTED
                                       : AGENT_DISCONNECTED;);
       if (state_ == AGENT_CONNECTED) {
-#ifdef USE_TEENSYTHREADS
-        Threads::Scope guard(mutex_);
-#else
-        std::lock_guard<std::mutex> guard(mutex_);
-#endif
-        rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(100));
+        rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(10));
       }
       break;
     case AGENT_DISCONNECTED:
+      Serial.println("[MR] Agent lost — destroying entities");
       destroy_entities();
       state_ = WAITING_AGENT;
       break;

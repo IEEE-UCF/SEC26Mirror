@@ -57,7 +57,13 @@ void BatterySubsystem::publishData() {
   msg_.energy = 0.0f;
   msg_.charge_use = 0.0f;
 
+#ifdef USE_TEENSYTHREADS
+  { Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

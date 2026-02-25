@@ -131,4 +131,12 @@ class MicrorosManager : public Classes::BaseSubsystem {
 
 }  // namespace Subsystem
 
+// Global mutex for serializing micro-ROS transport access across threads.
+// The XRCE-DDS session is NOT thread-safe: concurrent rcl_publish, ping,
+// and executor-spin calls corrupt the serial stream.  All code that touches
+// the session must hold this mutex.
+#ifdef USE_TEENSYTHREADS
+extern Threads::Mutex g_microros_mutex;
+#endif
+
 #endif

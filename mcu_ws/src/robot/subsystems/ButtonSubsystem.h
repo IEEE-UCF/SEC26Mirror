@@ -76,7 +76,13 @@ class ButtonSubsystem : public IMicroRosParticipant,
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
       msg_.data = current;
+#ifdef USE_TEENSYTHREADS
+      { Threads::Scope guard(g_microros_mutex);
+        (void)rcl_publish(&pub_, &msg_, NULL);
+      }
+#else
       (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
     }
   }
 

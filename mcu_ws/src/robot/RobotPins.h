@@ -15,60 +15,64 @@
 //  Teensy 4.1 GPIO pin assignments
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── Encoders (GPIO 2-9) ────────────────────────────────────────────────
-// Connected to quadrature encoder hardware.  Managed by drive subsystem.
-// Do NOT reassign these pins.
-// Pin 2: Encoder channel
-// Pin 3: Encoder channel
-// Pin 4: Encoder channel
-// Pin 5: Encoder channel
-// Pin 6: Encoder channel
-// Pin 7: Encoder channel
-// Pin 8: Encoder channel
-// Pin 9: Encoder channel
+// ── Motor Outputs (GPIO 2-9) ─────────────────────────────────────────
+// Reserved for motor driver outputs.  Do NOT reassign these pins.
+// Pin 2: Motor output
+// Pin 3: Motor output
+// Pin 4: Motor output
+// Pin 5: Motor output
+// Pin 6: Motor output
+// Pin 7: Motor output
+// Pin 8: Motor output
+// Pin 9: Motor output
 
-// ── UWB Module (SPI) ──────────────────────────────────────────────────
-constexpr uint8_t PIN_UWB_CS = 12;
-constexpr uint8_t PIN_UWB_CLK = 13;  // SPI SCK
-constexpr uint8_t PIN_UWB_MISO = 14;
+// ── UWB Module (SPI0) ───────────────────────────────────────────────
+constexpr uint8_t PIN_UWB_CS = 10;    // SPI0 CS0
+constexpr uint8_t PIN_UWB_MOSI = 11;  // SPI0 MOSI
+constexpr uint8_t PIN_UWB_MISO = 12;  // SPI0 MISO
+constexpr uint8_t PIN_UWB_CLK = 13;   // SPI0 SCK
+
+// ── I2C Bus: Wire1 — BNO085 IMU ──────────────────────────────────────
+constexpr uint8_t PIN_GYRO_SCL = 16;  // Wire1 SCL
+constexpr uint8_t PIN_GYRO_SDA = 17;  // Wire1 SDA
+constexpr uint8_t PIN_GYRO_RST = 40;  // BNO085 reset
+constexpr uint8_t PIN_GYRO_INT = 41;  // BNO085 interrupt
 
 // ── I2C Bus: Wire0 — Sensors / Mux / GPIO expander ───────────────────
 constexpr uint8_t PIN_SENSORS_SDA = 18;  // Wire0 SDA (default)
 constexpr uint8_t PIN_SENSORS_SCL = 19;  // Wire0 SCL (default)
 
-// ── I2C Bus: Wire1 — BNO085 IMU ──────────────────────────────────────
-constexpr uint8_t PIN_GYRO_SDA = 17;  // Wire1 SDA
-constexpr uint8_t PIN_GYRO_SCL = 16;  // Wire1 SCL
-constexpr uint8_t PIN_GYRO_INT = 41;  // BNO085 interrupt
-constexpr uint8_t PIN_GYRO_RST = 40;  // BNO085 reset
-
-// ── I2C Bus: Wire2 — PCA9685 servo + motor boards ────────────────────
-constexpr uint8_t PIN_SERVO_MOTOR_SDA = 24;  // Wire2 SDA
-constexpr uint8_t PIN_SERVO_MOTOR_SCL = 25;  // Wire2 SCL
-
-// ── PCA9685 Output Enable ────────────────────────────────────────────
-// NOTE: Pins 20/21 are shared with ESP32 UART (Serial5).
-//       Only one function can be active at a time.
-constexpr uint8_t PIN_SERVO_OE = 20;  // PCA9685 #0 OE (active LOW)
-constexpr uint8_t PIN_MOTOR_OE = 21;  // PCA9685 #1 OE (active LOW)
-
-// ── ESP32 UART (Serial5) — shared with OE pins ──────────────────────
-// constexpr uint8_t PIN_ESP_TX = 21;  // Teensy TX → ESP32 RX
-// constexpr uint8_t PIN_ESP_RX = 20;  // ESP32 TX → Teensy RX
+// ── I2C Bus: Wire2 — PCA9685 motor + servo boards ────────────────────
+constexpr uint8_t PIN_SERVO_MOTOR_SCL = 24;  // Wire2 SCL
+constexpr uint8_t PIN_SERVO_MOTOR_SDA = 25;  // Wire2 SDA
 
 // ── I2C Mux Reset ───────────────────────────────────────────────────
 constexpr uint8_t PIN_MUX_RESET = 23;  // TCA9548A active-LOW reset
 
-// ── Display (SSD1306 SPI) ───────────────────────────────────────────
+// ── Display (SSD1306 software SPI) ──────────────────────────────────
 constexpr uint8_t PIN_DISP_MOSI = 26;
 constexpr uint8_t PIN_DISP_CLK = 27;
 constexpr uint8_t PIN_DISP_CS = 38;
-constexpr uint8_t PIN_DISP_DC = 37;  // Data / Command
+constexpr uint8_t PIN_DISP_RST = 33;  // Display reset
+constexpr uint8_t PIN_DISP_DC = 37;   // Data / Command (CD)
+
+// ── PCA9685 Output Enable ────────────────────────────────────────────
+constexpr uint8_t PIN_SERVO_OE = 28;  // PCA9685 #0 OE (active LOW)
+constexpr uint8_t PIN_MOTOR_OE = 29;  // PCA9685 #1 OE (active LOW)
 
 // ── Misc GPIO ───────────────────────────────────────────────────────
-constexpr uint8_t PIN_BUTTON_INTERRUPT = 36;  // Standalone reset button
+constexpr uint8_t PIN_RC_RX = 34;             // FlySky IBUS receiver (Serial8 RX)
 constexpr uint8_t PIN_RGB_LEDS = 35;          // WS2812B data line
-constexpr uint8_t PIN_RC_RX = 34;  // FlySky IBUS receiver (Serial8 RX)
+constexpr uint8_t PIN_BUTTON_INTERRUPT = 36;  // Standalone reset button
+
+// ── Not Connected ───────────────────────────────────────────────────
+// Pin 14: NC
+// Pin 15: NC
+// Pin 20: NC
+// Pin 21: NC
+// Pin 22: NC
+// Pin 33: Display RST (PIN_DISP_RST)
+// Pin 39: NC
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  I2C device addresses

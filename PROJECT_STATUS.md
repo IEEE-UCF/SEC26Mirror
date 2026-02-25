@@ -35,7 +35,7 @@
 | **Duck Pickup** | TBD | Pick up ducks, place in 12x12 square | Intake state machine done; vision duck detection done |
 | **Drone** | TBD | Take off from robot, fly, land on robot | Firmware has subsystem stubs (flight controller, IMU, height, IR) |
 | **IR Color Transmission** | TBD | Read antenna LED colors, transmit via IR to "Earth" | IR library done; vision LED detector **STUBBED** |
-| **Minibot Crater Loop** | TBD | Minibot exits intake, enters crater, full loop, exits | MiniRobot subsystem done; minibot ESP32 firmware **NOT STARTED** |
+| **Minibot Crater Loop** | TBD | Minibot exits intake, enters crater, full loop, exits | MiniRobot subsystem done; minibot ESP32 firmware **FUNCTIONAL** (drive + UWB) |
 | **Deploy UWB Beacons** | N/A (enables localization) | Robot places beacons at 2 corners | UWB firmware done; deployment mechanism **NOT IMPLEMENTED** |
 
 ---
@@ -82,13 +82,14 @@
     └──────────┘         └──────────┘
               ↕ DW3000 TWR ↕
            ┌──────────────────┐
-           │  Robotcomms Tag  │
-           │  ID=12 (on robot)│
+           │   Robot UWB Tag  │
+           │  ID=13 (on robot)│
            └──────────────────┘
                     ↕
               ┌──────────┐
               │ Beacon 3 │
-              │ ID=13    │
+              │ ID=12    │
+              │ (corner) │
               └──────────┘
 ```
 
@@ -218,23 +219,36 @@ IDLE ──startMission()──► DRIVING_TO_TARGET ──arrival──► AT_T
 
 ### Minibot ESP32 Firmware
 
-**Status**: SCAFFOLDING — directory and drive subsystem header exist
+**Status**: FUNCTIONAL — builds and runs, drive + UWB operational
 
-**Files**: `mcu_ws/src/minibot/main.cpp`, `MinibotDriveSubsystem.h`, `machines/`
+**Platform**: ESP32 | **Framework**: Arduino + micro-ROS WiFi | **PIO Environment**: `minibot`
+**Entry Point**: `mcu_ws/src/minibot/machines/MinibotLogic.h`
 
-**Planned Subsystems** (from user spec):
-- [x] DriveBase header (MinibotDriveSubsystem.h — scaffold)
-- [ ] UWB Subsystem (for localization)
-- [ ] MPU6050 Gyro Subsystem
-- [ ] LED Indicators
-- [ ] Heartbeat
+**Files**:
+- `mcu_ws/src/minibot/main.cpp` — entry point
+- `mcu_ws/src/minibot/MinibotMotorDriver.h` — simple H-bridge driver (A1/A2 fwd/rev PWM per channel)
+- `mcu_ws/src/minibot/MinibotDriveSubsystem.h` — Twist subscriber with differential drive mix
+- `mcu_ws/src/minibot/machines/MinibotLogic.h` — wiring logic (all subsystem instantiation)
+
+**Active Subsystems**:
+- [x] **MicrorosManager** — WiFi UDP transport to Pi (192.168.4.1:8888)
+- [x] **UWBSubsystem** — DW3000 tag (ID=2), ranges to anchors 10, 11, 12, 13
+- [x] **MinibotDriveSubsystem** — receives `/mcu_minibot/cmd_vel` (Twist), publishes `/mcu_minibot/state`
+
+**Motor Configuration** (simple H-bridge, e.g. L298N/DRV8833):
+- Left motor: A1=pin 25 (fwd PWM), A2=pin 26 (rev PWM)
+- Right motor: B1=pin 27 (fwd PWM), B2=pin 14 (rev PWM)
+- Speed range: -255 to +255, differential drive mix
+
+**Network**: IP=192.168.4.24, MAC=0xAA:BB:CC:DD:EE:14
+
+**Safety**: 500ms command timeout (stops motors if no Twist received)
 
 **TODO**:
-- [ ] Create `minibot` PlatformIO environment in platformio.ini
-- [ ] Implement I2C slave command receiver (address 0x42)
-- [ ] Implement minibot drive base (motor control)
-- [ ] Implement MPU6050 gyro integration
-- [ ] Implement UWB tag for positioning
+- [ ] Implement I2C slave command receiver (address 0x42) for Teensy control
+- [ ] Add MPU6050 gyro subsystem for heading tracking
+- [ ] Add LED indicators
+- [ ] Add heartbeat publisher
 - [ ] Test crater loop navigation autonomy
 
 ---
@@ -387,7 +401,8 @@ Beacon 3 (ID=12, anchor) ◄──── DW3000 TWR ────► Robot Tag (I
 - Beacon 2: ID=11 (corner, IP=192.168.4.21)
 - Beacon 3: ID=12 (corner, IP=192.168.4.22)
 - Robot Tag: ID=13 (on robot, reserved)
-- Minibot: ID=14 (reserved), Drone: ID=15 (reserved)
+- Minibot Tag: ID=2 (on minibot, IP=192.168.4.24, ranges to 10-13)
+- Drone: ID=15 (reserved)
 
 ### Ranging Protocol (DW3000 Two-Way Ranging)
 1. Tag sends ranging request frame
@@ -541,16 +556,13 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 
 | Test | Platform | What's Tested |
 |------|----------|---------------|
-| teensy-test-microros-subsystem | Teensy41 | micro-ROS connection lifecycle |
 | teensy-test-battery-subsystem | Teensy41 | INA219/228 via mux, battery health |
 | teensy-test-sensor-subsystem | Teensy41 | VL53L0X TOF sensors |
 | teensy-test-oled-subsystem | Teensy41 | SSD1306 OLED display + ROS service |
-| teensy-test-all-subsystems | Teensy41 | All subsystems integration (servo, motor, button, dip, LED + existing) |
+| teensy-test-all-subsystems | Teensy41 | All subsystems integration (servo, motor, UWB, button, dip, LED + existing) |
 | teensy-test-rc-subsystem | Teensy41 | FlySky IBUS receiver → micro-ROS `/mcu_robot/rc` (publish-only) |
 | teensy-test-arm-servos | Teensy41 | PCA9685 servo control via micro-ROS SetServo service |
 | teensy-test-drive-motors | Teensy41 | PCA9685 motor control via micro-ROS SetMotor service |
-| teensy-test-freertos | Teensy41 | TeensyThreads multitasking |
-| teensy-test-microros-freertos | Teensy41 | micro-ROS + TeensyThreads combined |
 | esp32-test-simple-wifi | ESP32 | Basic WiFi connectivity |
 | esp32-test-microros-wifi | ESP32 | micro-ROS over WiFi UDP |
 
@@ -580,9 +592,11 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 - [ ] **Implement IR subsystem (robot-side)** - Transmit antenna colors to Earth
 
 #### Minibot
-- [x] **Create minibot firmware scaffold** - Directory and drive subsystem header exist (`src/minibot/`)
+- [x] **Create minibot firmware scaffold** - Directory, PIO environment, and all core files exist (`src/minibot/`)
+- [x] **Implement minibot drive base** - MinibotMotorDriver (H-bridge A1/A2 + B1/B2) + MinibotDriveSubsystem (Twist → differential mix)
+- [x] **Implement UWB tag** - UWBSubsystem wired as tag ID=2, ranges to anchors 10-13
+- [x] **Implement micro-ROS WiFi** - MicrorosManager with WiFi UDP transport
 - [ ] **Implement I2C slave receiver** - Receive commands from Teensy (address 0x42)
-- [ ] **Implement minibot drive base** - Motor control for crater navigation
 - [ ] **Implement MPU6050 gyro** - Heading tracking for loop navigation
 - [ ] **Test crater loop autonomy** - Enter, full loop, exit
 
@@ -648,7 +662,8 @@ docker compose up -d && docker compose exec devcontainer bash
 pio run -e robot              # Teensy41 main robot
 pio run -e beacon1            # UWB beacon ID=10
 pio run -e beacon2            # UWB beacon ID=11
-pio run -e drone              # Drone (placeholder)
+pio run -e minibot            # Minibot ESP32 (drive + UWB)
+pio run -e drone              # Drone ESP32
 pio run -e field-button       # Field element
 pio run -e field-crank        # Field element
 pio run -e field-earth        # Field element

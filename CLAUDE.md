@@ -22,7 +22,7 @@ The codebase is split into two workspaces:
   - `src/robot/`: Main Teensy41 robot firmware (uses micro-ROS)
   - `src/beacon/`: UWB beacon nodes (differentiated by `BEACON_ID` build flag)
   - `src/drone/`: Drone controller (flight controller, IMU, height, IR subsystems)
-  - `src/minibot/`: Mini-robot ESP32 firmware (drive subsystem, machines)
+  - `src/minibot/`: Mini-robot ESP32 firmware (MinibotMotorDriver, MinibotDriveSubsystem, UWB tag, micro-ROS WiFi)
   - `src/field/`: Field element controllers (button, crank, earth, keypad, pressure)
   - `src/test/`: Hardware test programs
   - `src/platform/`: Platform support files (e.g., `atomic_stubs_arm.c`)
@@ -110,6 +110,7 @@ pio run -e robot                          # Teensy41 main robot
 pio run -e beacon1                        # UWB beacon ID=10
 pio run -e beacon2                        # UWB beacon ID=11
 pio run -e beacon3                        # UWB beacon ID=12
+pio run -e minibot                        # Minibot ESP32 (drive + UWB)
 pio run -e drone                          # Drone controller (ESP32)
 pio run -e teensy-test-all-subsystems     # All subsystems integration test
 pio run -e field-button                   # Field element (ESP32)
@@ -120,7 +121,7 @@ pio run -e field-pressure
 pio run -e field-controller
 ```
 
-**Default build environments** (built by `pio run` with no `-e`): `robot`, `drone`, `beacon1`, `beacon2`, `beacon3`, `teensy-test-all-subsystems`.
+**Default build environments** (built by `pio run` with no `-e`): `robot`, `drone`, `minibot`, `beacon1`, `beacon2`, `beacon3`, `teensy-test-all-subsystems`.
 
 **Clean micro-ROS** (required after changing `mcu_msgs` definitions):
 ```bash
@@ -188,7 +189,7 @@ pio device monitor -e teensy-test-battery-subsystem       # Watch output
 pio run -e teensy-test-all-subsystems --target upload     # Flash all-subsystems test
 ```
 
-Hardware test environments: `teensy-test-oled-raw`, `teensy-test-teensythreads`, `teensy-test-microros-teensythreads`, `teensy-test-microros-bare`, `teensy-test-microros-minimal`, `teensy-test-microros-subsystem`, `teensy-test-battery-subsystem`, `teensy-test-sensor-subsystem`, `teensy-test-oled-subsystem`, `teensy-test-all-subsystems`, `teensy-test-rc-subsystem`, `teensy-test-arm-servos`, `teensy-test-drive-motors`, `esp32-test-microros-wifi`, `esp32-test-simple-wifi`.
+Hardware test environments: `teensy-test-battery-subsystem`, `teensy-test-sensor-subsystem`, `teensy-test-oled-subsystem`, `teensy-test-all-subsystems`, `teensy-test-rc-subsystem`, `teensy-test-arm-servos`, `teensy-test-drive-motors`, `esp32-test-microros-wifi`, `esp32-test-simple-wifi`.
 
 See `mcu_ws/test/README.md` for detailed test documentation.
 
@@ -209,7 +210,7 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | 1 | OLED, Battery, Sensors, Heartbeat | 50-200ms | 512-2048 |
 | dedicated | PCA9685 PWM flush | 20ms | — |
 
-The `teensy-test-all-subsystems` test environment additionally wires: Servo (pri 2, 50ms), Motor (pri 2, 50ms), DipSwitch (pri 1, 500ms), Button (pri 1, 20ms), LED (pri 1, 50ms).
+The `teensy-test-all-subsystems` test environment additionally wires: Servo (pri 2, 50ms), Motor (pri 2, 50ms), UWB (pri 2, 50ms), DipSwitch (pri 1, 500ms), Button (pri 1, 20ms), LED (pri 1, 50ms).
 
 Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`) for ROS2 lifecycle.
 
@@ -248,8 +249,12 @@ All robot topics use `/mcu_robot/` prefix:
 - `/mcu_robot/motor/state` (Float32MultiArray), `/mcu_robot/motor/set` (service: SetMotor)
 - `/mcu_robot/buttons` (UInt8), `/mcu_robot/dip_switches` (UInt8)
 - `/mcu_robot/led/set_all` (subscription: LedColor)
-- UWB: `mcu_uwb/ranging` (from beacons/robotcomms)
+- UWB: `mcu_uwb/ranging` (from beacons/robot tag)
 - Drive: `drive_base/status`, `drive_base/command` (currently commented out in RobotLogic.h)
+
+Minibot topics use `/mcu_minibot/` prefix:
+- `/mcu_minibot/cmd_vel` (subscription: geometry_msgs/Twist — differential drive mix)
+- `/mcu_minibot/state` (MiniRobotState — mission state publisher)
 
 ### ROS2 Data Flow
 
@@ -285,7 +290,7 @@ mcu_uwb/ranging ───WiFi UDP──► secbot_uwb ──► /uwb/robot_pose
      │                    │                      │
 [esp32_microros_wifi]  robot, teensy-test-*      │
      │                                           │
-beacons (wifi)  ─────────────────────────────────┘
+beacons, minibot ───────────────────────────────┘
 ```
 
 Concrete environments use `build_src_filter` to select source files and `extends` to inherit bases. The `teensy_base` includes TeensyThreads and FastLED as default dependencies.
@@ -373,3 +378,4 @@ Commits must follow **Conventional Commits** format (enforced by CI): `feat:`, `
 - **Teensy transport**: Serial (directly connected to Pi)
 - **ESP32 transport**: WiFi UDP to Pi agent
 - **Beacon IPs**: beacon1=192.168.4.20, beacon2=192.168.4.21, beacon3=192.168.4.22
+- **Minibot IP**: 192.168.4.24

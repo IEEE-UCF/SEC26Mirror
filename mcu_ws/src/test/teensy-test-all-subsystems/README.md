@@ -26,6 +26,7 @@ Wires **every** robot subsystem together in a single firmware image. Useful for 
 | Wire2 | PCA9685 servo board | 0x40 (OE=28) |
 | Wire2 | PCA9685 motor board | 0x41 (OE=29) |
 | Software SPI | SSD1306 OLED 128x64 | MOSI=26, CLK=27, CS=38, DC=37, RST=33 |
+| SPI0 | DW3000 UWB tag (ID=13) | CS=10, MOSI=11, MISO=12, CLK=13 |
 | GPIO | WS2812B LED strip (x5) | pin 35 |
 | Serial8 | FlySky RC receiver | pin 34 |
 
@@ -66,6 +67,7 @@ LEDs flash green on startup. All topics and services become available once the m
 | `/mcu_robot/buttons` | `std_msgs/msg/UInt8` | 10 Hz | 8-bit push button bitmask |
 | `/mcu_robot/servo/state` | `std_msgs/msg/Float32MultiArray` | 5 Hz | Current servo angles (deg) |
 | `/mcu_robot/motor/state` | `std_msgs/msg/Float32MultiArray` | 5 Hz | Current motor speeds (-1..1) |
+| `mcu_uwb/ranging` | `mcu_msgs/msg/UWBRanging` | 10 Hz | UWB distance measurements to beacons |
 
 ### Services
 
@@ -97,8 +99,8 @@ source install/setup.bash
 ### Verify Everything Is Up
 
 ```bash
-# List all topics (expect 9 topics under /mcu_robot/)
-ros2 topic list | grep mcu_robot
+# List all topics (expect 9 topics under /mcu_robot/ + 1 under mcu_uwb/)
+ros2 topic list | grep -E "mcu_robot|mcu_uwb"
 
 # List all services (expect 3 services)
 ros2 service list | grep mcu_robot
@@ -243,6 +245,18 @@ for i in 0 1 2 3 4 5 6 7; do
 done
 ```
 
+### UWB Ranging
+
+Requires UWB beacons (ID=10, 11, 12) to be powered on and within range.
+
+```bash
+# View ranging data (distances to each beacon)
+ros2 topic echo mcu_uwb/ranging
+
+# Check publish rate (~10 Hz)
+ros2 topic hz mcu_uwb/ranging
+```
+
 ### LEDs
 
 ```bash
@@ -299,7 +313,10 @@ ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor "{r: 0, g: 0,
 # 9. RC (move sticks, Ctrl+C to stop)
 ros2 topic echo /mcu_robot/rc --once
 
-# 10. Buttons and DIP switches
+# 10. UWB ranging (requires beacons powered on)
+ros2 topic echo mcu_uwb/ranging --once
+
+# 11. Buttons and DIP switches
 ros2 topic echo /mcu_robot/buttons --once
 ros2 topic echo /mcu_robot/dip_switches --once
 ```
@@ -313,6 +330,7 @@ ros2 topic echo /mcu_robot/dip_switches --once
 | 3 | RC Receiver (IBUS) | 5ms | 1024 |
 | 2 | Servo state publisher | 50ms (20 Hz) | 1024 |
 | 2 | Motor state publisher | 50ms (20 Hz) | 1024 |
+| 2 | UWB tag (DW3000) | 50ms (20 Hz) | 2048 |
 | 1 | OLED display | 50ms (20 Hz) | 2048 |
 | 1 | Battery monitor | 100ms (10 Hz) | 1024 |
 | 1 | TOF sensors | 100ms (10 Hz) | 1024 |

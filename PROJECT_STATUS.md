@@ -1,6 +1,6 @@
 # SEC26 - SoutheastCon 2026 Project Status
 
-> **Last Updated**: 2026-02-24
+> **Last Updated**: 2026-02-25
 > **Competition**: IEEE SoutheastCon 2026, Alabama
 > **Theme**: Rescue ducks stranded on the moon
 > **Field**: 4x8 feet | Robot start: 12x12 inch square in corner
@@ -33,9 +33,9 @@
 | **Beacon 3 - Pressure** | TBD | Rack-and-pinion intake with surgical tubing (crater center) | Field element done; intake subsystem done |
 | **Beacon 4 - Keypad** | TBD | Servo picks gear to enter hardcoded number (1 DOF) | Field element done; keypad task done in autonomy |
 | **Duck Pickup** | TBD | Pick up ducks, place in 12x12 square | Intake state machine done; vision duck detection done |
-| **Drone** | TBD | Take off from robot, fly, land on robot | **NOT STARTED** - firmware is empty stub |
+| **Drone** | TBD | Take off from robot, fly, land on robot | Firmware has subsystem stubs (flight controller, IMU, height, IR) |
 | **IR Color Transmission** | TBD | Read antenna LED colors, transmit via IR to "Earth" | IR library done; vision LED detector **STUBBED** |
-| **Minibot Crater Loop** | TBD | Minibot exits intake, enters crater, full loop, exits | MiniRobot subsystem done; minibot ESP32 firmware **NOT STARTED** |
+| **Minibot Crater Loop** | TBD | Minibot exits intake, enters crater, full loop, exits | MiniRobot subsystem done; minibot ESP32 firmware **FUNCTIONAL** (drive + UWB) |
 | **Deploy UWB Beacons** | N/A (enables localization) | Robot places beacons at 2 corners | UWB firmware done; deployment mechanism **NOT IMPLEMENTED** |
 
 ---
@@ -62,7 +62,7 @@
 │  Wire2: PCA9685 x2       - UWB Positioning                 │
 │         (servos/PWM)      - TF / Health                     │
 │                                                              │
-│  Other: SSD1306 OLED (SPI), FlySky RC (Serial1)            │
+│  Other: SSD1306 OLED (SPI), FlySky RC (Serial8)            │
 │         Motors (PWM), Encoders, IR breakbeam                │
 │         Addressable LEDs, Buttons                           │
 │                                                              │
@@ -82,13 +82,14 @@
     └──────────┘         └──────────┘
               ↕ DW3000 TWR ↕
            ┌──────────────────┐
-           │  Robotcomms Tag  │
-           │  ID=12 (on robot)│
+           │   Robot UWB Tag  │
+           │  ID=13 (on robot)│
            └──────────────────┘
                     ↕
               ┌──────────┐
               │ Beacon 3 │
-              │ ID=13    │
+              │ ID=12    │
+              │ (corner) │
               └──────────┘
 ```
 
@@ -99,7 +100,7 @@
 | TCA9548A | 0x70 | Wire0 | I2C Multiplexer |
 | TCA9555 | 0x20 | Wire0 | 16-bit GPIO Expander |
 | INA219 | 0x40 (mux ch0) | Wire0 | Power monitoring |
-| BNO085 | 0x4A | Wire1 | 9-DOF IMU |
+| BNO085 | 0x4B | Wire1 | 9-DOF IMU |
 | PCA9685 #1 | 0x40 | Wire2 | PWM/Servo driver |
 | PCA9685 #2 | 0x41 | Wire2 | PWM/Servo driver |
 | SSD1306 | N/A (SPI) | SPI | 128x64 OLED display |
@@ -122,7 +123,8 @@
 | **TOF Sensor** | `src/robot/subsystems/SensorSubsystem.*` | DONE | `/mcu_robot/tof_distances` | 100ms (prio 1) |
 | **RC Receiver** | `src/robot/subsystems/RCSubsystem.*` | DONE | `/mcu_robot/rc` | 5ms (prio 3) |
 | **Intake** | `src/robot/subsystems/IntakeSubsystem.*` | DONE | `/mcu_robot/intake/state` | 20ms (prio 2) |
-| **OLED Display** | `src/robot/subsystems/OLEDSubsystem.*` | DONE | `/mcu_robot/lcd/append` (srv) | 50ms (prio 1) |
+| **Intake Bridge** | `src/robot/subsystems/IntakeBridgeSubsystem.*` | DONE | `/mcu_robot/intake_bridge/*` | 20ms (prio 2) |
+| **OLED Display** | `src/robot/subsystems/OLEDSubsystem.*` | DONE | `/mcu_robot/lcd/append` (sub) | 50ms (prio 1) |
 | **Mini Robot** | `src/robot/subsystems/MiniRobotSubsystem.*` | DONE | `/mcu_robot/mini_robot/state` | 20ms (prio 2) |
 | **Arm** | `src/robot/subsystems/ArmSubsystem.h` | PSEUDO-CODE | Publisher/service commented out | 20ms (prio 2) |
 | **Drive Base** | `src/robot/drive-base/*` | CODE EXISTS, NOT INTEGRATED | `drive_base/status` | Commented out |
@@ -217,41 +219,55 @@ IDLE ──startMission()──► DRIVING_TO_TARGET ──arrival──► AT_T
 
 ### Minibot ESP32 Firmware
 
-**Status**: NOT STARTED
+**Status**: FUNCTIONAL — builds and runs, drive + UWB operational
 
-**Planned Subsystems** (from user spec):
-- [ ] UWB Subsystem (for localization)
-- [ ] MPU6050 Gyro Subsystem
-- [ ] LED Indicators
-- [ ] Heartbeat
-- [ ] DriveBase (tank drive)
+**Platform**: ESP32 | **Framework**: Arduino + micro-ROS WiFi | **PIO Environment**: `minibot`
+**Entry Point**: `mcu_ws/src/minibot/machines/MinibotLogic.h`
+
+**Files**:
+- `mcu_ws/src/minibot/main.cpp` — entry point
+- `mcu_ws/src/minibot/MinibotMotorDriver.h` — simple H-bridge driver (A1/A2 fwd/rev PWM per channel)
+- `mcu_ws/src/minibot/MinibotDriveSubsystem.h` — Twist subscriber with differential drive mix
+- `mcu_ws/src/minibot/machines/MinibotLogic.h` — wiring logic (all subsystem instantiation)
+
+**Active Subsystems**:
+- [x] **MicrorosManager** — WiFi UDP transport to Pi (192.168.4.1:8888)
+- [x] **UWBSubsystem** — DW3000 tag (ID=2), ranges to anchors 10, 11, 12, 13
+- [x] **MinibotDriveSubsystem** — receives `/mcu_minibot/cmd_vel` (Twist), publishes `/mcu_minibot/state`
+
+**Motor Configuration** (simple H-bridge, e.g. L298N/DRV8833):
+- Left motor: A1=pin 25 (fwd PWM), A2=pin 26 (rev PWM)
+- Right motor: B1=pin 27 (fwd PWM), B2=pin 14 (rev PWM)
+- Speed range: -255 to +255, differential drive mix
+
+**Network**: IP=192.168.4.24, MAC=0xAA:BB:CC:DD:EE:14
+
+**Safety**: 500ms command timeout (stops motors if no Twist received)
 
 **TODO**:
-- [ ] Create `mcu_ws/src/minibot/` source directory
-- [ ] Create `minibot` PlatformIO environment in platformio.ini
-- [ ] Implement I2C slave command receiver (address 0x42)
-- [ ] Implement minibot drive base (motor control)
-- [ ] Implement MPU6050 gyro integration
-- [ ] Implement UWB tag for positioning
+- [ ] Implement I2C slave command receiver (address 0x42) for Teensy control
+- [ ] Add MPU6050 gyro subsystem for heading tracking
+- [ ] Add LED indicators
+- [ ] Add heartbeat publisher
 - [ ] Test crater loop navigation autonomy
 
 ---
 
 ## 5. Drone
 
-### Firmware Status: NOT STARTED
+### Firmware Status: SUBSYSTEM STUBS
 
-**Current Code**: `mcu_ws/src/drone/main.cpp` - **Empty placeholder** (just `setup()` and `loop()` stubs)
+**Current Code**: `mcu_ws/src/drone/main.cpp` + `src/drone/subsystems/`
 
 **PlatformIO Environment**: `[env:drone]` extends `esp32_base` (no micro-ROS currently)
 
-**Planned Subsystems** (from user spec):
-- [ ] DroneControl (flight controller: twist or position modes)
-- [ ] BNO085 IMU Subsystem
-- [ ] VL53L1X Height Subsystem
+**Implemented Subsystems**:
+- [x] DroneControlSubsystem (`src/drone/subsystems/DroneControlSubsystem.*`)
+- [x] GyroSubsystem (`src/drone/subsystems/GyroSubsystem.*`) — BNO085 IMU
+- [x] HeightSubsystem (`src/drone/subsystems/HeightSubsystem.*`) — VL53L1X TOF
+- [x] IRSubsystem (`src/drone/subsystems/IRSubsystem.*`) — IR NEC transmission
 - [ ] Heartbeat
 - [ ] LED Indicators
-- [ ] IR Subsystem (transmit antenna colors to Earth)
 - [ ] UWB Subsystem (if readings are good enough for position mode)
 
 **TODO**:
@@ -281,10 +297,10 @@ IDLE ──startMission()──► DRIVING_TO_TARGET ──arrival──► AT_T
 | **secbot_uwb** | IMPLEMENTED | Trilateration with outlier rejection, multi-beacon support |
 | **secbot_sim** | IMPLEMENTED | Full MCU subsystem emulation with physics |
 | **secbot_bridge_i2c** | STUBBED | Only headers and config; no implementation |
-| **secbot_health** | STUBBED | Placeholder only |
+| **secbot_health** | IMPLEMENTED | System health monitoring, MCU heartbeat watchdog |
 | **secbot_tf** | STUBBED | Config exists; implementation empty |
 | **secbot_msgs** | DONE | TaskStatus, DuckDetection, DuckDetections |
-| **mcu_msgs** | DONE | 19 msg types, 5 services, shared with MCU |
+| **mcu_msgs** | DONE | 21 msg types, 5 services, shared with MCU |
 
 ### secbot_autonomy - Task Details
 
@@ -338,10 +354,10 @@ IDLE ──startMission()──► DRIVING_TO_TARGET ──arrival──► AT_T
 
 ### Message Definitions Summary
 
-**mcu_msgs** (19 messages, 3 services):
-- State: McuState, BatteryHealth, IntakeState, ArmSubsystem, DroneState, MiniRobotState
+**mcu_msgs** (21 messages, 5 services):
+- State: McuState, BatteryHealth, IntakeState, IntakeBridgeState, ArmSubsystem, DroneState, MiniRobotState
 - Sensor: UWBRanging, UWBRange, RC, AntennaMarker, RobotInputs
-- Command: DriveCommand, DriveBase, ArmCommand, MiniRobotControl, DroneControl, LedColor, IRCommand
+- Command: DriveCommand, DriveBase, ArmCommand, IntakeBridgeCommand, MiniRobotControl, DroneControl, LedColor, IRCommand
 - Services: ArmControl, OLEDControl, LCDAppend, SetServo, SetMotor
 
 **secbot_msgs** (3 messages, 2 services, 2 actions):
@@ -356,9 +372,9 @@ IDLE ──startMission()──► DRIVING_TO_TARGET ──arrival──► AT_T
 ### Architecture
 
 ```
-Beacon 1 (ID=10, anchor) ◄──── DW3000 TWR ────► Robotcomms (ID=12, tag)
-Beacon 2 (ID=11, anchor) ◄──── DW3000 TWR ────► Robotcomms (ID=12, tag)
-Beacon 3 (ID=13, anchor) ◄──── DW3000 TWR ────► Robotcomms (ID=12, tag)
+Beacon 1 (ID=10, anchor) ◄──── DW3000 TWR ────► Robot Tag (ID=13)
+Beacon 2 (ID=11, anchor) ◄──── DW3000 TWR ────► Robot Tag (ID=13)
+Beacon 3 (ID=12, anchor) ◄──── DW3000 TWR ────► Robot Tag (ID=13)
                                                         │
                                                   micro-ROS WiFi
                                                         │
@@ -376,16 +392,17 @@ Beacon 3 (ID=13, anchor) ◄──── DW3000 TWR ────► Robotcomms (
 |-----------|--------|-------|
 | **UWB Driver (DW3000)** | DONE | `lib/uwb/UWBDriver.h/cpp`, 4-stage TWR protocol |
 | **UWB Subsystem** | DONE | `lib/subsystems/UWBSubsystem.h/cpp`, TAG mode only publishes |
-| **Beacon Firmware** | DONE | `src/beacon/machines/BeaconLogic.h`, anchor responders |
-| **Robotcomms Firmware** | DONE | `src/robotcomms/machines/RobotcommsLogic.h`, tag initiator |
+| **Beacon Firmware** | DONE | `src/beacon/machines/BeaconLogic.h`, anchor responders (×3) |
 | **ROS2 Positioning** | DONE | `secbot_uwb`, trilateration with outlier rejection |
 | **Beacon Deployment** | NOT DONE | Physical mechanism to place beacons at field corners |
 
 ### UWB IDs
-- Beacon 1: ID=10 (corner)
-- Beacon 2: ID=11 (corner)
-- Beacon 3: ID=13 (robot-deployed or fixed)
-- Robotcomms Tag: ID=12 (on robot)
+- Beacon 1: ID=10 (corner, IP=192.168.4.20)
+- Beacon 2: ID=11 (corner, IP=192.168.4.21)
+- Beacon 3: ID=12 (corner, IP=192.168.4.22)
+- Robot Tag: ID=13 (on robot, reserved)
+- Minibot Tag: ID=2 (on minibot, IP=192.168.4.24, ranges to 10-13)
+- Drone: ID=15 (reserved)
 
 ### Ranging Protocol (DW3000 Two-Way Ranging)
 1. Tag sends ranging request frame
@@ -477,7 +494,7 @@ Earth
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/flash_mcu.sh` | Flash Teensy + ESP32 with retry (5 attempts) |
+| `scripts/flash_mcu.sh` | Flash Teensy with retry (5 attempts) |
 | `scripts/start_robot.sh` | colcon build (sequential) |
 | `scripts/deploy-all.py` | Master orchestrator: stage artifacts + flash + build + launch |
 | `scripts/export_urdf.sh` | Export URDF/STL from Onshape CAD |
@@ -494,8 +511,8 @@ Earth
 ### OLED Deployment Display
 
 The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
-- **Service**: `/mcu_robot/lcd/append` (LCDAppend.srv) - append text lines
-- **Topic**: `/mcu_robot/lcd/scroll` (Int8) - scroll viewport
+- **Subscription**: `/mcu_robot/lcd/append` (std_msgs/String) - append text lines
+- **Subscription**: `/mcu_robot/lcd/scroll` (std_msgs/Int8) - scroll viewport
 - Ring buffer: 128 lines, 21 chars wide, 8 visible lines
 - Thread-safe, 20Hz refresh
 
@@ -512,7 +529,7 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 | **I2C** | Wire0/1/2 | Teensy ↔ sensors/drivers | Sensor data, GPIO, PWM |
 | **I2C** | Wire | Teensy ↔ ESP32 (0x42) | Minibot commands |
 | **IR NEC** | 38kHz IR | Antennas → Earth | Color verification |
-| **IBUS** | Serial1 | FlySky RC → Teensy | Manual control |
+| **IBUS** | Serial8 (pin 34) | FlySky RC → Teensy | Manual control |
 | **SPI** | Software SPI | Teensy → SSD1306 | OLED display |
 
 ---
@@ -539,16 +556,13 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 
 | Test | Platform | What's Tested |
 |------|----------|---------------|
-| teensy-test-microros-subsystem | Teensy41 | micro-ROS connection lifecycle |
 | teensy-test-battery-subsystem | Teensy41 | INA219/228 via mux, battery health |
 | teensy-test-sensor-subsystem | Teensy41 | VL53L0X TOF sensors |
 | teensy-test-oled-subsystem | Teensy41 | SSD1306 OLED display + ROS service |
-| teensy-test-all-subsystems | Teensy41 | All subsystems integration (servo, motor, button, dip, LED + existing) |
+| teensy-test-all-subsystems | Teensy41 | All subsystems integration (servo, motor, UWB, button, dip, LED + existing) |
 | teensy-test-rc-subsystem | Teensy41 | FlySky IBUS receiver → micro-ROS `/mcu_robot/rc` (publish-only) |
 | teensy-test-arm-servos | Teensy41 | PCA9685 servo control via micro-ROS SetServo service |
 | teensy-test-drive-motors | Teensy41 | PCA9685 motor control via micro-ROS SetMotor service |
-| teensy-test-freertos | Teensy41 | TeensyThreads multitasking |
-| teensy-test-microros-freertos | Teensy41 | micro-ROS + TeensyThreads combined |
 | esp32-test-simple-wifi | ESP32 | Basic WiFi connectivity |
 | esp32-test-microros-wifi | ESP32 | micro-ROS over WiFi UDP |
 
@@ -578,18 +592,20 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 - [ ] **Implement IR subsystem (robot-side)** - Transmit antenna colors to Earth
 
 #### Minibot
-- [ ] **Create minibot firmware** - New ESP32 firmware (`src/minibot/`)
+- [x] **Create minibot firmware scaffold** - Directory, PIO environment, and all core files exist (`src/minibot/`)
+- [x] **Implement minibot drive base** - MinibotMotorDriver (H-bridge A1/A2 + B1/B2) + MinibotDriveSubsystem (Twist → differential mix)
+- [x] **Implement UWB tag** - UWBSubsystem wired as tag ID=2, ranges to anchors 10-13
+- [x] **Implement micro-ROS WiFi** - MicrorosManager with WiFi UDP transport
 - [ ] **Implement I2C slave receiver** - Receive commands from Teensy (address 0x42)
-- [ ] **Implement minibot drive base** - Motor control for crater navigation
 - [ ] **Implement MPU6050 gyro** - Heading tracking for loop navigation
 - [ ] **Test crater loop autonomy** - Enter, full loop, exit
 
 #### Drone
+- [x] **Subsystem stubs** - DroneControl, Gyro (BNO085), Height (VL53L1X), IR subsystem headers/cpp exist
 - [ ] **Define drone hardware** - Flight controller, motors, ESCs
 - [ ] **Implement flight control** - Motor mixing, PID stabilization
 - [ ] **Implement height hold** - VL53L1X TOF for altitude
 - [ ] **Implement takeoff/land** - State machine
-- [ ] **Implement IR transmission** - Read LED colors, encode and transmit to Earth
 - [ ] **Integrate with robot** - Launch/land commands via communication link
 
 #### ROS2
@@ -598,7 +614,7 @@ The SSD1306 OLED (128x64) on the robot can display deployment status via ROS2:
 - [ ] **Implement crank turn task** - Autonomy state machine (currently stubbed)
 - [ ] **Implement pressure clear task** - Autonomy state machine (currently stubbed)
 - [ ] **Implement secbot_bridge_i2c** - Or confirm it's unnecessary with current micro-ROS setup
-- [ ] **Implement secbot_health** - System health monitoring
+- [x] **Implement secbot_health** - System health monitoring (health_node.cpp implemented)
 - [ ] **Implement secbot_tf** - Static transform broadcaster for robot frame tree
 - [ ] **Complete launch files** - Many launch files are placeholder comments only
 
@@ -644,10 +660,10 @@ docker compose up -d && docker compose exec devcontainer bash
 
 # MCU builds (inside container)
 pio run -e robot              # Teensy41 main robot
-pio run -e robotcomms         # ESP32 comms bridge (UWB tag)
 pio run -e beacon1            # UWB beacon ID=10
 pio run -e beacon2            # UWB beacon ID=11
-pio run -e drone              # Drone (placeholder)
+pio run -e minibot            # Minibot ESP32 (drive + UWB)
+pio run -e drone              # Drone ESP32
 pio run -e field-button       # Field element
 pio run -e field-crank        # Field element
 pio run -e field-earth        # Field element
@@ -672,9 +688,7 @@ ros2 launch secbot_autonomy sim_autonomy.launch.py
 
 # Flash firmware
 pio run -e robot --target upload
-pio run -e robotcomms --target upload
 
 # Clean micro-ROS (after mcu_msgs changes)
 pio run -e robot -t clean_microros
-pio run -e robotcomms -t clean_microros
 ```

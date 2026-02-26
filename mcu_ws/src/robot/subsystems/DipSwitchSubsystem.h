@@ -60,7 +60,14 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
       msg_.data = setup_.driver_->readPort(0);
+#ifdef USE_TEENSYTHREADS
+      {
+        Threads::Scope guard(g_microros_mutex);
+        (void)rcl_publish(&pub_, &msg_, NULL);
+      }
+#else
       (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
     }
   }
 

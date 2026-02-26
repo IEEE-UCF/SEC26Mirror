@@ -1,9 +1,12 @@
 /**
  * @file LEDSubsystem.h
- * @brief WS2812B addressable RGB LED subsystem.
- * @date 2026-02-24
+ * @brief WS2812B addressable RGB LED subsystem (FastLED).
+ * @date 2026-02-25
  *
- * Drives a strip of WS2812B LEDs and exposes micro-ROS control.
+ * Drives a strip of WS2812B LEDs using FastLED on Teensy 4.x.
+ * WS2812B output requires precise bit timing; context switches during
+ * show() corrupt the signal, so interrupts are briefly disabled (~150µs
+ * for 5 LEDs).
  *
  * -- ROS2 interface (defaults) ---------------------------------------------
  *   /mcu_robot/led/set_all   subscription   mcu_msgs/msg/LedColor
@@ -12,8 +15,8 @@
 
 #pragma once
 
-#include <Adafruit_NeoPixel.h>
 #include <BaseSubsystem.h>
+#include <FastLED.h>
 #include <mcu_msgs/msg/led_color.h>
 #include <microros_manager_robot.h>
 
@@ -23,12 +26,16 @@
 
 namespace Subsystem {
 
+// Maximum number of LEDs supported by this subsystem.  The CRGB array is
+// statically sized; the actual count used at runtime comes from the setup.
+static constexpr uint8_t LED_MAX_COUNT = 32;
+
 class LEDSubsystemSetup : public Classes::BaseSetup {
  public:
   /**
    * @param _id      Subsystem identifier.
    * @param pin      Teensy GPIO pin connected to WS2812B data line.
-   * @param numLeds  Number of LEDs on the strip.
+   * @param numLeds  Number of LEDs on the strip (max LED_MAX_COUNT).
    * @param topic    ROS2 topic for colour commands.
    */
   LEDSubsystemSetup(const char* _id, uint8_t pin, uint8_t numLeds = 5,
@@ -43,14 +50,20 @@ class LEDSubsystem : public IMicroRosParticipant,
                      public Classes::BaseSubsystem {
  public:
   explicit LEDSubsystem(const LEDSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup),
-        setup_(setup),
-        strip_(setup.numLeds_, setup.pin_, NEO_GRB + NEO_KHZ800) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override {
-    strip_.begin();
-    strip_.clear();
-    strip_.show();
+    num_leds_ =
+        (setup_.numLeds_ <= LED_MAX_COUNT) ? setup_.numLeds_ : LED_MAX_COUNT;
+    // Force pin 35 to GPIO output mode.  Serial8.begin() (called by IBusBM
+    // for IBUS RC) sets pin 35's IOMUX to UART8-TX, stealing it from
+    // FastLED.  IBUS is RX-only (pin 34), so releasing TX is safe.
+    pinMode(35, OUTPUT);
+    // FastLED requires a compile-time pin for addLeds<>.  Pin 35 matches
+    // PIN_RGB_LEDS in RobotPins.h (the only WS2812B data pin on our PCB).
+    // If the hardware pin changes, update this template argument to match.
+    FastLED.addLeds<WS2812B, 35, GRB>(leds_, num_leds_);
+    FastLED.clear(true);
     return true;
   }
 
@@ -59,20 +72,20 @@ class LEDSubsystem : public IMicroRosParticipant,
   void update() override {
     if (dirty_) {
 #ifdef USE_TEENSYTHREADS
+      // WS2812B bit-bang requires precise timing (~1.25µs per bit).
+      // A TeensyThreads context switch mid-show() corrupts the signal.
+      // Briefly disable interrupts for the duration of show() (~30µs/LED).
       noInterrupts();
-      strip_.show();
+      FastLED.show();
       interrupts();
 #else
-      strip_.show();
+      FastLED.show();
 #endif
       dirty_ = false;
     }
   }
 
-  void pause() override {
-    strip_.clear();
-    strip_.show();
-  }
+  void pause() override { FastLED.clear(true); }
 
   void reset() override { pause(); }
 
@@ -104,15 +117,15 @@ class LEDSubsystem : public IMicroRosParticipant,
   }
 
   void setAll(uint8_t r, uint8_t g, uint8_t b) {
-    for (uint16_t i = 0; i < setup_.numLeds_; i++) {
-      strip_.setPixelColor(i, strip_.Color(r, g, b));
+    for (uint8_t i = 0; i < num_leds_; i++) {
+      leds_[i] = CRGB(r, g, b);
     }
     dirty_ = true;
   }
 
   void setPixel(uint8_t idx, uint8_t r, uint8_t g, uint8_t b) {
-    if (idx < setup_.numLeds_) {
-      strip_.setPixelColor(idx, strip_.Color(r, g, b));
+    if (idx < num_leds_) {
+      leds_[idx] = CRGB(r, g, b);
       dirty_ = true;
     }
   }
@@ -144,7 +157,8 @@ class LEDSubsystem : public IMicroRosParticipant,
   }
 
   const LEDSubsystemSetup setup_;
-  Adafruit_NeoPixel strip_;
+  CRGB leds_[LED_MAX_COUNT] = {};
+  uint8_t num_leds_ = 0;
   bool dirty_ = false;
 
   rcl_subscription_t sub_{};

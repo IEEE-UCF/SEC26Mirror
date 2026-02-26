@@ -73,7 +73,7 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   static constexpr uint32_t NFPSHOP_REVERSE_START_US = 100000;
   // PWM duty used during the brief reverse pulse — kept low so the
   // motor inertia absorbs it and it's not visible as a jerk.
-  static constexpr uint16_t NFPSHOP_REVERSE_DUTY = 15 * (MAX_PWM / 255);
+  static constexpr uint16_t NFPSHOP_REVERSE_DUTY = 5 * (MAX_PWM / 255);
 
   explicit MotorManagerSubsystem(const MotorManagerSubsystemSetup& setup)
       : Classes::BaseSubsystem(setup), setup_(setup) {}

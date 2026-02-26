@@ -16,10 +16,10 @@
 #include <rmw_microros/rmw_microros.h>
 #include <stdio.h>
 
+#ifdef USE_TEENSYTHREADS
+#include <TeensyThreads.h>
+#else
 #include <mutex>
-
-#ifdef USE_FREERTOS
-#include "arduino_freertos.h"
 #endif
 
 #include "microros_setup.h"
@@ -76,16 +76,20 @@ class MicrorosManager : public Classes::BaseSubsystem {
   // Register a participant; it will be created/destroyed with the manager
   void registerParticipant(IMicroRosParticipant* participant);
 
-#ifdef USE_FREERTOS
-  // FreeRTOS task entry point — pass `this` as pvParams
+#ifdef USE_TEENSYTHREADS
+  // TeensyThreads task entry point — pass `this` as pvParams
   static void taskFunction(void* pvParams);
 
-  // Create and start the micro-ROS FreeRTOS task
-  void beginThreaded(uint32_t stackSize, UBaseType_t priority);
+  // Create and start the micro-ROS thread
+  void beginThreaded(uint32_t stackSize, int priority = 1);
 #endif
 
-  // Mutex for thread-safe access to the executor (use with std::lock_guard)
+  // Mutex for thread-safe access to the executor
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex& getMutex();
+#else
   std::mutex& getMutex();
+#endif
 
   // Query agent connection state
   bool isConnected() const;
@@ -110,7 +114,11 @@ class MicrorosManager : public Classes::BaseSubsystem {
   } state_;
 
   static MicrorosManager* s_instance_;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex mutex_;
+#else
   std::mutex mutex_;
+#endif
   bool create_entities();
   void destroy_entities();
 

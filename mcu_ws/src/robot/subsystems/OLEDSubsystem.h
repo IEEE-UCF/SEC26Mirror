@@ -33,8 +33,8 @@
 #include <std_msgs/msg/int8.h>
 #include <microros_manager_robot.h>
 
-#ifdef USE_FREERTOS
-#include "arduino_freertos.h"
+#ifdef USE_TEENSYTHREADS
+#include <TeensyThreads.h>
 #endif
 
 namespace Subsystem {
@@ -106,11 +106,11 @@ class OLEDSubsystem : public IMicroRosParticipant,
    */
   void scrollBy(int8_t delta);
 
-#ifdef USE_FREERTOS
-  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
+#ifdef USE_TEENSYTHREADS
+  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 50) {
     task_delay_ms_ = updateRateMs;
-    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
+    threads.addThread(taskFunction, this, stackSize);
   }
 #endif
 
@@ -143,25 +143,21 @@ class OLEDSubsystem : public IMicroRosParticipant,
   std_msgs__msg__Int8 scroll_msg_ = {};
   rcl_subscription_t  scroll_sub_ = {};
 
-#ifdef USE_FREERTOS
+#ifdef USE_TEENSYTHREADS
   static void taskFunction(void* pv) {
     auto* self = static_cast<OLEDSubsystem*>(pv);
     self->begin();
     while (true) {
       self->update();
-      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+      threads.delay(self->task_delay_ms_);
     }
   }
 
-  SemaphoreHandle_t mutex_         = nullptr;
-  uint32_t          task_delay_ms_ = 50;
+  Threads::Mutex mutex_;
+  uint32_t       task_delay_ms_ = 50;
 
-  bool takeMutex() {
-    return mutex_ && xSemaphoreTake(mutex_, pdMS_TO_TICKS(10)) == pdTRUE;
-  }
-  void giveMutex() {
-    if (mutex_) xSemaphoreGive(mutex_);
-  }
+  bool takeMutex() { mutex_.lock(); return true; }
+  void giveMutex() { mutex_.unlock(); }
 #else
   bool takeMutex() { return true; }
   void giveMutex() {}

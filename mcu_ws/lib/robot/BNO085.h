@@ -5,7 +5,7 @@
  * @date 12/10/2025 (updated 2026-02-23)
  * @refactored 12/22/2025 - Renamed from IMU.h to BNO085.h for clarity
  *
- * Hardware: BNO085 on Wire1 (I2C address 0x4A default).
+ * Hardware: BNO085 on Wire1 (I2C address 0x4B).
  */
 
 #ifndef BNO085_H
@@ -29,11 +29,13 @@ class BNO085DriverSetup : public Classes::BaseSetup {
    * @param _pin   Reset pin, or -1 if not connected.
    * @param wire   I2C bus the BNO085 is on (default Wire1).
    */
-  BNO085DriverSetup(const char* _id, int8_t _pin = -1, TwoWire& wire = Wire1)
-      : Classes::BaseSetup(_id), reset_pin(_pin), wire_(wire) {}
+  BNO085DriverSetup(const char* _id, int8_t _pin = -1, TwoWire& wire = Wire1,
+                    uint8_t addr = 0x4B)
+      : Classes::BaseSetup(_id), reset_pin(_pin), wire_(wire), addr_(addr) {}
 
   const int8_t reset_pin;
   TwoWire& wire_;
+  uint8_t addr_;
 };
 
 struct BNO085DriverData {
@@ -51,8 +53,6 @@ struct BNO085DriverData {
   float qw = 0.0f;
 
   float yaw = 0.0f;
-  float roll = 0.0f;
-  float pitch = 0.0f;
 };
 
 class BNO085Driver : public Classes::BaseDriver {
@@ -63,31 +63,20 @@ class BNO085Driver : public Classes::BaseDriver {
       : BaseDriver(setup), setup_(setup), imu_(setup.reset_pin) {}
 
   bool init() override;
-  void update() override;//constantly read for values and update data in the BNO085Driver Structure
+  void update() override;
   const char* getInfo() override;
 
-<<<<<<< HEAD
-  BNO085DriverData getData() { return data_; };
-  float calculateRoll(float qx,float qy,float qz,float qw);
-  float calculatePitch(float qx,float qy,float qz,float qw);
-=======
   BNO085DriverData getData() const { return data_; }
 
->>>>>>> 24148fbc914056c80cc70e98718723a719880f53
   float calculateYaw(float qx, float qy, float qz, float qw);
-  float radians_to_degree(float angle);
+
  private:
   const BNO085DriverSetup setup_;
-<<<<<<< HEAD
-  BNO085DriverData data_; //structure data of the 
-  char infoBuffer_[64];
-=======
   BNO085DriverData data_;
   char infoBuffer_[64] = {};
->>>>>>> 24148fbc914056c80cc70e98718723a719880f53
 
-  Adafruit_BNO08x imu_; // object instance of the actual IMU sensor
-  sh2_SensorValue_t sensorValue_; //structure for sensor value
+  Adafruit_BNO08x imu_;
+  sh2_SensorValue_t sensorValue_;
 };
 
 }  // namespace Drivers

@@ -49,7 +49,7 @@ class MotorDriver : public Classes::BaseDriver {
   const MotorDriverSetup setup_;
   int pwmOut;
   bool motorDirection;
-  elapsedMillis prevReverseTime;
+  elapsedMicros prevReverseTime;
   char infoBuffer_[64];
 };
 }  // namespace Drivers

@@ -1,11 +1,24 @@
 #include "BatterySubsystem.h"
 
+#include <cstdio>
+
+#include "OLEDSubsystem.h"
+
 namespace Subsystem {
 
 bool BatterySubsystem::init() { return setup_.driver_->init(); }
 
 void BatterySubsystem::update() {
   setup_.driver_->update();
+
+  // Update OLED status line with battery info every cycle
+  if (oled_ && setup_.driver_) {
+    char buf[OLEDSubsystem::MAX_LINE_LEN + 1];
+    float v = setup_.driver_->getVoltage();
+    float ma = setup_.driver_->getCurrentmA();
+    snprintf(buf, sizeof(buf), "%.1fV  %.0fmA", v, ma);
+    oled_->setStatusLine(buf);
+  }
 
   if (!pub_.impl) return;
   uint32_t now = millis();
@@ -40,24 +53,30 @@ void BatterySubsystem::onDestroy() {
   // leaving pub_.impl non-NULL.  On the next onCreate that stale impl causes
   // rclc_publisher_init_best_effort to fail (publisher already initialised).
   // The DDS resources are freed by rclc_support_fini — just reset local state.
-  pub_   = rcl_get_zero_initialized_publisher();
-  node_  = nullptr;
+  pub_ = rcl_get_zero_initialized_publisher();
+  node_ = nullptr;
 }
 
 void BatterySubsystem::publishData() {
   if (!pub_.impl || !setup_.driver_) return;
 
   // INA219 data — convert driver units (mA, mV, mW) to SI (A, V, W).
-  msg_.voltage       = setup_.driver_->getVoltage();                       // V
-  msg_.shunt_voltage = setup_.driver_->getShuntVoltagemV() / 1000.0f;     // V
-  msg_.current       = setup_.driver_->getCurrentmA()      / 1000.0f;     // A
-  msg_.power         = setup_.driver_->getPowermW()         / 1000.0f;    // W
+  msg_.voltage = setup_.driver_->getVoltage();                         // V
+  msg_.shunt_voltage = setup_.driver_->getShuntVoltagemV() / 1000.0f;  // V
+  msg_.current = setup_.driver_->getCurrentmA() / 1000.0f;             // A
+  msg_.power = setup_.driver_->getPowermW() / 1000.0f;                 // W
   // INA219 has no die-temp sensor or energy/charge accumulators.
-  msg_.temperature   = 0.0f;
-  msg_.energy        = 0.0f;
-  msg_.charge_use    = 0.0f;
+  msg_.temperature = 0.0f;
+  msg_.energy = 0.0f;
+  msg_.charge_use = 0.0f;
 
+#ifdef USE_TEENSYTHREADS
+  { Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

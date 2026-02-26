@@ -7,10 +7,10 @@
 namespace Drone {
 
 struct HeightConfig {
-  uint8_t xshut_pin = 255;       // 255 = no XSHUT pin
-  uint16_t timing_budget_ms = 20; // measurement timing budget
-  float max_valid_m = 4.0f;      // reject readings above this
-  float min_valid_m = 0.01f;     // reject readings below this
+  uint8_t xshut_pin = 255;         // 255 = no XSHUT pin
+  uint16_t timing_budget_ms = 20;  // measurement timing budget
+  float max_valid_m = 4.0f;        // reject readings above this
+  float min_valid_m = 0.01f;       // reject readings below this
 };
 
 class HeightSubsystem {

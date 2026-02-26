@@ -50,8 +50,7 @@ static MicrorosManager g_mr(g_mr_setup);
 //   extern Subsystem::OLEDSubsystem g_oled;
 //
 // Hardware SPI1: MOSI=26, SCK=27, DC=37, RST=33, CS=38 (per RobotPins.h)
-static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
-                                       &SPI1,
+static OLEDSubsystemSetup g_oled_setup("oled_subsystem", &SPI1,
                                        /*dc*/ PIN_DISP_DC,
                                        /*rst*/ PIN_DISP_RST,
                                        /*cs*/ PIN_DISP_CS);
@@ -201,11 +200,10 @@ void setup() {
   g_arm.beginThreaded(1024, 2, 20);       // 50 Hz movement
   g_battery.beginThreaded(1024, 1, 100);  // 10 Hz battery
   g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
-  g_hb.beginThreaded(1024, 1, 200);        // 5 Hz heartbeat
+  g_hb.beginThreaded(1024, 1, 200);       // 5 Hz heartbeat
   g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   // g_drive.beginThreaded(2048, 3, 20);  // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
-
 }
 
 void loop() { threads.delay(100); }  // yield to subsystem threads

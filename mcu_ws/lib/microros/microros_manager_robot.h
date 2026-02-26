@@ -9,13 +9,13 @@
 #define MICROROS_MANAGER_H
 #include <BaseSubsystem.h>
 // microros includes
+#include <micro_ros_utilities/string_utilities.h>
 #include <rcl/error_handling.h>
 #include <rcl/rcl.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
 #include <std_msgs/msg/string.h>
-#include <micro_ros_utilities/string_utilities.h>
 #include <stdio.h>
 
 #ifdef USE_TEENSYTHREADS

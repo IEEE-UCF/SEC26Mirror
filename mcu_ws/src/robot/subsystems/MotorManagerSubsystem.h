@@ -239,7 +239,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     for (uint8_t i = 0; i < setup_.numMotors_; i++) pub_data_[i] = speeds_[i];
     pub_msg_.data.size = setup_.numMotors_;
 #ifdef USE_TEENSYTHREADS
-    { Threads::Scope guard(g_microros_mutex);
+    {
+      Threads::Scope guard(g_microros_mutex);
       (void)rcl_publish(&pub_, &pub_msg_, NULL);
     }
 #else
@@ -263,9 +264,9 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 
   const MotorManagerSubsystemSetup setup_;
   float speeds_[MAX_MOTORS] = {};
-  bool dirs_[MAX_MOTORS] = {};         // cached direction per motor
+  bool dirs_[MAX_MOTORS] = {};                  // cached direction per motor
   uint32_t reverse_timer_us_[MAX_MOTORS] = {};  // NFPShop cycle timer
-  bool in_reverse_[MAX_MOTORS] = {};   // currently in reverse pulse window
+  bool in_reverse_[MAX_MOTORS] = {};  // currently in reverse pulse window
 
   rcl_publisher_t pub_{};
   std_msgs__msg__Float32MultiArray pub_msg_{};

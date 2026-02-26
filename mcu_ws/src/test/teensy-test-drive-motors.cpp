@@ -45,12 +45,8 @@ struct SpeedStep {
 };
 
 static const SpeedStep pattern[] = {
-    {+1.00f, "FWD 100%"},
-    {+0.50f, "FWD  50%"},
-    { 0.00f, "STOP    "},
-    {-0.50f, "REV  50%"},
-    {-1.00f, "REV 100%"},
-    { 0.00f, "STOP    "},
+    {+1.00f, "FWD 100%"}, {+0.50f, "FWD  50%"}, {0.00f, "STOP    "},
+    {-0.50f, "REV  50%"}, {-1.00f, "REV 100%"}, {0.00f, "STOP    "},
 };
 static constexpr int PATTERN_LEN = sizeof(pattern) / sizeof(pattern[0]);
 
@@ -59,7 +55,7 @@ static constexpr int PATTERN_LEN = sizeof(pattern) / sizeof(pattern[0]);
 // ═══════════════════════════════════════════════════════════════════════════
 
 static Robot::PCA9685DriverSetup g_pca_setup("pca_motor", I2C_ADDR_MOTOR,
-                                              MOTOR_PCA9685_FREQ, Wire2);
+                                             MOTOR_PCA9685_FREQ, Wire2);
 static Robot::PCA9685Driver g_pca(g_pca_setup);
 
 static void setMotor(uint8_t motor, float speed) {
@@ -107,7 +103,9 @@ void setup() {
   Serial.print("PCA9685 init (0x41, Wire2)... ");
   if (!g_pca.init()) {
     Serial.println("FAILED — check I2C wiring. Halting.");
-    while (true) { delay(100); }
+    while (true) {
+      delay(100);
+    }
   }
   Serial.println("OK");
 
@@ -118,9 +116,10 @@ void setup() {
   // Ensure all motors start stopped
   stopAll();
 
-  Serial.printf("Motors: %d  |  OE pin: %d  |  Step: %lu ms\n",
-                NUM_MOTORS, PIN_MOTOR_OE, STEP_DURATION_MS);
-  Serial.println("Pattern: FWD 100% → FWD 50% → STOP → REV 50% → REV 100% → STOP");
+  Serial.printf("Motors: %d  |  OE pin: %d  |  Step: %lu ms\n", NUM_MOTORS,
+                PIN_MOTOR_OE, STEP_DURATION_MS);
+  Serial.println(
+      "Pattern: FWD 100% → FWD 50% → STOP → REV 50% → REV 100% → STOP");
   Serial.println("\nStarting in 2 seconds...\n");
   delay(2000);
 }
@@ -146,9 +145,8 @@ void loop() {
 
     // Print status
     uint16_t duty = MAX_PWM - (uint16_t)(fabsf(s.speed) * MAX_PWM);
-    Serial.printf("[%6lu ms]  %s  (speed=%+.2f  duty=%4d  dir=%s)\n",
-                  now, s.label, s.speed, duty,
-                  s.speed >= 0 ? "FWD" : "REV");
+    Serial.printf("[%6lu ms]  %s  (speed=%+.2f  duty=%4d  dir=%s)\n", now,
+                  s.label, s.speed, duty, s.speed >= 0 ? "FWD" : "REV");
 
     digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
 

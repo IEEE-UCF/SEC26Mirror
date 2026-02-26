@@ -52,8 +52,8 @@ class OLEDSubsystemSetup : public Classes::BaseSetup {
    * @param cs_pin    Chip-select pin.
    * @param bitrate   SPI clock rate in Hz (default 8 MHz).
    */
-  OLEDSubsystemSetup(const char* id, SPIClass* spi,
-                     int8_t dc_pin, int8_t rst_pin, int8_t cs_pin,
+  OLEDSubsystemSetup(const char* id, SPIClass* spi, int8_t dc_pin,
+                     int8_t rst_pin, int8_t cs_pin,
                      uint32_t bitrate = 8000000UL)
       : Classes::BaseSetup(id),
         spi_(spi),

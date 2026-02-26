@@ -53,10 +53,8 @@ static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
 
 // --- OLED (always active, hardware SPI1) ---
-static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
-                                       &SPI1,
-                                       PIN_DISP_DC, PIN_DISP_RST,
-                                       PIN_DISP_CS);
+static OLEDSubsystemSetup g_oled_setup("oled_subsystem", &SPI1, PIN_DISP_DC,
+                                       PIN_DISP_RST, PIN_DISP_CS);
 static OLEDSubsystem g_oled(g_oled_setup);
 
 // --- Heartbeat ---
@@ -136,8 +134,8 @@ static MotorManagerSubsystem g_motor(g_motor_setup);
 
 // --- UWB ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
-                                                   Drivers::UWBMode::TAG,
-                                                   ROBOT_UWB_TAG_ID, PIN_UWB_CS);
+                                                  Drivers::UWBMode::TAG,
+                                                  ROBOT_UWB_TAG_ID, PIN_UWB_CS);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
@@ -278,20 +276,20 @@ static void step_uwb() {
 
 // Step table — ordered to match typical conflict suspicion (most likely last)
 static Step steps[] = {
-    {"micro-ROS manager",  step_microros},
-    {"Heartbeat",          step_heartbeat},
-    {"I2C bus/mux/GPIO",   step_i2c_bus},
-    {"Battery (INA219)",   step_battery},
-    {"Sensor (TOF)",       step_sensor},
-    {"IMU (BNO085)",       step_imu},
-    {"RC (FlySky)",        step_rc},
-    {"PCA9685 flush",      step_pca9685},
-    {"Servo",              step_servo},
-    {"Motor",              step_motor},
-    {"DipSwitch",          step_dip_switch},
-    {"Button",             step_button},
-    {"LED (WS2812B)",      step_led},
-    {"UWB (DW3000 SPI0)",  step_uwb},
+    {"micro-ROS manager", step_microros},
+    {"Heartbeat", step_heartbeat},
+    {"I2C bus/mux/GPIO", step_i2c_bus},
+    {"Battery (INA219)", step_battery},
+    {"Sensor (TOF)", step_sensor},
+    {"IMU (BNO085)", step_imu},
+    {"RC (FlySky)", step_rc},
+    {"PCA9685 flush", step_pca9685},
+    {"Servo", step_servo},
+    {"Motor", step_motor},
+    {"DipSwitch", step_dip_switch},
+    {"Button", step_button},
+    {"LED (WS2812B)", step_led},
+    {"UWB (DW3000 SPI0)", step_uwb},
 };
 static constexpr int NUM_STEPS = sizeof(steps) / sizeof(steps[0]);
 
@@ -357,7 +355,9 @@ void setup() {
   Serial.print("Initializing OLED... ");
   if (!g_oled.init()) {
     Serial.println("FAILED — check wiring. Halting.");
-    while (true) { delay(100); }
+    while (true) {
+      delay(100);
+    }
   }
   Serial.println("OK");
 

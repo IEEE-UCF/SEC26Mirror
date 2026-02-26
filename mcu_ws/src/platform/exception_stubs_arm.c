@@ -17,36 +17,37 @@ extern "C" {
 #endif
 
 /* ARM EABI exception personality routines - used for stack unwinding */
-void __wrap___aeabi_unwind_cpp_pr0(void) { while(1); }
-void __wrap___aeabi_unwind_cpp_pr1(void) { while(1); }
-void __wrap___aeabi_unwind_cpp_pr2(void) { while(1); }
+void __wrap___aeabi_unwind_cpp_pr0(void) { while (1); }
+void __wrap___aeabi_unwind_cpp_pr1(void) { while (1); }
+void __wrap___aeabi_unwind_cpp_pr2(void) { while (1); }
 
 /* GCC personality routine for C++ */
-void __wrap___gxx_personality_v0(void) { while(1); }
+void __wrap___gxx_personality_v0(void) { while (1); }
 
 /* C++ exception handling functions */
 void *__wrap___cxa_allocate_exception(unsigned int size) {
-    (void)size;
-    while(1);
-    return (void*)0;
+  (void)size;
+  while (1);
+  return (void *)0;
 }
 
-void __wrap___cxa_throw(void *thrown_exception, void *tinfo, void (*dest)(void *)) {
-    (void)thrown_exception;
-    (void)tinfo;
-    (void)dest;
-    while(1);
+void __wrap___cxa_throw(void *thrown_exception, void *tinfo,
+                        void (*dest)(void *)) {
+  (void)thrown_exception;
+  (void)tinfo;
+  (void)dest;
+  while (1);
 }
 
-void __wrap___cxa_rethrow(void) { while(1); }
+void __wrap___cxa_rethrow(void) { while (1); }
 
 void *__wrap___cxa_begin_catch(void *exceptionObject) {
-    (void)exceptionObject;
-    while(1);
-    return (void*)0;
+  (void)exceptionObject;
+  while (1);
+  return (void *)0;
 }
 
-void __wrap___cxa_end_catch(void) { while(1); }
+void __wrap___cxa_end_catch(void) { while (1); }
 
 #ifdef __cplusplus
 }

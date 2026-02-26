@@ -2,7 +2,7 @@
 
 namespace Drone {
 
-//  Lifecycle 
+//  Lifecycle
 
 void DroneControlSubsystem::init() {
   // Setup ESP32 LEDC PWM channels for each motor (Arduino Core v2 API)
@@ -33,7 +33,7 @@ void DroneControlSubsystem::disarm() {
 }
 
 void DroneControlSubsystem::update(const IMUData& imu, float altitude_m,
-                                    float dt) {
+                                   float dt) {
   if (!armed_ || dt <= 0.0f || dt > 0.1f) {
     motors_[0] = motors_[1] = motors_[2] = motors_[3] = 0.0f;
     writeMotors();
@@ -57,13 +57,14 @@ void DroneControlSubsystem::update(const IMUData& imu, float altitude_m,
 }
 
 //  PID core
-// use_measurement_derivative: if true, D-term uses raw sensor rate instead of differentiated error
-// This is smoother and industry standard for attitude control
+// use_measurement_derivative: if true, D-term uses raw sensor rate instead of
+// differentiated error This is smoother and industry standard for attitude
+// control
 
 float DroneControlSubsystem::computePID(const PIDGains& g, PIDState& s,
-                                         float error, float dt,
-                                         bool use_measurement_derivative,
-                                         float measurement_rate) {
+                                        float error, float dt,
+                                        bool use_measurement_derivative,
+                                        float measurement_rate) {
   // Integral with anti-windup
   s.integral += error * dt;
   s.integral = constrain(s.integral, -g.i_limit, g.i_limit);
@@ -101,18 +102,18 @@ void DroneControlSubsystem::resetPIDStates() {
 void DroneControlSubsystem::controlAngle(const IMUData& imu, float dt) {
   // Roll
   float error_roll = sp_.roll_des - imu.roll;
-  roll_pid_ = computePID(cfg_.roll_angle, roll_angle_pid_, error_roll, dt,
-                          true, imu.gyro_x);
+  roll_pid_ = computePID(cfg_.roll_angle, roll_angle_pid_, error_roll, dt, true,
+                         imu.gyro_x);
 
   // Pitch
   float error_pitch = sp_.pitch_des - imu.pitch;
   pitch_pid_ = computePID(cfg_.pitch_angle, pitch_angle_pid_, error_pitch, dt,
-                           true, imu.gyro_y);
+                          true, imu.gyro_y);
 
   // Yaw (rate-based  stabilize on gyro Z rate)
   float error_yaw = sp_.yaw_rate_des - imu.gyro_z;
-  yaw_pid_ = computePID(cfg_.yaw_rate, yaw_rate_pid_, error_yaw, dt,
-                          false, 0.0f);
+  yaw_pid_ =
+      computePID(cfg_.yaw_rate, yaw_rate_pid_, error_yaw, dt, false, 0.0f);
 
   // Reset integrators when throttle is very low (on the ground)
   if (throttle_ < 0.05f) {
@@ -122,7 +123,7 @@ void DroneControlSubsystem::controlAngle(const IMUData& imu, float dt) {
   }
 }
 
-//  Altitude hold PID 
+//  Altitude hold PID
 // Modifies throttle_ around hover_throttle baseline
 
 void DroneControlSubsystem::controlAltitude(float altitude_m, float dt) {
@@ -135,15 +136,13 @@ void DroneControlSubsystem::controlAltitude(float altitude_m, float dt) {
   // PID on altitude error
   float error = sp_.altitude_des - altitude_m;
   altitude_pid_.integral += error * dt;
-  altitude_pid_.integral =
-      constrain(altitude_pid_.integral, -cfg_.altitude.i_limit,
-                cfg_.altitude.i_limit);
+  altitude_pid_.integral = constrain(
+      altitude_pid_.integral, -cfg_.altitude.i_limit, cfg_.altitude.i_limit);
 
   // D-term: use negative filtered velocity (rising = less error correction)
-  float alt_correction =
-      cfg_.altitude.kp * error +
-      cfg_.altitude.ki * altitude_pid_.integral +
-      cfg_.altitude.kd * (-alt_velocity_);
+  float alt_correction = cfg_.altitude.kp * error +
+                         cfg_.altitude.ki * altitude_pid_.integral +
+                         cfg_.altitude.kd * (-alt_velocity_);
 
   alt_correction = constrain(alt_correction, -0.3f, 0.3f);
 
@@ -174,7 +173,7 @@ void DroneControlSubsystem::controlMixer() {
   }
 }
 
-//  Write motor values to ESP32 LEDC PWM 
+//  Write motor values to ESP32 LEDC PWM
 
 void DroneControlSubsystem::writeMotors() {
   uint32_t max_duty = (1 << cfg_.motors.pwm_resolution) - 1;

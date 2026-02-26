@@ -18,11 +18,6 @@
 #include "arduino_freertos.h"
 #include "robot/drive-base/DriveSubsystem.h"
 #include "robot/machines/HeartbeatSubsystem.h"
-<<<<<<< HEAD
-#include "robot/machines/McuSubsystem.h"
-#include "robot/machines/RobotManager.h"
-=======
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"

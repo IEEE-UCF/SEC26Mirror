@@ -68,20 +68,14 @@ mcu_ws/.vscode/*
 
 # ai agents
 .claude/*
-<<<<<<< HEAD
+!.claude/skills/
+!.claude/commands/
 
 #specific fix for jh directory
 ros2_ws/src/build/
 ros2_ws/src/install/
 ros2_ws/src/log
-<<<<<<< HEAD
-#general safety net for ant ROS folder depth
-=======
 #general safety net for any ROS folder depth
->>>>>>> 483df76753580e8f55ec702e10059802933bf67b
 **/build/
 **/install/
 **/log/
-=======
-!.claude/skills/
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0

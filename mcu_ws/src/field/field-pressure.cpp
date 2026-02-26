@@ -2,11 +2,8 @@
 #include <field-element.h>
 #include <raw-rgb-analog-led.h>
 
-<<<<<<< HEAD
-=======
 #include "pressure.h"
 
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 const uint8_t forcePin =
     34;  // Must use ADC1 pin (32-39) - ADC2 blocked by WiFi/ESP-NOW
 

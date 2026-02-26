@@ -10,14 +10,6 @@
 #include "mcu_msgs/msg/drive_base.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
-<<<<<<< HEAD
-=======
-#include "std_msgs/msg/bool.hpp"
-#include "visualization_msgs/msg/marker_array.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "geometry_msgs/msg/point.hpp"
-
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 #include "rclcpp/rclcpp.hpp"
 #include "secbot_navigation/grid_map.hpp"
 #include "secbot_navigation/planner_server.hpp"
@@ -94,7 +86,6 @@ class PathingNode : public rclcpp::Node {
     RCLCPP_INFO(this->get_logger(), "Pathing Node Initialized");
   }
 
-<<<<<<< HEAD
  private:
   // ROS Interfaces
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
@@ -111,17 +102,6 @@ class PathingNode : public rclcpp::Node {
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::string control_output_ = "drive_base";
-=======
-      // Ros interfaces publish and subscriber nodes
-      publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10); // output motion commands
-      subscription_ = this->create_subscription<nav_msgs::msg::Odometry>("/odom", 10, std::bind(&PathingNode::odom_callback, this, _1)); // input robot pose
-      timer_ = this->create_wall_timer(100ms, std::bind(&PathingNode::control_loop, this)); // timer at 10 Hz, controls output
-      path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/global_path", 1); // publish planned path for RViz
-      debug_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/nav_debug", 1); // placeholder for markers
-      pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/nav_pose", 10); // placeholder for publishing pose
-      goal_reached_pub_ = this->create_publisher<std_msgs::msg::Bool>("/nav/goal_reached", 10); // signals when nav goal is reached
-      vision_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("/goal_pose", 10, std::bind(&PathingNode::goal_callback, this, _1)); // dynamic goal input
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 
   // variables ====================================
   // helper
@@ -241,7 +221,6 @@ class PathingNode : public rclcpp::Node {
       throw std::runtime_error("MISSING PARAMS");
     }
 
-<<<<<<< HEAD
     planning_frame_ = this->get_parameter("planning_frame").as_string();
 
     RCLCPP_INFO(this->get_logger(), "Loaded nav_path config: %s",
@@ -251,25 +230,6 @@ class PathingNode : public rclcpp::Node {
     try {
       YAML::Node nav_cfg = YAML::LoadFile(nav_path);
       YAML::Node arena_cfg = YAML::LoadFile(arena_path);
-=======
-  private:
-    // ROS Interfaces
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr vision_sub_;
-    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_; // Path publisher for RViz
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr debug_pub_; // MarkerArray publisher for debug visualization
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
-    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr goal_reached_pub_;
-
-    rclcpp::TimerBase::SharedPtr timer_;
-    bool goal_reached_ = false;
-    // === helper ===
-    void log_state(const char *tag)
-    {
-      RCLCPP_INFO(this->get_logger(), tag);
-    }
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 
       // Arena Config =======================================================
       if (arena_cfg["grid"]["width"])
@@ -526,7 +486,6 @@ class PathingNode : public rclcpp::Node {
       return;
     }
 
-<<<<<<< HEAD
     // check how close robot is
     const double d_robot =
         std::hypot(goal_meters.first - robot_x_, goal_meters.second - robot_y_);
@@ -537,41 +496,6 @@ class PathingNode : public rclcpp::Node {
                   d_robot, min_goal_dist_, goal_meters.first,
                   goal_meters.second, robot_x_, robot_y_);
       return;
-=======
-
-    // Dynamic goal callback from /goal_pose
-    void goal_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
-    {
-      log_state("--------------------");
-      log_state("Received new goal_pose");
-      goal_x_ = msg->pose.position.x;
-      goal_y_ = msg->pose.position.y;
-      goal_reached_ = false;
-
-      // Replan from current robot position to new goal
-      start_x_ = robot_x_;
-      start_y_ = robot_y_;
-      init_planner();
-      compute_plan();
-      RCLCPP_INFO(this->get_logger(), "Replanned to goal (%.2f, %.2f) from (%.2f, %.2f)", goal_x_, goal_y_, robot_x_, robot_y_);
-    }
-
-    // === Odom callback updates robot pose ===
-    void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) // uses robot pose from odometry
-    {
-      log_state("--------------------");
-      log_state("Odom callback being ran");
-      // converts quaternion orientation to yaw using tf2
-      tf2::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-      tf2::Matrix3x3 m(q);
-      double roll, pitch, yaw;
-      m.getRPY(roll, pitch, yaw);
-      robot_x_ = msg->pose.pose.position.x;
-      robot_y_ = msg->pose.pose.position.y;
-      robot_theta_ = yaw;
-      log_state("Converted quaternion orientation to yaw");
-      state_received_ = true; // so control loop can run
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
     }
 
     // reject goals near already-reached positions
@@ -583,7 +507,6 @@ class PathingNode : public rclcpp::Node {
       return;
     }
 
-<<<<<<< HEAD
     // Initialize filter if first goal
     if (!have_goal_filt_) {
       goal_filt_x_ = goal_meters.first;
@@ -598,23 +521,6 @@ class PathingNode : public rclcpp::Node {
                        (1.0 - goal_ema_alpha_) * goal_filt_x_;
         goal_filt_y_ = goal_ema_alpha_ * goal_meters.second +
                        (1.0 - goal_ema_alpha_) * goal_filt_y_;
-=======
-      // Check goal
-      double dx = goal_x_ - robot_x_;
-      double dy = goal_y_ - robot_y_;
-
-      if (std::sqrt(dx * dx + dy * dy) < 0.2) // check the distance to the goal
-      {
-        auto stop_msg = geometry_msgs::msg::Twist();
-        publisher_->publish(stop_msg);
-        if (!goal_reached_) {
-          goal_reached_ = true;
-          auto reached_msg = std_msgs::msg::Bool();
-          reached_msg.data = true;
-          goal_reached_pub_->publish(reached_msg);
-        }
-        log_state("Distance to goal reached");
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
         return;
       }
 

@@ -63,11 +63,7 @@ class MiniRobotSubsystemSetup : public Classes::BaseSetup {
   uint32_t comms_timeout_ms_;    // Time before declaring comms failure
   uint32_t mission_timeout_ms_;  // Max time for a mission before timeout
   float arrival_threshold_m_;    // Distance threshold to consider "arrived"
-<<<<<<< HEAD
-  uint8_t esp32_i2c_addr_;       // I2C address of the robotcomms ESP32
-=======
   uint8_t esp32_i2c_addr_;       // I2C address of the companion ESP32
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 };
 
 /**

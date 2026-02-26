@@ -173,12 +173,9 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   intake_pub_ = this->create_publisher<mcu_msgs::msg::IntakeState>(
       "/mcu_robot/intake/state", 10);
 
-<<<<<<< HEAD
-=======
   bridge_pub_ = this->create_publisher<mcu_msgs::msg::IntakeBridgeState>(
       "/mcu_robot/intake_bridge/state", 10);
 
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
   mini_robot_pub_ = this->create_publisher<mcu_msgs::msg::MiniRobotState>(
       "/mcu_robot/mini_robot/state", 10);
 
@@ -205,8 +202,6 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::bind(&McuSubsystemSimulator::cmdVelCallback, this,
                 std::placeholders::_1));
 
-<<<<<<< HEAD
-=======
   // Bridge command subscriber
   bridge_cmd_sub_ =
       this->create_subscription<mcu_msgs::msg::IntakeBridgeCommand>(
@@ -226,7 +221,6 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::bind(&McuSubsystemSimulator::intakeSpeedCallback, this,
                 std::placeholders::_1));
 
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
   // Gazebo ground-truth odometry — used for trajectory tracking in sim
   gz_odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       "/odom", 10,
@@ -273,14 +267,11 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::chrono::milliseconds(50),
       std::bind(&McuSubsystemSimulator::intakePublishCallback, this));
 
-<<<<<<< HEAD
-=======
   // Bridge @ 20 Hz
   bridge_publish_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(50),
       std::bind(&McuSubsystemSimulator::bridgePublishCallback, this));
 
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
   // MiniRobot @ 10 Hz
   mini_robot_publish_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(100),
@@ -832,25 +823,13 @@ void McuSubsystemSimulator::rcPublishCallback() {
   rc_pub_->publish(msg);
 }
 
-<<<<<<< HEAD
-// Intake publish
-=======
 // Intake publish (improved: uses simulated state instead of always IDLE)
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 void McuSubsystemSimulator::intakePublishCallback() {
   auto msg = mcu_msgs::msg::IntakeState();
 
   msg.header.stamp = this->now();
   msg.header.frame_id = "base_link";
 
-<<<<<<< HEAD
-  msg.state = mcu_msgs::msg::IntakeState::STATE_IDLE;
-  msg.duck_detected = false;
-  msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_OFF;
-  msg.capture_count = 0;
-  msg.jam_count = 0;
-  msg.time_in_state_ms = 0;
-=======
   msg.state = sim_intake_state_;
   msg.duck_detected = sim_duck_detected_;
 
@@ -867,13 +846,10 @@ void McuSubsystemSimulator::intakePublishCallback() {
   auto elapsed = std::chrono::steady_clock::now() - intake_state_time_;
   msg.time_in_state_ms = static_cast<uint32_t>(
       std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 
   intake_pub_->publish(msg);
 }
 
-<<<<<<< HEAD
-=======
 // Intake speed callback
 void McuSubsystemSimulator::intakeSpeedCallback(
     const std_msgs::msg::Int16::SharedPtr msg) {
@@ -995,7 +971,6 @@ void McuSubsystemSimulator::bridgePublishCallback() {
   bridge_pub_->publish(msg);
 }
 
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 // MiniRobot publish
 void McuSubsystemSimulator::miniRobotPublishCallback() {
   auto msg = mcu_msgs::msg::MiniRobotState();

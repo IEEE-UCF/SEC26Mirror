@@ -10,15 +10,7 @@
 #define IMUSUBSYSTEM_H
 
 #include <BNO085.h>
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-=======
 #include <BaseSubsystem.h>
->>>>>>> 788e3a1a00f0f8138e28a6ee774f71d46d6817ca
-=======
-#include <BaseSubsystem.h>
->>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
 

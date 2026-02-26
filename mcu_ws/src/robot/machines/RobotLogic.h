@@ -18,6 +18,7 @@
 #include <microros_manager_robot.h>
 
 #include "../RobotConstants.h"
+#include "../RobotPins.h"
 #include "BNO085.h"
 #include "I2CBusLock.h"
 #include "I2CMuxDriver.h"

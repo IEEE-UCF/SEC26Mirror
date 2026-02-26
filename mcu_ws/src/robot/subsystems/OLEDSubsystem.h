@@ -28,6 +28,7 @@
 
 #include <Adafruit_SSD1306.h>
 #include <BaseSubsystem.h>
+#include <SPI.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/int8.h>
 #include <std_msgs/msg/string.h>
@@ -45,26 +46,27 @@ class OLEDSubsystemSetup : public Classes::BaseSetup {
  public:
   /**
    * @param id        Subsystem identifier string.
-   * @param mosi_pin  MOSI / D1 pin (software SPI).
-   * @param clk_pin   CLK  / D0 pin (software SPI).
+   * @param spi       Hardware SPI bus (e.g. &SPI1).
    * @param dc_pin    Data/Command select pin.
    * @param rst_pin   Reset pin, or -1 if not connected.
    * @param cs_pin    Chip-select pin.
+   * @param bitrate   SPI clock rate in Hz (default 8 MHz).
    */
-  OLEDSubsystemSetup(const char* id, int8_t mosi_pin, int8_t clk_pin,
-                     int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
+  OLEDSubsystemSetup(const char* id, SPIClass* spi,
+                     int8_t dc_pin, int8_t rst_pin, int8_t cs_pin,
+                     uint32_t bitrate = 8000000UL)
       : Classes::BaseSetup(id),
-        mosi_pin_(mosi_pin),
-        clk_pin_(clk_pin),
+        spi_(spi),
         dc_pin_(dc_pin),
         rst_pin_(rst_pin),
-        cs_pin_(cs_pin) {}
+        cs_pin_(cs_pin),
+        bitrate_(bitrate) {}
 
-  int8_t mosi_pin_ = -1;
-  int8_t clk_pin_ = -1;
+  SPIClass* spi_ = nullptr;
   int8_t dc_pin_ = -1;
   int8_t rst_pin_ = -1;
   int8_t cs_pin_ = -1;
+  uint32_t bitrate_ = 8000000UL;
 };
 
 // ── Subsystem

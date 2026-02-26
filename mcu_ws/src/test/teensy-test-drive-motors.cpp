@@ -1,114 +1,157 @@
 /**
  * @file teensy-test-drive-motors.cpp
- * @brief Focused test — PCA9685 motor control with micro-ROS SetMotor service.
- * @date 2026-02-24
+ * @brief Bare-metal drive motor test — no micro-ROS, no threads.
  *
- * Hardware expected:
- *   Wire2 (SDA=24, SCL=25) — PCA9685 #1 at 0x41 (motor board), OE=pin 21
+ * Cycles all 8 motors through a speed pattern:
+ *   1. Forward  100%  (1 s)
+ *   2. Forward   50%  (1 s)
+ *   3. Stop            (1 s)
+ *   4. Reverse  50%   (1 s)
+ *   5. Reverse 100%   (1 s)
+ *   6. Stop            (1 s)
+ *   (repeat)
  *
- * Each motor uses two consecutive PCA9685 channels:
- *   even channel = PWM (0-4095 duty)
- *   odd  channel = DIR (digital HIGH/LOW)
- *   Motor 0 → ch 0,1;  Motor 1 → ch 2,3; …  Motor 7 → ch 14,15
+ * Motor control (NFPShop brushless on PCA9685):
+ *   Even channel = PWM  (inverted: 4095 = stopped, 0 = full speed)
+ *   Odd  channel = DIR  (HIGH = forward, LOW = reverse)
  *
- * micro-ROS topics published:
- *   /mcu_robot/motor/state   std_msgs/Float32MultiArray   5 Hz
+ * Hardware:
+ *   Wire2 (SDA=24, SCL=25) — PCA9685 #1 at 0x41, OE = pin 29
  *
- * micro-ROS services:
- *   /mcu_robot/motor/set     mcu_msgs/srv/SetMotor
- *
- * Usage:
- *   ros2 topic echo /mcu_robot/motor/state
- *   ros2 service call /mcu_robot/motor/set mcu_msgs/srv/SetMotor \
- *       "{index: 0, speed: 0.5}"
+ * Build & flash:
+ *   pio run -e teensy-test-drive-motors --target upload
+ *   pio device monitor -e teensy-test-drive-motors
  */
 
 #include <Arduino.h>
-#include <TeensyThreads.h>
-#include <microros_manager_robot.h>
 
 #include "I2CBusLock.h"
-#include "PCA9685Manager.h"
+#include "PCA9685Driver.h"
 #include "robot/RobotConstants.h"
 #include "robot/RobotPins.h"
-#include "robot/subsystems/MotorManagerSubsystem.h"
 
-using namespace Subsystem;
+// ═══════════════════════════════════════════════════════════════════════════
+//  Constants
+// ═══════════════════════════════════════════════════════════════════════════
 
-// --- micro-ROS manager ---
-static MicrorosManagerSetup g_mr_setup("motor_test_mr");
-static MicrorosManager g_mr(g_mr_setup);
+static constexpr uint16_t MAX_PWM = 4095;
+static constexpr uint32_t STEP_DURATION_MS = 1000;
 
-// --- Wire2: PCA9685 manager + motor driver ---
-static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
-static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
+// Speed pattern: {speed_fraction, label}
+// Positive = forward, negative = reverse
+struct SpeedStep {
+  float speed;
+  const char* label;
+};
 
-static Robot::PCA9685Driver* g_pca_motor =
-    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca_motor", I2C_ADDR_MOTOR, DEFAULT_PCA9685_FREQ, Wire2));
+static const SpeedStep pattern[] = {
+    {+1.00f, "FWD 100%"},
+    {+0.50f, "FWD  50%"},
+    { 0.00f, "STOP    "},
+    {-0.50f, "REV  50%"},
+    {-1.00f, "REV 100%"},
+    { 0.00f, "STOP    "},
+};
+static constexpr int PATTERN_LEN = sizeof(pattern) / sizeof(pattern[0]);
 
-// --- Motor manager subsystem (PCA9685 #1, OE = pin 21) ---
-static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
-                                                PIN_MOTOR_OE, NUM_MOTORS);
-static MotorManagerSubsystem g_motor(g_motor_setup);
+// ═══════════════════════════════════════════════════════════════════════════
+//  PCA9685 motor driver (direct, no subsystem)
+// ═══════════════════════════════════════════════════════════════════════════
 
-// --- PCA9685 flush task ---
-static void pca_task(void*) {
-  while (true) {
-    g_pca_mgr.update();
-    threads.delay(20);
-  }
+static Robot::PCA9685DriverSetup g_pca_setup("pca_motor", I2C_ADDR_MOTOR,
+                                              MOTOR_PCA9685_FREQ, Wire2);
+static Robot::PCA9685Driver g_pca(g_pca_setup);
+
+static void setMotor(uint8_t motor, float speed) {
+  speed = constrain(speed, -1.0f, 1.0f);
+  bool dir = (speed >= 0.0f);
+  uint16_t duty = MAX_PWM - (uint16_t)(fabsf(speed) * MAX_PWM);
+
+  uint8_t pwmCh = motor * 2;
+  uint8_t dirCh = motor * 2 + 1;
+
+  g_pca.bufferDigital(dirCh, dir);
+  g_pca.bufferPWM(pwmCh, duty);
 }
 
-// --- Blink task (visual heartbeat) ---
-static void blink_task(void*) {
-  pinMode(LED_BUILTIN, OUTPUT);
-  while (true) {
-    digitalWriteFast(LED_BUILTIN, HIGH);
-    threads.delay(500);
-    digitalWriteFast(LED_BUILTIN, LOW);
-    threads.delay(500);
+static void stopAll() {
+  for (uint8_t i = 0; i < NUM_MOTORS; i++) {
+    setMotor(i, 0.0f);
   }
+  g_pca.applyBuffered();
 }
 
-// --- Serial print task (debug) ---
-static void print_task(void*) {
-  while (true) {
-    Serial.printf("Motor test — agent %s | speeds:",
-                  g_mr.isConnected() ? "CONNECTED" : "waiting...");
-    for (uint8_t i = 0; i < NUM_MOTORS; i++) {
-      Serial.printf(" %+.2f", g_motor.getSpeed(i));
-    }
-    Serial.println();
-    threads.delay(2000);
-  }
-}
+// ═══════════════════════════════════════════════════════════════════════════
+//  Arduino entry points
+// ═══════════════════════════════════════════════════════════════════════════
 
 void setup() {
   Serial.begin(921600);
   delay(500);
-  Serial.println(PSTR("\r\nSEC26 Robot — Drive Motor Test\r\n"));
+  if (CrashReport) {
+    Serial.print(CrashReport);
+    Serial.println();
+    Serial.flush();
+  }
 
-  // 0. I2C bus mutexes
+  Serial.println("\r\n═══════════════════════════════════════════");
+  Serial.println("  SEC26 Drive Motor Test (bare-metal)");
+  Serial.println("  No micro-ROS, no threads");
+  Serial.println("═══════════════════════════════════════════\n");
+
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  // Init I2C bus locks and motor PCA9685
   I2CBus::initLocks();
 
-  // 1. Init subsystems
-  g_mr.init();
-  g_pca_mgr.init();
-  g_motor.init();
+  Serial.print("PCA9685 init (0x41, Wire2)... ");
+  if (!g_pca.init()) {
+    Serial.println("FAILED — check I2C wiring. Halting.");
+    while (true) { delay(100); }
+  }
+  Serial.println("OK");
 
-  // 2. Register micro-ROS participant
-  g_mr.registerParticipant(&g_motor);
+  // Enable motor output (OE active LOW)
+  pinMode(PIN_MOTOR_OE, OUTPUT);
+  digitalWrite(PIN_MOTOR_OE, LOW);
 
-  // 3. Start threads
-  //                                      stack  pri  rate(ms)
-  g_mr.beginThreaded(8192, 4);                // ROS agent
-  g_motor.beginThreaded(1024, 2, 50);         // 20 Hz state pub
-  threads.addThread(pca_task, nullptr, 512);  // PWM flush @ 50 Hz
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  // Ensure all motors start stopped
+  stopAll();
 
-  Serial.println(PSTR("setup(): drive motor test threads started."));
+  Serial.printf("Motors: %d  |  OE pin: %d  |  Step: %lu ms\n",
+                NUM_MOTORS, PIN_MOTOR_OE, STEP_DURATION_MS);
+  Serial.println("Pattern: FWD 100% → FWD 50% → STOP → REV 50% → REV 100% → STOP");
+  Serial.println("\nStarting in 2 seconds...\n");
+  delay(2000);
 }
 
-void loop() { threads.delay(100); }
+static int step_idx = 0;
+static uint32_t step_start = 0;
+static bool first = true;
+
+void loop() {
+  uint32_t now = millis();
+
+  if (first || (now - step_start >= STEP_DURATION_MS)) {
+    first = false;
+    step_start = now;
+
+    const SpeedStep& s = pattern[step_idx];
+
+    // Apply speed to all motors
+    for (uint8_t i = 0; i < NUM_MOTORS; i++) {
+      setMotor(i, s.speed);
+    }
+    g_pca.applyBuffered();
+
+    // Print status
+    uint16_t duty = MAX_PWM - (uint16_t)(fabsf(s.speed) * MAX_PWM);
+    Serial.printf("[%6lu ms]  %s  (speed=%+.2f  duty=%4d  dir=%s)\n",
+                  now, s.label, s.speed, duty,
+                  s.speed >= 0 ? "FWD" : "REV");
+
+    digitalWriteFast(LED_BUILTIN, !digitalReadFast(LED_BUILTIN));
+
+    step_idx = (step_idx + 1) % PATTERN_LEN;
+  }
+}

@@ -77,10 +77,9 @@ using namespace Subsystem;
 static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
 
-// --- OLED display (SSD1306 128x64, software SPI) ---
+// --- OLED display (SSD1306 128x64, hardware SPI1) ---
 static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
-                                       /*mosi*/ PIN_DISP_MOSI,
-                                       /*clk*/ PIN_DISP_CLK,
+                                       &SPI1,
                                        /*dc*/ PIN_DISP_DC,
                                        /*rst*/ PIN_DISP_RST,
                                        /*cs*/ PIN_DISP_CS);
@@ -132,7 +131,7 @@ static Robot::PCA9685Driver* g_pca_servo =
         "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2));
 static Robot::PCA9685Driver* g_pca_motor =
     g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca_motor", I2C_ADDR_MOTOR, DEFAULT_PCA9685_FREQ, Wire2));
+        "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2));
 
 // --- RC subsystem (FlySky, Serial8 RX = pin 34) ---
 static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial8);
@@ -156,14 +155,14 @@ static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
                                          PIN_SERVO_OE, NUM_SERVOS);
 static ServoSubsystem g_servo(g_servo_setup);
 
-// --- UWB subsystem (DW3000 tag, SPI0) ---
-static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
-                                                   Drivers::UWBMode::TAG,
-                                                   ROBOT_UWB_TAG_ID, PIN_UWB_CS);
-static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
-static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
-                                     ROBOT_UWB_TOPIC);
-static UWBSubsystem g_uwb(g_uwb_setup);
+// --- UWB subsystem (DW3000 tag, SPI0) --- DISABLED FOR OLED DEBUG
+// static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
+//                                                    Drivers::UWBMode::TAG,
+//                                                    ROBOT_UWB_TAG_ID, PIN_UWB_CS);
+// static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
+// static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
+//                                      ROBOT_UWB_TOPIC);
+// static UWBSubsystem g_uwb(g_uwb_setup);
 
 // --- Motor manager subsystem (PCA9685 #1, OE = pin 21) ---
 static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
@@ -193,9 +192,8 @@ void setup() {
   Serial.println(
       PSTR("\r\nSEC26 Robot — All Subsystems Test (TeensyThreads)\r\n"));
 
-  // 0. I2C bus mutexes + SPI for UWB
+  // 0. I2C bus mutexes
   I2CBus::initLocks();
-  SPI.begin();
 
   // 1. Mux reset (if wired)
   pinMode(PIN_MUX_RESET, OUTPUT);
@@ -217,8 +215,9 @@ void setup() {
   g_led.init();
   g_servo.init();
   g_motor.init();
-  g_uwb.init();
-  g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+  // SPI.begin();  // DISABLED — UWB commented out for OLED debug
+  // g_uwb.init();
+  // g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
 
   // 2a. Startup LED flash (green) — show immediately before threads start
   g_led.setAll(0, 32, 0);
@@ -239,7 +238,7 @@ void setup() {
   g_mr.registerParticipant(&g_led);
   g_mr.registerParticipant(&g_servo);
   g_mr.registerParticipant(&g_motor);
-  g_mr.registerParticipant(&g_uwb);
+  // g_mr.registerParticipant(&g_uwb);  // DISABLED — UWB
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
@@ -255,7 +254,7 @@ void setup() {
   g_btn.beginThreaded(1024, 1, 20);            // 50 Hz
   g_led.beginThreaded(1024, 1, 50);            // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
-  g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
+  // g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging — DISABLED
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
 
 }

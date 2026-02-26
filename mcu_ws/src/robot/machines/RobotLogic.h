@@ -42,19 +42,18 @@ using namespace Subsystem;
 static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
 
-// --- OLED display (SSD1306 128x64, software SPI) ---
+// --- OLED display (SSD1306 128x64, hardware SPI1) ---
 // Serial-terminal style: call g_oled.appendText("line") from any subsystem.
 // ROS2 topics: /mcu_robot/lcd/text (append) and /mcu_robot/lcd/scroll (-1/+1).
 // To call from another subsystem header, forward-declare:
 //   extern Subsystem::OLEDSubsystem g_oled;
 //
-// Software SPI: MOSI=11, CLK=13, DC=9, RST=3, CS=10
+// Hardware SPI1: MOSI=26, SCK=27, DC=37, RST=33, CS=38 (per RobotPins.h)
 static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
-                                       /*mosi*/ 11,
-                                       /*clk*/ 13,
-                                       /*dc*/ 9,
-                                       /*rst*/ 3,
-                                       /*cs*/ 10);
+                                       &SPI1,
+                                       /*dc*/ PIN_DISP_DC,
+                                       /*rst*/ PIN_DISP_RST,
+                                       /*cs*/ PIN_DISP_CS);
 static OLEDSubsystem g_oled(g_oled_setup);
 
 // --- Heartbeat subsystem ---
@@ -103,7 +102,7 @@ static Robot::PCA9685Driver* g_pca0 =
         "pca0", DEFAULT_PCA9685_ADDR, DEFAULT_PCA9685_FREQ, Wire2));
 static Robot::PCA9685Driver* g_pca1 =
     g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca1", DEFAULT_PCA9685_ADDR + 1, DEFAULT_PCA9685_FREQ, Wire2));
+        "pca1", DEFAULT_PCA9685_ADDR + 1, MOTOR_PCA9685_FREQ, Wire2));
 
 // --- Arm subsystem ---
 static Drivers::EncoderDriverSetup g_encoder_setup("arm_encoder", /*pin1*/ 1,

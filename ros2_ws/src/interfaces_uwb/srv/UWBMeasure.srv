@@ -1,4 +1,0 @@
-int64 src_address
-int64 dest_address
----
-UWBDistance uwb_distance

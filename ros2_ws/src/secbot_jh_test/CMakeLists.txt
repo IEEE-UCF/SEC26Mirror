@@ -11,7 +11,8 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(mcu_msgs REQUIRED)
-find_package(gz-transport13 QUIET REQUIRED OPTIONAL_COMPONENTS log)
+find_package(gz-transport13 QUIET OPTIONAL_COMPONENTS log)
+find_package(gz-msgs10 QUIET)
 
 #[==[
 If you need files from another workspace like RAFEEDS PID CONTROLLER you can do the whole
@@ -33,6 +34,7 @@ add_executable(keystroke_translator_node
 	${MCU_SOURCES}
 )
 #================================executable for tag-node#================================
+if(gz-transport13_FOUND AND gz-msgs10_FOUND)
 add_executable(uwb_tag_node_cmake
 	src/uwb-test.cpp
 	${MCU_SOURCES}
@@ -53,6 +55,7 @@ target_link_libraries(uwb_tag_node_cmake
 	gz-transport13::gz-transport13
 	gz-msgs10::gz-msgs10
 )
+endif()
 #=========================================================================================
 target_include_directories(keystroke_publish_node PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -93,11 +96,15 @@ install(DIRECTORY
 	# secbot_jh_test
 	DESTINATION share/${PROJECT_NAME}
 )
-install (TARGETS
+set(_JH_TARGETS
 	keystroke_publish_node
 	keystroke_translator_node
-	keystroke_publish_node
-	uwb_tag_node_cmake
+)
+if(gz-transport13_FOUND AND gz-msgs10_FOUND)
+	list(APPEND _JH_TARGETS uwb_tag_node_cmake)
+endif()
+install(TARGETS
+	${_JH_TARGETS}
 	# keystroke_subscribe_node
 	DESTINATION lib/${PROJECT_NAME}
 )

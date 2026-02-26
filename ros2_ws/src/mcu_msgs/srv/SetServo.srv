@@ -1,0 +1,5 @@
+# Service to set a servo angle on the PCA9685
+uint8 index       # servo index (0-7)
+float32 angle     # angle in degrees (0-180)
+---
+bool success

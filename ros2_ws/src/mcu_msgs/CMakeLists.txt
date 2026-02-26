@@ -61,6 +61,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/ArmControl.srv"
   "srv/LCDAppend.srv"
   "srv/OLEDControl.srv"
+  "srv/SetMotor.srv"
+  "srv/SetServo.srv"
   DEPENDENCIES std_msgs geometry_msgs
 )
 

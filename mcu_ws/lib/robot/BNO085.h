@@ -66,15 +66,25 @@ class BNO085Driver : public Classes::BaseDriver {
   void update() override;//constantly read for values and update data in the BNO085Driver Structure
   const char* getInfo() override;
 
+<<<<<<< HEAD
   BNO085DriverData getData() { return data_; };
   float calculateRoll(float qx,float qy,float qz,float qw);
   float calculatePitch(float qx,float qy,float qz,float qw);
+=======
+  BNO085DriverData getData() const { return data_; }
+
+>>>>>>> 24148fbc914056c80cc70e98718723a719880f53
   float calculateYaw(float qx, float qy, float qz, float qw);
   float radians_to_degree(float angle);
  private:
   const BNO085DriverSetup setup_;
+<<<<<<< HEAD
   BNO085DriverData data_; //structure data of the 
   char infoBuffer_[64];
+=======
+  BNO085DriverData data_;
+  char infoBuffer_[64] = {};
+>>>>>>> 24148fbc914056c80cc70e98718723a719880f53
 
   Adafruit_BNO08x imu_; // object instance of the actual IMU sensor
   sh2_SensorValue_t sensorValue_; //structure for sensor value

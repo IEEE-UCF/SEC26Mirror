@@ -87,6 +87,36 @@ void setup() {
   g_drive.begin();
 
   Serial.println("Minibot initialized!");
+
+  // Motor test: forward → stop → forward (500ms each)
+  Serial.println("Motor test: forward 10/255");
+  g_left_motor.setPWM(10);
+  g_right_motor.setPWM(10);
+  g_left_motor.update();
+  g_right_motor.update();
+  delay(500);
+
+  Serial.println("Motor test: stop");
+  g_left_motor.setPWM(0);
+  g_right_motor.setPWM(0);
+  g_left_motor.update();
+  g_right_motor.update();
+  delay(500);
+
+  Serial.println("Motor test: forward 10/255");
+  g_left_motor.setPWM(10);
+  g_right_motor.setPWM(10);
+  g_left_motor.update();
+  g_right_motor.update();
+  delay(500);
+
+  Serial.println("Motor test: stop");
+  g_left_motor.setPWM(0);
+  g_right_motor.setPWM(0);
+  g_left_motor.update();
+  g_right_motor.update();
+
+  Serial.println("Motor test complete.");
 }
 
 void loop() {

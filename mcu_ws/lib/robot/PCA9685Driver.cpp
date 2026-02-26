@@ -17,6 +17,12 @@ bool PCA9685Driver::init() {
   setup_.wire_.begin();
   pwm_.begin();
   pwm_.setPWMFreq(setup_.freq_hz_);
+
+  // Explicitly set all 16 channels to low
+  for (uint8_t ch = 0; ch < 16; ++ch) {
+    pwm_.setPWM(ch, 0, 4096);
+  }
+
   initSuccess_ = true;
   return true;
 }

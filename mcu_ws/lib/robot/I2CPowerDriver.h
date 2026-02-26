@@ -1,104 +1,90 @@
 /**
  * @file I2CPowerDriver.h
  * @author Alexander Peacock
- * @brief Driver for an INA219 I2C power sensor, optionally routed through a
- *        TCA9548A I2C multiplexer.
- * @date 12/14/2025 (updated 2026-02-23)
+ * @brief Defines the Driver for an INA228 I2C power sensor
+ * @date 12/14/2025
  */
 
 #ifndef I2CPOWERDRIVER_H
 #define I2CPOWERDRIVER_H
 
-#include <Adafruit_INA219.h>
+#include <Adafruit_INA228.h>
 #include <Arduino.h>
 #include <BaseDriver.h>
-#include <Wire.h>
 
-#include "I2CBusLock.h"
+#include <string>
 
 namespace Drivers {
-
-// Forward declaration — keeps I2CPowerDriver.h independent of I2CMuxDriver.h.
-class I2CMuxDriver;
 
 class I2CPowerDriverSetup : public Classes::BaseSetup {
  public:
   ~I2CPowerDriverSetup() = default;
   I2CPowerDriverSetup() = delete;
 
-  /**
-   * @param _id         Driver identifier string.
-   * @param address     INA219 I2C address (default 0x40, range 0x40–0x4F).
-   * @param mux         Pointer to an initialised I2CMuxDriver, or nullptr when
-   *                    the INA219 is wired directly on the I2C bus.
-   * @param muxChannel  TCA9548A channel (0–7) the INA219 is behind.
-   *                    Ignored when mux == nullptr.
-   * @param wire        I2C bus the INA219 is on (must match the mux's bus).
-   * @param shuntOhm    Shunt resistor value in ohms. The Adafruit library
-   *                    assumes 0.1 Ω; override here for custom hardware.
-   *                    Current and power are derived from the raw shunt voltage
-   *                    so the library's calibration register is not used for
-   *                    those readings.
-   */
   I2CPowerDriverSetup(const char* _id, uint8_t address = 0x40,
-                      I2CMuxDriver* mux = nullptr, uint8_t muxChannel = 0,
-                      TwoWire& wire = Wire, float shuntOhm = 0.1f)
+                      float maxCurrent = 10, float shuntRes = 0.015)
       : Classes::BaseSetup(_id),
         _address(address),
-        _mux(mux),
-        _muxChannel(muxChannel),
-        _wire(wire),
-        _shuntOhm(shuntOhm) {}
+        _maxCurrent(maxCurrent),
+        _shuntRes(shuntRes){};
 
-  const uint8_t _address;
-  I2CMuxDriver* _mux;
-  const uint8_t _muxChannel;
-  TwoWire& _wire;
-  const float _shuntOhm;
+  const uint8_t _address;   // i2c address default is 0x40
+  const float _maxCurrent;  // max current
+  const float _shuntRes;    // shunt resistance
 };
 
 struct PowerDriverData {
-  float currentmA = 0.0f;       ///< mA
-  float busVoltage = 0.0f;      ///< V
-  float shuntVoltagemV = 0.0f;  ///< mV
-  float loadVoltage = 0.0f;     ///< V  (= busVoltage + shuntVoltagemV/1000)
-  float powermW = 0.0f;         ///< mW
+  float currentmA = 0.0f;
+  float busVoltage = 0.0f;
+  float shuntVoltagemW = 0.0f;
+  float powermW = 0.0f;
+  float energy = 0.0f;
+  float charge = 0.0f;
+  float temp = 0.0f;
 };
 
 class I2CPowerDriver : public Classes::BaseDriver {
  public:
-  explicit I2CPowerDriver(const I2CPowerDriverSetup& setup)
-      : BaseDriver(setup), _setup(setup), _sensor(setup._address) {}
+  I2CPowerDriver(const I2CPowerDriverSetup& setup)
+      : BaseDriver(setup), _setup(setup){};
 
   ~I2CPowerDriver() override = default;
 
-  /// @brief Initialise I2C, select mux channel (if configured), begin INA219.
+  /// @brief  Initialize driver
+  /// @return Success
   bool init() override;
 
-  /// @brief Read all sensor channels and cache the results.
+  /// @brief Update driver
+  /// @return float
   void update() override;
 
-  /// @brief Load voltage in volts (= bus + shunt-drop compensation).
-  float getVoltage() const;
+  /// @brief  Get bus voltage
+  /// @return float
+  float getVoltage();
 
-  /// @brief Current in milliamperes.
-  float getCurrentmA() const;
+  /// @brief  Get current
+  /// @return float
+  float getCurrentmA();
 
-  /// @brief Power in milliwatts.
-  float getPowermW() const;
+  /// @brief  Get power
+  /// @return float
+  float getPowermW();
 
-  /// @brief Shunt voltage in millivolts.
-  float getShuntVoltagemV() const;
+  /// @brief  Get temperature
+  /// @return float
+  float getTemp();
 
+  /// @brief Get info in the form of a data string
+  /// @return data string
   const char* getInfo() override;
 
  private:
   const I2CPowerDriverSetup _setup;
   PowerDriverData _data;
-  Adafruit_INA219 _sensor;
-  char _infoBuf[128] = {};
+
+  Adafruit_INA228 _sensor;
 };
 
-}  // namespace Drivers
+};  // namespace Drivers
 
 #endif

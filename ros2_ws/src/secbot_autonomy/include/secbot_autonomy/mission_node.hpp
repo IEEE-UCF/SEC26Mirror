@@ -64,8 +64,7 @@ enum class MissionPhase : uint8_t {
   LAUNCH_DRONE = 19,
   NAV_TO_FINISH = 20,
   MISSION_COMPLETE = 21,
-  // Duck interrupt states (entered from any NAV phase after
-  // COLLECT_KNOWN_DUCKS)
+  // Duck interrupt states (entered from any NAV phase after COLLECT_KNOWN_DUCKS)
   DUCK_INTERRUPT_NAV,
   DUCK_INTERRUPT_CAPTURE,
   DUCK_INTERRUPT_DEPOSIT_NAV,

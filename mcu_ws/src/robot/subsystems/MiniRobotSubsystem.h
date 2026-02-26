@@ -3,8 +3,8 @@
 #include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
 #endif
 
 #include "Pose2D.h"
@@ -130,11 +130,11 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   Pose2D getTargetPosition() const { return target_position_; }
   float getDistanceToTarget() const;
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
                      uint32_t updateRateMs = 100) {
     task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
   }
 
  private:
@@ -143,7 +143,7 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
     }
   }
   uint32_t task_delay_ms_ = 100;

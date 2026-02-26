@@ -17,8 +17,8 @@
 #include "PCA9685Driver.h"
 #include "robot/drive-base/EncoderDriver.h"
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
 #endif
 
 namespace Subsystem {
@@ -153,11 +153,11 @@ class ArmSubsystem : public IMicroRosParticipant,
     // rosidl_runtime_c__String__assign(&response->message, "Command accepted");
   }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
   }
 
  private:
@@ -166,7 +166,7 @@ class ArmSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
     }
   }
   uint32_t task_delay_ms_ = 20;

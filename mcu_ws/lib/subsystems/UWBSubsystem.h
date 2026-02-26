@@ -13,11 +13,6 @@
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
-#include <stdio.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 #include "TimedSubsystem.h"
 #include "UWBDriver.h"
@@ -62,52 +57,21 @@ class UWBSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 10) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<UWBSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 10;
-#endif
-
  private:
   void publishRanging();
   void updateRangingMessage();
-  void publishPeerRanges();
 
-  static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;  // 10 Hz (TAG mode)
-  static constexpr uint32_t RANGING_INTERVAL_MS = 50;   // 20 Hz (TAG mode)
-  static constexpr uint32_t PEER_PUBLISH_INTERVAL_MS =
-      500;                                     // 2 Hz (inter-beacon)
-  static constexpr uint8_t MAX_PEER_PUBS = 2;  // max peers per beacon
+  static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;  // Publish at 10 Hz
+  static constexpr uint32_t RANGING_INTERVAL_MS = 50;   // Range at 20 Hz
 
   const UWBSubsystemSetup setup_;
 
-  // TAG mode publisher
   rcl_publisher_t pub_{};
   mcu_msgs__msg__UWBRanging msg_{};
   rcl_node_t* node_ = nullptr;
 
   bool is_tag_mode_ = false;
   elapsedMillis ranging_timer_;
-
-  // Inter-beacon peer publishers (ANCHOR mode with peers)
-  bool has_peer_ranging_ = false;
-  rcl_publisher_t peer_pubs_[MAX_PEER_PUBS] = {};
-  mcu_msgs__msg__UWBRange peer_msgs_[MAX_PEER_PUBS] = {};
-  char peer_topic_names_[MAX_PEER_PUBS][32] = {};
-  uint8_t num_peer_pubs_ = 0;
 };
 
 }  // namespace Subsystem

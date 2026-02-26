@@ -94,9 +94,9 @@ bool IntakeSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void IntakeSubsystem::onDestroy() {
-  // destroy_entities() finalises the rcl_node before calling onDestroy, so
-  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
-  state_pub_ = rcl_get_zero_initialized_publisher();
+  if (state_pub_.impl) {
+    (void)rcl_publisher_fini(&state_pub_, node_);
+  }
   mcu_msgs__msg__IntakeState__fini(&state_msg_);
   node_ = nullptr;
 }

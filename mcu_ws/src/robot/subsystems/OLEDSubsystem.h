@@ -30,17 +30,16 @@
 #include <Adafruit_SSD1306.h>
 #include <BaseSubsystem.h>
 #include <mcu_msgs/srv/lcd_append.h>
-#include <microros_manager_robot.h>
 #include <std_msgs/msg/int8.h>
+#include <microros_manager_robot.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
 #endif
 
 namespace Subsystem {
 
-// ── Setup
-// ─────────────────────────────────────────────────────────────────────
+// ── Setup ─────────────────────────────────────────────────────────────────────
 
 class OLEDSubsystemSetup : public Classes::BaseSetup {
  public:
@@ -62,34 +61,33 @@ class OLEDSubsystemSetup : public Classes::BaseSetup {
         cs_pin_(cs_pin) {}
 
   int8_t mosi_pin_ = -1;
-  int8_t clk_pin_ = -1;
-  int8_t dc_pin_ = -1;
-  int8_t rst_pin_ = -1;
-  int8_t cs_pin_ = -1;
+  int8_t clk_pin_  = -1;
+  int8_t dc_pin_   = -1;
+  int8_t rst_pin_  = -1;
+  int8_t cs_pin_   = -1;
 };
 
-// ── Subsystem
-// ─────────────────────────────────────────────────────────────────
+// ── Subsystem ─────────────────────────────────────────────────────────────────
 
 class OLEDSubsystem : public IMicroRosParticipant,
                       public Classes::BaseSubsystem {
  public:
   // ── Display geometry ──────────────────────────────────────────────────────
-  static constexpr uint8_t DISPLAY_W = 128;
-  static constexpr uint8_t DISPLAY_H = 64;
-  static constexpr int LINES_VISIBLE = 8;  // 64 px / 8 px per text-size-1 row
-  static constexpr int MAX_LINE_LEN = 21;  // floor(128 px / 6 px per char)
-  static constexpr int MAX_LINES = 128;    // ring-buffer depth
-  static constexpr int TEXT_BUF_CAP = MAX_LINES * (MAX_LINE_LEN + 1);  // 2816 B
+  static constexpr uint8_t DISPLAY_W    = 128;
+  static constexpr uint8_t DISPLAY_H    = 64;
+  static constexpr int     LINES_VISIBLE = 8;   // 64 px / 8 px per text-size-1 row
+  static constexpr int     MAX_LINE_LEN  = 21;  // floor(128 px / 6 px per char)
+  static constexpr int     MAX_LINES     = 128; // ring-buffer depth
+  static constexpr int     TEXT_BUF_CAP  = MAX_LINES * (MAX_LINE_LEN + 1); // 2816 B
 
   explicit OLEDSubsystem(const OLEDSubsystemSetup& setup);
 
   // ── BaseSubsystem lifecycle ───────────────────────────────────────────────
-  bool init() override;
-  void begin() override {}
-  void update() override;
-  void pause() override {}
-  void reset() override;
+  bool        init()    override;
+  void        begin()   override {}
+  void        update()  override;
+  void        pause()   override {}
+  void        reset()   override;
   const char* getInfo() override;
 
   // ── IMicroRosParticipant ──────────────────────────────────────────────────
@@ -108,21 +106,21 @@ class OLEDSubsystem : public IMicroRosParticipant,
    */
   void scrollBy(int8_t delta);
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
                      uint32_t updateRateMs = 50) {
     task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
   }
 #endif
 
  private:
   // ── Ring buffer ───────────────────────────────────────────────────────────
   char lines_[MAX_LINES][MAX_LINE_LEN + 1] = {};
-  int next_write_ = 0;     // next write index in ring
-  int total_written_ = 0;  // lines ever written, capped at MAX_LINES
-  int view_offset_ = 0;    // 0 = live (newest visible); N = scrolled N back
-  bool dirty_ = false;
+  int  next_write_    = 0;  // next write index in ring
+  int  total_written_ = 0;  // lines ever written, capped at MAX_LINES
+  int  view_offset_   = 0;  // 0 = live (newest visible); N = scrolled N back
+  bool dirty_         = false;
 
   // ── Render helpers ────────────────────────────────────────────────────────
   void appendOneLine(const char* s, int len);
@@ -130,46 +128,47 @@ class OLEDSubsystem : public IMicroRosParticipant,
   void flushDisplay();
 
   // ── micro-ROS: LCD append service ─────────────────────────────────────────
-  void handleAppend(const mcu_msgs__srv__LCDAppend_Request* req,
-                    mcu_msgs__srv__LCDAppend_Response* res);
+  void handleAppend(const mcu_msgs__srv__LCDAppend_Request*  req,
+                          mcu_msgs__srv__LCDAppend_Response* res);
   static void appendServiceCallback(const void* req, void* res, void* ctx);
 
-  char lcd_text_buf_[TEXT_BUF_CAP] = {};
-  mcu_msgs__srv__LCDAppend_Request lcd_req_{};
-  mcu_msgs__srv__LCDAppend_Response lcd_res_{};
-  rcl_service_t lcd_srv_{};
+  char                               lcd_text_buf_[TEXT_BUF_CAP] = {};
+  mcu_msgs__srv__LCDAppend_Request   lcd_req_{};
+  mcu_msgs__srv__LCDAppend_Response  lcd_res_{};
+  rcl_service_t                      lcd_srv_{};
 
   // ── micro-ROS: scroll topic ───────────────────────────────────────────────
   static void scrollCallback(const void* msg, void* ctx);
 
   std_msgs__msg__Int8 scroll_msg_ = {};
-  rcl_subscription_t scroll_sub_ = {};
+  rcl_subscription_t  scroll_sub_ = {};
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   static void taskFunction(void* pv) {
     auto* self = static_cast<OLEDSubsystem*>(pv);
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
     }
   }
 
-  Threads::Mutex mutex_;
-  uint32_t task_delay_ms_ = 50;
+  SemaphoreHandle_t mutex_         = nullptr;
+  uint32_t          task_delay_ms_ = 50;
 
   bool takeMutex() {
-    mutex_.lock();
-    return true;
+    return mutex_ && xSemaphoreTake(mutex_, pdMS_TO_TICKS(10)) == pdTRUE;
   }
-  void giveMutex() { mutex_.unlock(); }
+  void giveMutex() {
+    if (mutex_) xSemaphoreGive(mutex_);
+  }
 #else
   bool takeMutex() { return true; }
   void giveMutex() {}
 #endif
 
   const OLEDSubsystemSetup setup_;
-  Adafruit_SSD1306 display_;
+  Adafruit_SSD1306         display_;
 
   rcl_node_t* node_ = nullptr;
 };

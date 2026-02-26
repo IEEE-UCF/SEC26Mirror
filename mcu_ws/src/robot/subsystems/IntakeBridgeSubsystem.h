@@ -27,7 +27,11 @@ enum class IntakeBridgeState : uint8_t {
 /**
  * @brief Commands for the intake bridge
  */
-enum class IntakeBridgeCommand : uint8_t { STOW = 0, EXTEND = 1, RETRACT = 2 };
+enum class IntakeBridgeCommand : uint8_t {
+  STOW = 0,
+  EXTEND = 1,
+  RETRACT = 2
+};
 
 /**
  * @brief Setup configuration for IntakeBridgeSubsystem
@@ -35,12 +39,13 @@ enum class IntakeBridgeCommand : uint8_t { STOW = 0, EXTEND = 1, RETRACT = 2 };
 class IntakeBridgeSubsystemSetup : public Classes::BaseSetup {
  public:
   IntakeBridgeSubsystemSetup(const char* _id, uint8_t rack_pwm_pin,
-                             uint8_t rack_dir_pin, uint8_t home_switch_pin,
-                             uint8_t tof_xshut_pin, uint8_t tof_i2c_addr = 0x30,
-                             uint32_t extend_timeout_ms = 3000,
-                             uint32_t retract_timeout_ms = 3000,
-                             uint16_t duck_detect_threshold_mm = 50,
-                             uint8_t motor_speed = 200)
+                              uint8_t rack_dir_pin, uint8_t home_switch_pin,
+                              uint8_t tof_xshut_pin,
+                              uint8_t tof_i2c_addr = 0x30,
+                              uint32_t extend_timeout_ms = 3000,
+                              uint32_t retract_timeout_ms = 3000,
+                              uint16_t duck_detect_threshold_mm = 50,
+                              uint8_t motor_speed = 200)
       : Classes::BaseSetup(_id),
         rack_pwm_pin_(rack_pwm_pin),
         rack_dir_pin_(rack_dir_pin),
@@ -54,10 +59,9 @@ class IntakeBridgeSubsystemSetup : public Classes::BaseSetup {
 
   uint8_t rack_pwm_pin_;
   uint8_t rack_dir_pin_;
-  uint8_t
-      home_switch_pin_;    // Limit switch at home/stowed position (active LOW)
-  uint8_t tof_xshut_pin_;  // XSHUT pin for VL53L0X address config
-  uint8_t tof_i2c_addr_;   // I2C address for VL53L0X
+  uint8_t home_switch_pin_;            // Limit switch at home/stowed position (active LOW)
+  uint8_t tof_xshut_pin_;              // XSHUT pin for VL53L0X address config
+  uint8_t tof_i2c_addr_;               // I2C address for VL53L0X
   uint32_t extend_timeout_ms_;         // Max time to extend (safety fallback)
   uint32_t retract_timeout_ms_;        // Max time to retract (safety fallback)
   uint16_t duck_detect_threshold_mm_;  // TOF distance below which duck detected
@@ -153,8 +157,7 @@ class IntakeBridgeSubsystem : public IMicroRosParticipant,
   // Sensor State
   bool duck_detected_ = false;
   uint16_t tof_distance_mm_ = 0;
-  bool home_switch_active_ =
-      false;  // true when home switch reads LOW (at home)
+  bool home_switch_active_ = false;  // true when home switch reads LOW (at home)
 
   // Motor State
   enum class MotorState : uint8_t { OFF = 0, EXTENDING = 1, RETRACTING = 2 };

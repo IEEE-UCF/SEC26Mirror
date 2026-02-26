@@ -69,7 +69,6 @@ mcu_ws/.vscode/*
 # ai agents
 .claude/*
 <<<<<<< HEAD
-<<<<<<< HEAD
 
 #specific fix for jh directory
 ros2_ws/src/build/
@@ -84,8 +83,5 @@ ros2_ws/src/log
 **/install/
 **/log/
 =======
-=======
-!.claude/commands/
->>>>>>> 24148fbc914056c80cc70e98718723a719880f53
 !.claude/skills/
 >>>>>>> 1efe8ca348ef17c6d21aa1f5e5f0f24367ae9fe0

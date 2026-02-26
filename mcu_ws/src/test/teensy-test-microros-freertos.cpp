@@ -1,20 +1,22 @@
 /**
  * @file teensy-test-microros-freertos.cpp
- * @brief TeensyThreads + micro-ROS integration test for Teensy41
+ * @brief FreeRTOS + micro-ROS integration test for Teensy41
  *
- * Creates threads using the beginThreaded() API:
+ * Creates FreeRTOS tasks using the beginThreaded() API:
  *   1. micro-ROS task — runs the MicrorosManager state machine
  *   2. blink task — toggles LED to confirm scheduler is running
  *   3. status task — publishes status when connected
  */
 
 #include <Arduino.h>
-#include <TeensyThreads.h>
+
+#include <mutex>
 
 #include "ExampleMicrorosSubsystem.h"
+#include "arduino_freertos.h"
 #include "microros_manager_robot.h"
 
-static Subsystem::MicrorosManagerSetup g_mr_setup("microros_test");
+static Subsystem::MicrorosManagerSetup g_mr_setup("microros_freertos_test");
 static Subsystem::MicrorosManager g_mr(g_mr_setup);
 
 static Subsystem::ExampleSubsystemSetup g_ex_setup("example_sub_test");
@@ -24,19 +26,19 @@ static void blink_task(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
     digitalWriteFast(LED_BUILTIN, HIGH);
-    threads.delay(500);
+    vTaskDelay(pdMS_TO_TICKS(500));
     digitalWriteFast(LED_BUILTIN, LOW);
-    threads.delay(500);
+    vTaskDelay(pdMS_TO_TICKS(500));
   }
 }
 
 static void status_task(void*) {
   while (true) {
     if (g_mr.isConnected()) {
-      Threads::Scope guard(g_mr.getMutex());
+      std::lock_guard<std::mutex> guard(g_mr.getMutex());
       g_ex.publishStatus("OK");
     }
-    threads.delay(1000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
@@ -48,17 +50,21 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR("\r\nTeensyThreads + micro-ROS test.\r\n"));
+  Serial.println(
+      PSTR("\r\nFreeRTOS + micro-ROS test. Kernel " tskKERNEL_VERSION_NUMBER
+           "\r\n"));
 
   g_mr.init();
   g_mr.registerParticipant(&g_ex);
 
   g_mr.beginThreaded(8192, 3);
-  threads.addThread(blink_task, nullptr, 512);
-  threads.addThread(status_task, nullptr, 1024);
+  xTaskCreate(blink_task, "blink", 128, nullptr, 2, nullptr);
+  xTaskCreate(status_task, "status", 512, nullptr, 2, nullptr);
 
-  Serial.println(PSTR("setup(): threads started."));
+  Serial.println(PSTR("setup(): starting scheduler..."));
   Serial.flush();
+
+  vTaskStartScheduler();
 }
 
-void loop() { threads.delay(100); }
+void loop() {}

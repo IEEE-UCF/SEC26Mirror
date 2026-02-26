@@ -1,8 +1,7 @@
 /**
  * @file MinibotDriveSubsystem.h
  * @author Rafeed Khan
- * @brief Micro-ROS subsystem that receives Twist commands and drives minibot
- * motors
+ * @brief Micro-ROS subsystem that receives Twist commands and drives minibot motors
  */
 #pragma once
 
@@ -22,9 +21,10 @@ class MinibotDriveSubsystemSetup : public Classes::BaseSetup {
   Drivers::MotorDriver* right_motor;
   float speed_scale;
 
-  MinibotDriveSubsystemSetup(const char* _id, Drivers::MotorDriver* _left,
-                             Drivers::MotorDriver* _right,
-                             float _speed_scale = 255.0f)
+  MinibotDriveSubsystemSetup(const char* _id,
+                              Drivers::MotorDriver* _left,
+                              Drivers::MotorDriver* _right,
+                              float _speed_scale = 255.0f)
       : Classes::BaseSetup(_id),
         left_motor(_left),
         right_motor(_right),
@@ -32,7 +32,7 @@ class MinibotDriveSubsystemSetup : public Classes::BaseSetup {
 };
 
 class MinibotDriveSubsystem : public IMicroRosParticipant,
-                              public Subsystem::TimedSubsystem {
+                               public Subsystem::TimedSubsystem {
  public:
   explicit MinibotDriveSubsystem(const MinibotDriveSubsystemSetup& setup)
       : Subsystem::TimedSubsystem(setup), setup_(setup) {}
@@ -75,19 +75,18 @@ class MinibotDriveSubsystem : public IMicroRosParticipant,
     geometry_msgs__msg__Twist__init(&twist_msg_);
     mcu_msgs__msg__MiniRobotState__init(&state_msg_);
 
-    if (RCL_RET_OK !=
-        rclc_publisher_init_best_effort(
-            &state_pub_, node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, MiniRobotState),
-            "/mcu_minibot/state")) {
+    if (RCL_RET_OK != rclc_publisher_init_best_effort(
+                          &state_pub_, node,
+                          ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg,
+                                                      MiniRobotState),
+                          "/mcu_minibot/state")) {
       return false;
     }
 
-    if (RCL_RET_OK !=
-        rclc_subscription_init_best_effort(
-            &twist_sub_, node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-            "/mcu_minibot/cmd_vel")) {
+    if (RCL_RET_OK != rclc_subscription_init_best_effort(
+                          &twist_sub_, node,
+                          ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
+                          "/mcu_minibot/cmd_vel")) {
       return false;
     }
 
@@ -139,7 +138,8 @@ class MinibotDriveSubsystem : public IMicroRosParticipant,
     if (!state_pub_.impl) return;
 
     state_msg_.header.stamp.sec = (int32_t)(millis() / 1000);
-    state_msg_.header.stamp.nanosec = (uint32_t)((millis() % 1000) * 1000000);
+    state_msg_.header.stamp.nanosec =
+        (uint32_t)((millis() % 1000) * 1000000);
     state_msg_.state = mission_state_;
     state_msg_.current_task = current_task_;
 

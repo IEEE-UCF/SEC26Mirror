@@ -1,5 +1,0 @@
-# Set a specific servo to a target angle.
-uint8 index        # Servo index (0-7)
-float32 angle      # Target angle in degrees (0.0-180.0)
----
-bool success

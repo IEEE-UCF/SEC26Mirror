@@ -19,8 +19,9 @@ float clamp01(float x) {
 PressureClearTask::PressureClearTask(rclcpp::Node::SharedPtr node,
                                      const PressureClearConfig& cfg)
     : TaskBase(node), cfg_(cfg) {
-  bridge_cmd_pub_ = node_->create_publisher<mcu_msgs::msg::IntakeBridgeCommand>(
-      cfg_.bridge_command_topic, 10);
+  bridge_cmd_pub_ =
+      node_->create_publisher<mcu_msgs::msg::IntakeBridgeCommand>(
+          cfg_.bridge_command_topic, 10);
 
   if (cfg_.intake_speed != 0) {
     intake_pub_ =
@@ -90,8 +91,9 @@ void PressureClearTask::step() {
   }
 
   // Progress estimate
-  const float est_total = cfg_.settle_s + cfg_.extend_timeout_s +
-                          cfg_.capture_timeout_s + cfg_.retract_timeout_s;
+  const float est_total =
+      cfg_.settle_s + cfg_.extend_timeout_s + cfg_.capture_timeout_s +
+      cfg_.retract_timeout_s;
   if (est_total > 0.001f) {
     progress_ = clamp01(t_total / est_total);
   }
@@ -110,7 +112,8 @@ void PressureClearTask::step() {
 
     case State::kExtendBridge:
       // Wait for bridge to report EXTENDED or timeout
-      if (bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED) {
+      if (bridge_state_ ==
+          mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED) {
         enterState(State::kWaitCapture);
         RCLCPP_INFO(node_->get_logger(),
                     "PressureClear: Bridge extended, waiting for duck");
@@ -128,7 +131,8 @@ void PressureClearTask::step() {
         // Duck detected, brief extra wait then retract
         if (t_state >= cfg_.capture_wait_s) {
           enterState(State::kRetractBridge);
-          sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT);
+          sendBridgeCommand(
+              mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT);
           RCLCPP_INFO(node_->get_logger(),
                       "PressureClear: Duck captured! Retracting bridge");
         }
@@ -143,7 +147,8 @@ void PressureClearTask::step() {
 
     case State::kRetractBridge:
       // Wait for bridge to report STOWED or timeout
-      if (bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_STOWED) {
+      if (bridge_state_ ==
+          mcu_msgs::msg::IntakeBridgeState::STATE_STOWED) {
         commandIntake(0);
         status_ = TaskStatus::kSucceeded;
         progress_ = 1.0f;

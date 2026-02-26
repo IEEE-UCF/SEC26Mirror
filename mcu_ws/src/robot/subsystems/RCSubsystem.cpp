@@ -54,9 +54,9 @@ bool RCSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void RCSubsystem::onDestroy() {
-  // destroy_entities() finalises the rcl_node before calling onDestroy, so
-  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
-  pub_ = rcl_get_zero_initialized_publisher();
+  if (pub_.impl) {
+    (void)rcl_publisher_fini(&pub_, node_);
+  }
   mcu_msgs__msg__RC__fini(&msg_);
   node_ = nullptr;
 }

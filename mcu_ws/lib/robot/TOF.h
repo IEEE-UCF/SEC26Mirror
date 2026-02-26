@@ -1,8 +1,9 @@
 /**
  * @file TOF.h
  * @author Trevor Cannon
- * @brief VL53L0X time-of-flight distance sensor driver.
- * @date 12/10/2025 (updated 2026-02-23)
+ * @brief Defines TOF driver wrapper for
+ * VL53L0X TOF sensor
+ * @date 12/10/2025
  */
 
 #ifndef VL53L0XWRAPPER_H
@@ -10,9 +11,8 @@
 
 #include <BaseDriver.h>
 #include <VL53L0X.h>
-#include <Wire.h>
 
-#include "I2CBusLock.h"
+#include <string>
 
 namespace Drivers {
 
@@ -24,36 +24,36 @@ class TOFDriverSetup : public Classes::BaseSetup {
   ~TOFDriverSetup() = default;
   TOFDriverSetup() = delete;
 
-  /**
-   * @param _id      Driver identifier string.
-   * @param _timeout Range timeout in ms (default 500).
-   * @param _cooldown Continuous-mode inter-measurement period ms (default 0).
-   * @param wire     I2C bus the sensor is on (default Wire / Wire0).
-   */
   TOFDriverSetup(const char* _id, uint16_t _timeout = 500,
-                 uint16_t _cooldown = 0, TwoWire& wire = Wire)
-      : Classes::BaseSetup(_id),
-        timeout(_timeout),
-        cooldown(_cooldown),
-        wire_(wire) {}
+                 uint16_t _cooldown = 0)
+      : Classes::BaseSetup(_id), timeout(_timeout), cooldown(_cooldown){};
 
-  TwoWire& wire_;
+ private:
 };
 
 struct TOFDriverData {
-  uint16_t range = 0;
+  uint16_t range;
 };
 
 class TOFDriver : public Classes::BaseDriver {
  public:
-  explicit TOFDriver(const TOFDriverSetup& setup)
-      : BaseDriver(setup), setup_(setup) {}
+  TOFDriver(const TOFDriverSetup& setup) : BaseDriver(setup), setup_(setup){};
 
   ~TOFDriver() override = default;
 
+  /// @brief  Initialize driver
+  /// @return Success
   bool init() override;
+
+  /// @brief Update driver
   void update() override;
-  TOFDriverData read() { return range_; }
+
+  /// @brief  Get data
+  /// @return data
+  TOFDriverData read() { return range_; };
+
+  /// @brief Get info in the form of a data string
+  /// @return data string
   const char* getInfo() override;
 
  private:
@@ -61,7 +61,6 @@ class TOFDriver : public Classes::BaseDriver {
   VL53L0X sensor_;
   TOFDriverData range_;
 };
-
-}  // namespace Drivers
+};  // namespace Drivers
 
 #endif

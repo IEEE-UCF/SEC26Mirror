@@ -52,10 +52,8 @@ bool DriveSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void DriveSubsystem::onDestroy() {
-  // destroy_entities() finalises the rcl_node before calling onDestroy, so
-  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
-  drive_pub_ = rcl_get_zero_initialized_publisher();
-  drive_sub_ = rcl_get_zero_initialized_subscription();
+  rcl_publisher_fini(&drive_pub_, node_);
+  rcl_subscription_fini(&drive_sub_, node_);
   mcu_msgs__msg__DriveBase__fini(&drive_msg_);
 
   node_ = nullptr;

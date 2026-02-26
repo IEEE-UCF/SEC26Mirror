@@ -54,7 +54,7 @@ void UWB_Tag_Sim::rostwo_executor_callback(){
             double simulated_distance = distance + distribution_normal(tandomGenerator);
             mcu_msgs::msg::UWBRange range_info;
 
-            if(tag_name=="Drone"||tag_name=="tag_20") range_info.tag_id=20;
+            if(tag_name=="Drone") range_info.tag_id=20;
             if(tag_name=="MiniBot") range_info.tag_id = 21;
             rclcpp::Time now = this->now();
             if(name.find("anchor_10")!=std::string::npos){

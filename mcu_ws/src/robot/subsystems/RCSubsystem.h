@@ -14,8 +14,8 @@
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include "arduino_freertos.h"
 #endif
 
 namespace Subsystem {
@@ -73,11 +73,11 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+#ifdef USE_FREERTOS
+  void beginThreaded(uint32_t stackSize, UBaseType_t priority,
                      uint32_t updateRateMs = 5) {
     task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
+    xTaskCreate(taskFunction, getInfo(), stackSize, this, priority, nullptr);
   }
 
  private:
@@ -86,7 +86,7 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
     }
   }
   uint32_t task_delay_ms_ = 5;

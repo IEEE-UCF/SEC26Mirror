@@ -32,11 +32,11 @@ struct PressureClearConfig {
   int16_t intake_speed = 200;
 
   /// Timing (seconds)
-  float settle_s = 0.20f;          ///< Initial pause before extending
-  float extend_timeout_s = 3.0f;   ///< Max time to wait for bridge to extend
-  float capture_timeout_s = 2.0f;  ///< Max time to wait for duck detection
-  float retract_timeout_s = 3.0f;  ///< Max time to wait for bridge to retract
-  float capture_wait_s = 0.20f;    ///< Extra time after duck detected
+  float settle_s = 0.20f;           ///< Initial pause before extending
+  float extend_timeout_s = 3.0f;    ///< Max time to wait for bridge to extend
+  float capture_timeout_s = 2.0f;   ///< Max time to wait for duck detection
+  float retract_timeout_s = 3.0f;   ///< Max time to wait for bridge to retract
+  float capture_wait_s = 0.20f;     ///< Extra time after duck detected
 
   /// Safety timeout for entire task
   float timeout_s = 12.0f;
@@ -83,7 +83,8 @@ class PressureClearTask : public TaskBase {
   void commandIntake(int16_t speed);
 
   // Callback
-  void onBridgeState(const mcu_msgs::msg::IntakeBridgeState::SharedPtr msg);
+  void onBridgeState(
+      const mcu_msgs::msg::IntakeBridgeState::SharedPtr msg);
 
   PressureClearConfig cfg_;
   State state_ = State::kIdle;

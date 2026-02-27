@@ -1,18 +1,16 @@
 #ifndef RANSAC_LOCATOR_H
 #define RANSAC_LOCATOR_H
 
-#include <stdlib.h>
+#include <assert.h>
+#include <float.h>
+#include <gsl/gsl_multifit.h>
 #include <math.h>
 #include <stdbool.h>
-#include <float.h>
+#include <stdlib.h>
 #include <string.h>
-#include <assert.h>
-
 
 #include <unordered_map>
 #include <unordered_set>
-
-#include <gsl/gsl_multifit.h>
 
 #include "nav_msgs/msg/odometry.hpp"
 
@@ -22,21 +20,19 @@
 #define PI 3.1415926535
 #define EPS 0.0000001
 
-typedef struct
-{
-    double x;
-    double y;
-    double z;
+typedef struct {
+  double x;
+  double y;
+  double z;
 } Position3D;
 
-enum LOCATOR_RETURN
-{
-    CALCULATE_SUCCESS,
-    EFFECTIVE_LANDMARK_TOO_SMALL,
-    EFFECTIVE_LANDMARK_LESS_2,
-    anchor_ON_ONE_LINE,
-    CONDITIONAL_NUMBER_TOO_LARGE,
-    FIT_FAILED
+enum LOCATOR_RETURN {
+  CALCULATE_SUCCESS,
+  EFFECTIVE_LANDMARK_TOO_SMALL,
+  EFFECTIVE_LANDMARK_LESS_2,
+  anchor_ON_ONE_LINE,
+  CONDITIONAL_NUMBER_TOO_LARGE,
+  FIT_FAILED
 
 };
 
@@ -59,20 +55,17 @@ calculate_pos_with_index_(std::unordered_map<int, Position3D> anchorPoseMap,
                           std::unordered_map<int, double> distances,
                           std::vector<int> effective_landmark_indexes,
                           Position3D &res);
-bool
-is_landmarks_in_one_line(std::unordered_map<int, Position3D> anchorPoseMap,
-                         std::vector<int> effective_landmark_indexes);
+bool is_landmarks_in_one_line(std::unordered_map<int, Position3D> anchorPoseMap,
+                              std::vector<int> effective_landmark_indexes);
 
 bool get_sample_indexes_(std::vector<int> indexes,
-                         std::vector<int> &sample_indexes,
-                         int each_sample_cnt);
+                         std::vector<int> &sample_indexes, int each_sample_cnt);
 
 void get_all_fit_indexes_(std::unordered_map<int, Position3D> anchorPoseMap,
-                         std::unordered_map<int, double> distances,
-                         std::vector<int> sample_indexes,
-                         Position3D p,
-                         double threshold,
-                         std::vector<int> &all_fit_indexes_out,
-                         double &total_residual_out);
-                         
-#endif // RANSAC_LOCATOR
+                          std::unordered_map<int, double> distances,
+                          std::vector<int> sample_indexes, Position3D p,
+                          double threshold,
+                          std::vector<int> &all_fit_indexes_out,
+                          double &total_residual_out);
+
+#endif  // RANSAC_LOCATOR

@@ -37,7 +37,8 @@ DStarLite::DStarLite(GridMap &grid_map, Node start, Node goal,
 }
 
 // === Heuristic ===
-// Octile distance: consistent with 8-directional movement (cardinal=1, diagonal=sqrt(2))
+// Octile distance: consistent with 8-directional movement (cardinal=1,
+// diagonal=sqrt(2))
 double DStarLite::distance_between_points(const Node &a, const Node &b) const {
   double dr = std::abs(a.r - b.r);
   double dc = std::abs(a.c - b.c);

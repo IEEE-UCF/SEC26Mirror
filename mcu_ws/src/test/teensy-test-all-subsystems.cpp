@@ -242,15 +242,15 @@ void setup() {
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);       // ROS agent
-  g_imu.beginThreaded(2048, 3, 10);  // 50 Hz
-  // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 25);  // 20 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);  // 1000 Hz — NFPShop reverse-pulse timing
-  g_oled.beginThreaded(2048, 1, 25);           // 20 Hz display
+  g_mr.beginThreaded(8192, 4);                 // ROS agent
+  g_imu.beginThreaded(2048, 3, 20);            // 50 Hz
+  g_rc.beginThreaded(1024, 3, 5);              // IBUS polling
+  g_servo.beginThreaded(1024, 2, 50);          // 20 Hz state pub
+  g_motor.beginThreaded(1024, 2, 50);          // 20 Hz state pub
+  g_oled.beginThreaded(2048, 1, 50);           // 20 Hz display
   g_battery.beginThreaded(1024, 1, 100);       // 10 Hz
   g_sensor.beginThreaded(1024, 1, 100);        // 10 Hz TOF
-  g_dip.beginThreaded(1024, 1, 20);            // 2 Hz
+  g_dip.beginThreaded(1024, 1, 500);           // 2 Hz
   g_btn.beginThreaded(1024, 1, 20);            // 50 Hz
   g_led.beginThreaded(1024, 1, 50);            // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz

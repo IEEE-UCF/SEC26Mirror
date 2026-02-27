@@ -3,8 +3,19 @@
 #include <cstdio>
 
 #include "OLEDSubsystem.h"
+#include "robot/RobotConstants.h"
 
 namespace Subsystem {
+
+namespace {
+/** Estimate battery percent from voltage (linear approximation). */
+int estimateBatteryPercent(float voltage) {
+  if (voltage >= BATTERY_VOLTAGE_FULL) return 100;
+  if (voltage <= BATTERY_VOLTAGE_EMPTY) return 0;
+  float range = BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_EMPTY;
+  return static_cast<int>((voltage - BATTERY_VOLTAGE_EMPTY) / range * 100.0f);
+}
+}  // namespace
 
 bool BatterySubsystem::init() { return setup_.driver_->init(); }
 
@@ -12,11 +23,14 @@ void BatterySubsystem::update() {
   setup_.driver_->update();
 
   // Update OLED status line with battery info every cycle
+  // Format: "VV.VV AA.AA PP.PP XX%" (21 chars max)
   if (oled_ && setup_.driver_) {
     char buf[OLEDSubsystem::MAX_LINE_LEN + 1];
     float v = setup_.driver_->getVoltage();
-    float ma = setup_.driver_->getCurrentmA();
-    snprintf(buf, sizeof(buf), "%.1fV  %.0fmA", v, ma);
+    float a = setup_.driver_->getCurrentmA() / 1000.0f;  // Convert mA to A
+    float w = setup_.driver_->getPowermW() / 1000.0f;    // Convert mW to W
+    int pct = estimateBatteryPercent(v);
+    snprintf(buf, sizeof(buf), "%.2fV %.2fA %.2fW %d%%", v, a, w, pct);
     oled_->setStatusLine(buf);
   }
 
@@ -71,7 +85,8 @@ void BatterySubsystem::publishData() {
   msg_.charge_use = 0.0f;
 
 #ifdef USE_TEENSYTHREADS
-  { Threads::Scope guard(g_microros_mutex);
+  {
+    Threads::Scope guard(g_microros_mutex);
     (void)rcl_publish(&pub_, &msg_, NULL);
   }
 #else

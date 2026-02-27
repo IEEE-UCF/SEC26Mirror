@@ -77,10 +77,8 @@ using namespace Subsystem;
 static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
 
-// --- OLED display (SSD1306 128x64, software SPI) ---
-static OLEDSubsystemSetup g_oled_setup("oled_subsystem",
-                                       /*mosi*/ PIN_DISP_MOSI,
-                                       /*clk*/ PIN_DISP_CLK,
+// --- OLED display (SSD1306 128x64, hardware SPI1) ---
+static OLEDSubsystemSetup g_oled_setup("oled_subsystem", &SPI1,
                                        /*dc*/ PIN_DISP_DC,
                                        /*rst*/ PIN_DISP_RST,
                                        /*cs*/ PIN_DISP_CS);
@@ -132,7 +130,7 @@ static Robot::PCA9685Driver* g_pca_servo =
         "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2));
 static Robot::PCA9685Driver* g_pca_motor =
     g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca_motor", I2C_ADDR_MOTOR, DEFAULT_PCA9685_FREQ, Wire2));
+        "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2));
 
 // --- RC subsystem (FlySky, Serial8 RX = pin 34) ---
 static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial8);
@@ -158,8 +156,8 @@ static ServoSubsystem g_servo(g_servo_setup);
 
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
-                                                   Drivers::UWBMode::TAG,
-                                                   ROBOT_UWB_TAG_ID, PIN_UWB_CS);
+                                                  Drivers::UWBMode::TAG,
+                                                  ROBOT_UWB_TAG_ID, PIN_UWB_CS);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
@@ -217,6 +215,7 @@ void setup() {
   g_led.init();
   g_servo.init();
   g_motor.init();
+  SPI.begin();
   g_uwb.init();
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
 
@@ -243,21 +242,23 @@ void setup() {
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);                // ROS agent
-  g_imu.beginThreaded(2048, 3, 20);           // 50 Hz
-  g_rc.beginThreaded(1024, 3, 5);             // IBUS polling
-  g_servo.beginThreaded(1024, 2, 50);         // 20 Hz state pub
-  g_motor.beginThreaded(1024, 2, 50);         // 20 Hz state pub
-  g_oled.beginThreaded(2048, 1, 50);          // 20 Hz display
-  g_battery.beginThreaded(1024, 1, 100);      // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);       // 10 Hz TOF
-  g_dip.beginThreaded(1024, 1, 500);           // 2 Hz
+  g_mr.beginThreaded(8192, 4);       // ROS agent
+  g_imu.beginThreaded(2048, 3, 10);  // 50 Hz
+  // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
+  g_servo.beginThreaded(1024, 2, 25);  // 20 Hz state pub
+  g_motor.beginThreaded(1024, 2, 1);  // 1000 Hz — NFPShop reverse-pulse timing
+  g_oled.beginThreaded(2048, 1, 25);           // 20 Hz display
+  g_battery.beginThreaded(1024, 1, 100);       // 10 Hz
+  g_sensor.beginThreaded(1024, 1, 100);        // 10 Hz TOF
+  g_dip.beginThreaded(1024, 1, 20);            // 2 Hz
   g_btn.beginThreaded(1024, 1, 20);            // 50 Hz
   g_led.beginThreaded(1024, 1, 50);            // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
-
 }
 
-void loop() { threads.delay(100); }
+void loop() {
+  g_rc.update();
+  delay(5);
+}

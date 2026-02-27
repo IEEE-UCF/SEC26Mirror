@@ -30,13 +30,10 @@ class SimpleHeartbeat : public IMicroRosParticipant {
  public:
   bool onCreate(rcl_node_t* node, rclc_executor_t*) override {
     return rclc_publisher_init_best_effort(
-               &g_pub, node,
-               ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+               &g_pub, node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
                "esp32_wifi_test/status") == RCL_RET_OK;
   }
-  void onDestroy() override {
-    g_pub = rcl_get_zero_initialized_publisher();
-  }
+  void onDestroy() override { g_pub = rcl_get_zero_initialized_publisher(); }
   void publish(const char* text) {
     if (!g_pub.impl) return;
     g_msg.data = micro_ros_string_utilities_set(g_msg.data, text);

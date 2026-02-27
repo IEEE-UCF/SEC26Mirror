@@ -61,7 +61,8 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
       last_publish_ms_ = now;
       msg_.data = setup_.driver_->readPort(0);
 #ifdef USE_TEENSYTHREADS
-      { Threads::Scope guard(g_microros_mutex);
+      {
+        Threads::Scope guard(g_microros_mutex);
         (void)rcl_publish(&pub_, &msg_, NULL);
       }
 #else

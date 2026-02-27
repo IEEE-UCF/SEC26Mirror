@@ -94,7 +94,7 @@ def generate_launch_description():
             executable='ekf_node',
             name='ekf_node',
             output='screen',
-            parameters=[ekf_config_path, {'use_sim_time': True, 'publish_tf': False}],
+            parameters=[ekf_config_path, {'use_sim_time': True, 'publish_tf': True}],
         ),
 
         # --- Autonomy (using raw /odom for now; switch to /odometry/filtered once EKF is confirmed) ---

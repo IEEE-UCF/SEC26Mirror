@@ -73,7 +73,6 @@ LEDs flash green on startup. All topics and services become available once the m
 
 | Service | Type | Description |
 |---------|------|-------------|
-| `/mcu_robot/lcd/append` | `mcu_msgs/srv/LCDAppend` | Append text line to OLED |
 | `/mcu_robot/servo/set` | `mcu_msgs/srv/SetServo` | Set servo angle (0-180 deg) |
 | `/mcu_robot/motor/set` | `mcu_msgs/srv/SetMotor` | Set motor speed (-1.0 to 1.0) |
 
@@ -81,6 +80,7 @@ LEDs flash green on startup. All topics and services become available once the m
 
 | Topic | Type | Description |
 |-------|------|-------------|
+| `/mcu_robot/lcd/append` | `std_msgs/msg/String` | Append text to OLED (newlines split into lines) |
 | `/mcu_robot/lcd/scroll` | `std_msgs/msg/Int8` | Scroll OLED display (-1=up, 1=down) |
 | `/mcu_robot/led/set_all` | `mcu_msgs/msg/LedColor` | Set all WS2812B LEDs to RGB color |
 
@@ -99,10 +99,10 @@ source install/setup.bash
 ### Verify Everything Is Up
 
 ```bash
-# List all topics (expect 9 topics under /mcu_robot/ + 1 under mcu_uwb/)
+# List all topics (expect 10 topics under /mcu_robot/ + 1 under mcu_uwb/)
 ros2 topic list | grep -E "mcu_robot|mcu_uwb"
 
-# List all services (expect 3 services)
+# List all services (expect 2 services)
 ros2 service list | grep mcu_robot
 ```
 
@@ -189,12 +189,14 @@ ros2 topic echo /mcu_robot/buttons
 
 ### OLED Display
 
+The first line always shows battery status: voltage, current, power (2 decimal places), and estimated battery percent.
+
 ```bash
-# Append a line of text to the OLED terminal
-ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend "{text: 'Hello from ROS2'}"
+# Append a line of text to the OLED terminal (appears below battery status line)
+ros2 topic pub --once /mcu_robot/lcd/append std_msgs/msg/String "{data: 'Hello from ROS2'}"
 
 # Append multi-line text (newlines split into separate lines)
-ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend "{text: 'Line 1\nLine 2\nLine 3'}"
+ros2 topic pub --once /mcu_robot/lcd/append std_msgs/msg/String "{data: 'Line 1\nLine 2\nLine 3'}"
 
 # Scroll up (view older lines)
 ros2 topic pub --once /mcu_robot/lcd/scroll std_msgs/msg/Int8 "{data: -1}"
@@ -295,7 +297,7 @@ ros2 topic echo /mcu_robot/imu/data --once
 ros2 topic echo /mcu_robot/battery_health --once
 
 # 5. OLED write
-ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend "{text: 'Sanity check OK'}"
+ros2 topic pub --once /mcu_robot/lcd/append std_msgs/msg/String "{data: 'Sanity check OK'}"
 
 # 6. Servo test (moves servo 0 to 90 deg)
 ros2 service call /mcu_robot/servo/set mcu_msgs/srv/SetServo "{index: 0, angle: 90.0}"

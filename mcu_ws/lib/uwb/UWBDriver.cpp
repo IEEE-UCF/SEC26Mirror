@@ -22,7 +22,10 @@ bool UWBDriver::init() {
   DW3000.spiSelect(setup_.cs_pin);
   DW3000.begin();
 
-  // Hardware reset if pin is specified
+  // Hardware reset if pin is specified.
+  // NOTE: DW3000.hardReset() uses a hardcoded RST_PIN (pin 27) from
+  // DW3000Constants.h which conflicts with the OLED SPI1 SCK line.
+  // Only do a hardware reset if the user explicitly wired a reset pin.
   if (setup_.rst_pin != 255) {
     pinMode(setup_.rst_pin, OUTPUT);
     digitalWrite(setup_.rst_pin, LOW);
@@ -30,7 +33,7 @@ bool UWBDriver::init() {
     digitalWrite(setup_.rst_pin, HIGH);
     delay(200);
   } else {
-    DW3000.hardReset();
+    // No reset pin wired — soft reset only (called below)
     delay(200);
   }
 

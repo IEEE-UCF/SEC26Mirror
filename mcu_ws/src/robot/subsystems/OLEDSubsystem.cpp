@@ -10,8 +10,8 @@ namespace Subsystem {
 OLEDSubsystem::OLEDSubsystem(const OLEDSubsystemSetup& setup)
     : Classes::BaseSubsystem(setup),
       setup_(setup),
-      display_(DISPLAY_W, DISPLAY_H, setup.mosi_pin_, setup.clk_pin_,
-               setup.dc_pin_, setup.rst_pin_, setup.cs_pin_) {}
+      display_(DISPLAY_W, DISPLAY_H, setup.spi_, setup.dc_pin_, setup.rst_pin_,
+               setup.cs_pin_, setup.bitrate_) {}
 
 // ── Lifecycle
 // ─────────────────────────────────────────────────────────────────
@@ -110,18 +110,7 @@ void OLEDSubsystem::renderLines() {
   }
 }
 
-void OLEDSubsystem::flushDisplay() {
-#ifdef USE_TEENSYTHREADS
-  // Software SPI is bit-banged; a context switch mid-transfer shifts the SPI
-  // clock phase by one bit, manifesting as a 1-pixel display shake.
-  // Disabling interrupts for the ~150 µs framebuffer transfer is safe.
-  noInterrupts();
-  display_.display();
-  interrupts();
-#else
-  display_.display();
-#endif
-}
+void OLEDSubsystem::flushDisplay() { display_.display(); }
 
 // ── micro-ROS: LCD append subscription
 // ─────────────────────────────────────────

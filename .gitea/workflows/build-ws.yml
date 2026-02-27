@@ -19,7 +19,7 @@ on:
 jobs:
   docker-health-check:
     name: Docker Health Check
-    if: "!startsWith(github.head_ref, 'doc')"
+    if: "!startsWith(github.head_ref, 'doc') && !contains(github.event.pull_request.labels.*.name, 'invalid')"
     runs-on: [ubuntu-latest, linux-amd64]
     steps:
       - name: Checkout code
@@ -53,7 +53,7 @@ jobs:
   build-and-push:
     name: Build & Push for ${{ matrix.platform }}
     needs: docker-health-check
-    if: "!startsWith(github.head_ref, 'doc')"
+    if: "!startsWith(github.head_ref, 'doc') && !contains(github.event.pull_request.labels.*.name, 'invalid')"
     runs-on: [ubuntu-latest, linux-amd64]
 
     strategy:
@@ -118,7 +118,7 @@ jobs:
   colcon-build:
     name: Colcon Build for ${{ matrix.platform }}
     needs: build-and-push
-    if: "!startsWith(github.head_ref, 'doc')"
+    if: "!startsWith(github.head_ref, 'doc') && !contains(github.event.pull_request.labels.*.name, 'invalid')"
     runs-on: [ubuntu-latest, linux-amd64]
     strategy:
       fail-fast: false

@@ -11,6 +11,7 @@ on:
 
 jobs:
   build-all:
+    if: "!contains(github.event.pull_request.labels.*.name, 'invalid')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

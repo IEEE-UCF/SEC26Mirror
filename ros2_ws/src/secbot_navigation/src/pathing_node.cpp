@@ -283,69 +283,37 @@ class PathingNode : public rclcpp::Node {
     }
   }
 
-  // safety for TF failure ------------------
-  void stop_robot() {
-    nav_msgs::msg::Path empty;
-    empty.header.stamp = this->get_clock()->now();
-    empty.header.frame_id = planning_frame_;
-    traj_to_mcu_pub_->publish(empty);
-  }
+  // === Marks obstacle from YAML into GridMap ===
+  void mark_rectangle_obstacle(const YAML::Node &obs) {
+    double x = obs["x"].as<double>();
+    while (x < obs["x"].as<double>() +
+                   obs["width"].as<double>())  // prevents all logic if obstacle
+                                               // is out of bounds on the x axis
+    {
+      double y = obs["y"].as<double>();
+      while (y <
+             obs["y"].as<double>() +
+                 obs["height"].as<double>())  // prevents all logic if obstacle
+                                              // is out of bounds on the y axis
+      {
+        int r = static_cast<int>(
+            (y - origin_.second) /
+            resolution_);  // (y - origin_y) / resolution      (THIS RENDERS THE
+                           // OBSTACLE ON THE Y AXIS)
+        int c = static_cast<int>(
+            (x - origin_.first) /
+            resolution_);  // (x - origin_x) / resolution      (THIS RENDERS THE
+                           // OBSTACLE ON THE X AXIS)
 
-  void goal_reached() {
-    if (!goal_reached_) {
-      goal_reached_ = true;
-      visited_goals_.emplace_back(goal_x_, goal_y_);
-      RCLCPP_INFO(this->get_logger(),
-                  "Marked visited goal at (%.2f, %.2f), total visited: %zu",
-                  goal_x_, goal_y_, visited_goals_.size());
-      std_msgs::msg::Bool reached;
-      reached.data = true;
-      goal_reached_pub_->publish(reached);  // if goal is reached -> publish
+        if (r >= 0 && r < grid_map_->get_rows() && c >= 0 &&
+            c < grid_map_->get_cols())  // if the obstacle is within bounds
+        {
+          grid_map_->set_obstacle({r, c});
+        }                  // sets the new obstacle
+        y += resolution_;  // jump to the next y in real world coordinates
+      }
+      x += resolution_;  // jump to the next x in real world coordinates
     }
-  }
-
-  // CONVERTERS ==============================================
-
-  // check if r and c in bounds ----------
-  bool cell_in_bounds(int r, int c) const {
-    return grid_map_ && r >= 0 && r < grid_map_->get_rows() && c >= 0 &&
-           c < grid_map_->get_cols();
-  }
-
-  // 0.5 >= x >>>> 1 | 0.5 < x >>>> 0
-  static inline int rounding_rules(double x) {
-    return (x >= 0.0) ? static_cast<int>(std::floor(x + 0.5))
-                      : static_cast<int>(std::ceil(x - 0.5));
-  }
-
-  // convert from meters >>>> grid coords --------------
-  std::pair<int, int> world_to_cell(double x, double y) const {
-    return {rounding_rules((y - origin_.second) / resolution_),
-            rounding_rules((x - origin_.first) / resolution_)};
-  }
-
-  // converts coords >>> meters --------------
-  std::pair<double, double> cell_to_world(int r, int c) const {
-    return {origin_.first + (c + 0.5) * resolution_,
-            origin_.second + (r + 0.5) * resolution_};
-  }
-
-  // Normalize angle [-pi, pi]
-  static double oscolate_around_pi(double a) {
-    while (a > M_PI) a -= 2.0 * M_PI;
-    while (a < -M_PI) a += 2.0 * M_PI;
-    return a;
-  }
-
-  // convert degrees -> radians
-  static double degrees_to_radians(double d) { return d * M_PI / 180.0; }
-
-  // check if a goal is near any previously-reached position
-  bool is_near_visited_goal(double x, double y) const {
-    for (const auto &[vx, vy] : visited_goals_) {
-      if (std::hypot(x - vx, y - vy) < visited_goal_radius_) return true;
-    }
-    return false;
   }
 
   // PLAN ======================================================

@@ -1,12 +1,19 @@
 /**
  * @file MotorManagerSubsystem.h
- * @brief Manages motors on a PCA9685 with micro-ROS service control.
- * @date 2026-02-24
+ * @brief Manages brushless motors (NFPShop) on a PCA9685 with micro-ROS.
+ * @date 2026-02-26
  *
  * Each motor uses two consecutive PCA9685 channels:
- *   even channel = PWM (0-4095 duty)
+ *   even channel = PWM (inverted: 4095 = stopped, 0 = full speed)
  *   odd  channel = DIR (digital HIGH/LOW)
  * Motor 0 -> ch 0,1;  Motor 1 -> ch 2,3;  ...  Motor 7 -> ch 14,15.
+ *
+ * NFPShop brushless motor quirk: a brief reverse pulse (~3ms) is applied
+ * every ~103ms to prevent the integrated controller from entering a fault
+ * state.  This is handled transparently in update().
+ *
+ * The motor PCA9685 should be configured at a higher frequency than the
+ * servo board (e.g. 1000 Hz via MOTOR_PCA9685_FREQ in RobotConstants.h).
  *
  * -- ROS2 interface (defaults) ---------------------------------------------
  *   /mcu_robot/motor/state     topic    std_msgs/msg/Float32MultiArray (5 Hz)
@@ -61,6 +68,13 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   static constexpr uint8_t MAX_MOTORS = 8;
   static constexpr uint16_t MAX_PWM = 4095;
 
+  // NFPShop reverse-pulse timing (microseconds)
+  static constexpr uint32_t NFPSHOP_CYCLE_US = 103000;
+  static constexpr uint32_t NFPSHOP_REVERSE_START_US = 100000;
+  // PWM duty used during the brief reverse pulse — kept low so the
+  // motor inertia absorbs it and it's not visible as a jerk.
+  static constexpr uint16_t NFPSHOP_REVERSE_DUTY = 5 * (MAX_PWM / 255);
+
   explicit MotorManagerSubsystem(const MotorManagerSubsystemSetup& setup)
       : Classes::BaseSubsystem(setup), setup_(setup) {}
 
@@ -69,13 +83,43 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
       pinMode(setup_.oePin_, OUTPUT);
       digitalWrite(setup_.oePin_, LOW);
     }
-    for (uint8_t i = 0; i < setup_.numMotors_; i++) setSpeed(i, 0.0f);
+    // Set all motor PWM channels to stopped (inverted: MAX_PWM = stopped).
+    // The PCA9685Driver::init() sets channels to OFF (duty 0) which would
+    // mean full speed with inverted logic, so we must override immediately.
+    for (uint8_t i = 0; i < setup_.numMotors_; i++) {
+      speeds_[i] = 0.0f;
+      dirs_[i] = true;
+      if (setup_.driver_) {
+        setup_.driver_->bufferPWM(i * 2, MAX_PWM);
+        setup_.driver_->bufferDigital(i * 2 + 1, true);
+      }
+    }
+    // Flush immediately so motors don't twitch on startup
+    if (setup_.driver_) setup_.driver_->applyBuffered();
     return true;
   }
 
   void begin() override {}
 
   void update() override {
+    // NFPShop reverse-pulse: briefly flip direction for ~3ms every ~103ms
+    uint32_t now_us = micros();
+    for (uint8_t i = 0; i < setup_.numMotors_; i++) {
+      uint32_t elapsed = now_us - reverse_timer_us_[i];
+      if (elapsed >= NFPSHOP_CYCLE_US) {
+        // Cycle complete — reset timer, restore normal output
+        reverse_timer_us_[i] = now_us;
+        applyMotorOutput(i);
+      } else if (elapsed >= NFPSHOP_REVERSE_START_US && !in_reverse_[i]) {
+        // Enter reverse pulse window
+        in_reverse_[i] = true;
+        if (setup_.driver_) {
+          setup_.driver_->bufferDigital(i * 2 + 1, !dirs_[i]);
+          setup_.driver_->bufferPWM(i * 2, MAX_PWM - NFPSHOP_REVERSE_DUTY);
+        }
+      }
+    }
+
     if (!pub_.impl) return;
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
@@ -131,19 +175,19 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     node_ = nullptr;
   }
 
+  /**
+   * @brief Set motor speed.
+   * @param motor Motor index (0-7).
+   * @param speed Speed from -1.0 (full reverse) to +1.0 (full forward).
+   *              PWM is inverted: 0 speed → MAX_PWM duty, full speed → 0 duty.
+   */
   void setSpeed(uint8_t motor, float speed) {
     if (motor >= setup_.numMotors_ || !setup_.driver_) return;
     speed = constrain(speed, -1.0f, 1.0f);
     speeds_[motor] = speed;
+    dirs_[motor] = (speed >= 0.0f);
 
-    uint8_t pwmCh = motor * 2;
-    uint8_t dirCh = motor * 2 + 1;
-
-    bool forward = (speed >= 0.0f);
-    uint16_t duty = (uint16_t)(fabsf(speed) * MAX_PWM);
-
-    setup_.driver_->bufferDigital(dirCh, forward);
-    setup_.driver_->bufferPWM(pwmCh, duty);
+    applyMotorOutput(motor);
   }
 
   float getSpeed(uint8_t motor) const {
@@ -178,11 +222,25 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  /** Write the normal (non-reverse-pulse) output for a motor. */
+  void applyMotorOutput(uint8_t motor) {
+    uint8_t pwmCh = motor * 2;
+    uint8_t dirCh = motor * 2 + 1;
+
+    // Inverted PWM: MAX_PWM = stopped, 0 = full speed
+    uint16_t duty = MAX_PWM - (uint16_t)(fabsf(speeds_[motor]) * MAX_PWM);
+
+    setup_.driver_->bufferDigital(dirCh, dirs_[motor]);
+    setup_.driver_->bufferPWM(pwmCh, duty);
+    in_reverse_[motor] = false;
+  }
+
   void publishState() {
     for (uint8_t i = 0; i < setup_.numMotors_; i++) pub_data_[i] = speeds_[i];
     pub_msg_.data.size = setup_.numMotors_;
 #ifdef USE_TEENSYTHREADS
-    { Threads::Scope guard(g_microros_mutex);
+    {
+      Threads::Scope guard(g_microros_mutex);
       (void)rcl_publish(&pub_, &pub_msg_, NULL);
     }
 #else
@@ -206,6 +264,9 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 
   const MotorManagerSubsystemSetup setup_;
   float speeds_[MAX_MOTORS] = {};
+  bool dirs_[MAX_MOTORS] = {};                  // cached direction per motor
+  uint32_t reverse_timer_us_[MAX_MOTORS] = {};  // NFPShop cycle timer
+  bool in_reverse_[MAX_MOTORS] = {};  // currently in reverse pulse window
 
   rcl_publisher_t pub_{};
   std_msgs__msg__Float32MultiArray pub_msg_{};

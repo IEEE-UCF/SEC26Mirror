@@ -169,7 +169,8 @@ void MicrorosManager::debugLog(const char* text) {
   if (!debug_pub_.impl || state_ != AGENT_CONNECTED) return;
   debug_msg_.data = micro_ros_string_utilities_set(debug_msg_.data, text);
 #ifdef USE_TEENSYTHREADS
-  { Threads::Scope guard(g_microros_mutex);
+  {
+    Threads::Scope guard(g_microros_mutex);
     (void)rcl_publish(&debug_pub_, &debug_msg_, NULL);
   }
 #else

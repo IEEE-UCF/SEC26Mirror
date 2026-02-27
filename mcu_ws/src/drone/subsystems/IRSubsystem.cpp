@@ -14,16 +14,20 @@ bool IRSubsystem::init() {
 
 uint8_t IRSubsystem::antennaIdToCode(uint8_t antenna_id) {
   switch (antenna_id) {
-    case 1: return ANTENNA_1_CODE;
-    case 2: return ANTENNA_2_CODE;
-    case 3: return ANTENNA_3_CODE;
-    case 4: return ANTENNA_4_CODE;
-    default: return 0x00;
+    case 1:
+      return ANTENNA_1_CODE;
+    case 2:
+      return ANTENNA_2_CODE;
+    case 3:
+      return ANTENNA_3_CODE;
+    case 4:
+      return ANTENNA_4_CODE;
+    default:
+      return 0x00;
   }
 }
 
-void IRSubsystem::transmitAntennaColor(uint8_t antenna_id,
-                                        uint8_t color_code) {
+void IRSubsystem::transmitAntennaColor(uint8_t antenna_id, uint8_t color_code) {
   if (!initialized_) return;
 
   uint8_t command = antennaIdToCode(antenna_id) | color_code;

@@ -28,9 +28,7 @@ class MinibotMotorDriver {
   }
 
   /// @param speed -255 (full reverse) to +255 (full forward), 0 = stop
-  void setPWM(int speed) {
-    speed_ = constrain(speed, -255, 255);
-  }
+  void setPWM(int speed) { speed_ = constrain(speed, -255, 255); }
 
   void update() {
     if (speed_ > 0) {

@@ -8,6 +8,8 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_secbot_sim = get_package_share_directory('secbot_sim')
     pkg_my_robot   = get_package_share_directory('my_robot_description')
+    pkg_secbot_fusion = get_package_share_directory('secbot_fusion')
+    ekf_config_path = os.path.join(pkg_secbot_fusion,'config','ekf.yaml')
 
     rviz_config    = os.path.join(pkg_my_robot,   'rviz',   'secbot_sim.rviz')
     mcu_sim_launch = os.path.join(pkg_secbot_sim, 'launch', 'mcu_sim_secbot.launch.py')
@@ -59,5 +61,23 @@ def generate_launch_description():
             parameters=['/home/ubuntu/ros2_workspaces/src/sec26ros/secbot_uwb/config/beacons.yaml'],
             # This helps debug what the node actually "sees"
             arguments=['--ros-args', '--log-level', 'info'] 
-        )
+        ),
+
+        # EKF node (commented out until tuned) ==============
+        Node(
+             package='robot_localization',
+             executable='ekf_node',
+             name='ekf_node',
+             output='screen',
+             parameters=[ekf_config_path, {'use_sim_time': True}],
+             remappings=[('/odom/unfiltered', '/odom')],
+         ),
+
+         Node(
+             package='secbot_fusion',
+             executable='fusion_node',
+             name='fusion_node',
+             output='screen',
+             parameters=[{'use_sime_time':True}]
+         )
     ])

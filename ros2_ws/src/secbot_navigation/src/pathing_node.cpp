@@ -37,7 +37,7 @@ namespace secbot_navigation {
 
 // === ROS2 Node for planning + following a path ===
 class PathingNode : public rclcpp::Node {
- public:
+public:
   PathingNode() : Node("pathing_node") {
     // Get parameters from launch.py file
     if (!this->has_parameter("use_sim")) {
@@ -57,7 +57,7 @@ class PathingNode : public rclcpp::Node {
 
     // Ros interfaces publish and subscriber nodes
     cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
-        "/cmd_vel", 10);  // output motion commands
+        "/cmd_vel", 10); // output motion commands
     drive_cmd_pub_ = this->create_publisher<mcu_msgs::msg::DriveBase>(
         "drive_base/command", 10);
     auto traj_qos =
@@ -65,28 +65,28 @@ class PathingNode : public rclcpp::Node {
     traj_to_mcu_pub_ = this->create_publisher<nav_msgs::msg::Path>(
         "drive_base/trajectory", traj_qos);
     subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-        "/odom", 10,
-        std::bind(&PathingNode::odom_callback, this, _1));  // input robot pose
+        "/odometry/filtered", 10,
+        std::bind(&PathingNode::odom_callback, this, _1)); // input robot pose
     timer_ = this->create_wall_timer(
         100ms, std::bind(&PathingNode::control_loop,
-                         this));  // timer at 10 Hz, controls output
+                         this)); // timer at 10 Hz, controls output
     path_pub_ = this->create_publisher<nav_msgs::msg::Path>(
-        "/global_path", 1);  // publish planned path for RViz
+        "/global_path", 1); // publish planned path for RViz
     goal_reached_pub_ = this->create_publisher<std_msgs::msg::Bool>(
-        "/nav/goal_reached", 10);  // signals when nav goal is reached
+        "/nav/goal_reached", 10); // signals when nav goal is reached
     vision_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
         "/goal_pose", 10,
         std::bind(&PathingNode::goal_callback, this,
-                  _1));  // dynamic goal input
+                  _1)); // dynamic goal input
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(
-        *tf_buffer_);  // <-- CRITICAL
+        *tf_buffer_); // <-- CRITICAL
     tf_print_timer_ = this->create_wall_timer(
         250ms, std::bind(&PathingNode::print_tf_pose, this));
     RCLCPP_INFO(this->get_logger(), "Pathing Node Initialized");
   }
 
- private:
+private:
   // ROS Interfaces
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
   rclcpp::Publisher<mcu_msgs::msg::DriveBase>::SharedPtr drive_cmd_pub_;
@@ -186,17 +186,17 @@ class PathingNode : public rclcpp::Node {
   bool require_tf_for_control_ = false;
   double tf_timeout_sec_ = 0.1;
 
-  double lookahead_front_min_x_ = 0.05;  // meters
+  double lookahead_front_min_x_ = 0.05; // meters
   double k_yaw_ = 1.0;
   bool enable_front_lookahead_guard_ = true;
 
   rclcpp::Time last_time_;
 
   // Components =======================
-  std::unique_ptr<GridMap> grid_map_;  // Occupancy grid
+  std::unique_ptr<GridMap> grid_map_; // Occupancy grid
   std::unique_ptr<PlannerServer>
-      planner_;  // Planning of D* Lite + smoothing + trajecotry conversion
-  std::unique_ptr<Trajectory> current_trajectory_;  // Current followed plan
+      planner_; // Planning of D* Lite + smoothing + trajecotry conversion
+  std::unique_ptr<Trajectory> current_trajectory_; // Current followed plan
 
   // USED FOR PRINTING =================================
   struct RectObs {
@@ -244,8 +244,10 @@ class PathingNode : public rclcpp::Node {
         origin_.second = arena_cfg["origin"]["y"].as<double>();
 
       // Goal =======================================================
-      if (arena_cfg["goal"]["x"]) goal_x_ = arena_cfg["goal"]["x"].as<double>();
-      if (arena_cfg["goal"]["y"]) goal_y_ = arena_cfg["goal"]["y"].as<double>();
+      if (arena_cfg["goal"]["x"])
+        goal_x_ = arena_cfg["goal"]["x"].as<double>();
+      if (arena_cfg["goal"]["y"])
+        goal_y_ = arena_cfg["goal"]["y"].as<double>();
 
       // Start =======================================================
       if (arena_cfg["start"]["x"])
@@ -255,12 +257,12 @@ class PathingNode : public rclcpp::Node {
 
       // Nav Config =======================================================
       if (nav_cfg["trajectory"]["speed"])
-        speed_ = nav_cfg["trajectory"]["speed"].as<double>();  // add speed
+        speed_ = nav_cfg["trajectory"]["speed"].as<double>(); // add speed
       if (nav_cfg["trajectory"]["lookahead_distance"])
         lookahead = nav_cfg["trajectory"]["lookahead_distance"]
-                        .as<double>();  // add lookahead distance
+                        .as<double>(); // add lookahead distance
       if (nav_cfg["smoothing"]["max_skip"])
-        max_skip_ = nav_cfg["smoothing"]["max_skip"].as<int>();  // add max skip
+        max_skip_ = nav_cfg["smoothing"]["max_skip"].as<int>(); // add max skip
 
       // LOADED GRID ============================================
       std::vector<std::vector<int>> grid_data(height,
@@ -300,7 +302,7 @@ class PathingNode : public rclcpp::Node {
                   goal_x_, goal_y_, visited_goals_.size());
       std_msgs::msg::Bool reached;
       reached.data = true;
-      goal_reached_pub_->publish(reached);  // if goal is reached -> publish
+      goal_reached_pub_->publish(reached); // if goal is reached -> publish
     }
   }
 
@@ -332,8 +334,10 @@ class PathingNode : public rclcpp::Node {
 
   // Normalize angle [-pi, pi]
   static double oscolate_around_pi(double a) {
-    while (a > M_PI) a -= 2.0 * M_PI;
-    while (a < -M_PI) a += 2.0 * M_PI;
+    while (a > M_PI)
+      a -= 2.0 * M_PI;
+    while (a < -M_PI)
+      a += 2.0 * M_PI;
     return a;
   }
 
@@ -343,7 +347,8 @@ class PathingNode : public rclcpp::Node {
   // check if a goal is near any previously-reached position
   bool is_near_visited_goal(double x, double y) const {
     for (const auto &[vx, vy] : visited_goals_) {
-      if (std::hypot(x - vx, y - vy) < visited_goal_radius_) return true;
+      if (std::hypot(x - vx, y - vy) < visited_goal_radius_)
+        return true;
     }
     return false;
   }
@@ -418,16 +423,16 @@ class PathingNode : public rclcpp::Node {
     traj_to_mcu_pub_->publish(path_msg);
 
     this->publish_and_print_path(
-        *current_trajectory_);  // (TO REMOVE): CAN REMOVE LATER JUST VISUALIZES
-                                // PATH
-    print_grid_with_path(*current_trajectory_);  // (TO REMOVE): CAN REMOVE
-                                                 // LATER JUST VISUALIZES PATH
+        *current_trajectory_); // (TO REMOVE): CAN REMOVE LATER JUST VISUALIZES
+                               // PATH
+    print_grid_with_path(*current_trajectory_); // (TO REMOVE): CAN REMOVE
+                                                // LATER JUST VISUALIZES PATH
   }
 
   // CLALBACKS =============================================================
   // ODOM TO UPDATE ROBOT POSE  ---------------
   void odom_callback(const nav_msgs::msg::Odometry::SharedPtr
-                         msg)  // uses robot pose from odometry
+                         msg) // uses robot pose from odometry
   {
     // converts quaternion orientation to yaw using tf2
     tf2::Quaternion q(
@@ -440,7 +445,7 @@ class PathingNode : public rclcpp::Node {
     robot_x_ = msg->pose.pose.position.x;
     robot_y_ = msg->pose.pose.position.y;
     robot_theta_ = yaw;
-    state_received_ = true;  // so control loop can run
+    state_received_ = true; // so control loop can run
   }
 
   // Dynamic goal callback from /goal_pose ----------------------
@@ -682,7 +687,8 @@ class PathingNode : public rclcpp::Node {
         auto [r, c] = world_to_cell(p.x, p.y);
         if (r >= 0 && r < grid_map_->get_rows() && c >= 0 &&
             c < grid_map_->get_cols()) {
-          if (!grid_map_->is_free(GridMap::Cell{r, c})) collide_count++;
+          if (!grid_map_->is_free(GridMap::Cell{r, c}))
+            collide_count++;
         }
       }
     }
@@ -803,9 +809,12 @@ class PathingNode : public rclcpp::Node {
           ch = '*';
 
         // Overrides (most important last)
-        if (r == sr && c == sc) ch = 'S';
-        if (r == gr && c == gc) ch = 'G';
-        if (r == rr && c == rc) ch = 'R';
+        if (r == sr && c == sc)
+          ch = 'S';
+        if (r == gr && c == gc)
+          ch = 'G';
+        if (r == rr && c == rc)
+          ch = 'R';
 
         out << ch;
       }
@@ -814,13 +823,14 @@ class PathingNode : public rclcpp::Node {
 
     // Simple, readable axis: mark every 5 columns
     out << "    ";
-    for (int c = 0; c < cols; ++c) out << ((c % 5 == 0) ? '|' : ' ');
+    for (int c = 0; c < cols; ++c)
+      out << ((c % 5 == 0) ? '|' : ' ');
     out << "\n";
 
     out << "    ";
     for (int c = 0; c < cols; ++c) {
       if (c % 5 == 0)
-        out << static_cast<char>('0' + (c % 10));  // ones digit
+        out << static_cast<char>('0' + (c % 10)); // ones digit
       else
         out << ' ';
     }
@@ -832,7 +842,7 @@ class PathingNode : public rclcpp::Node {
   }
 };
 
-}  // namespace secbot_navigation
+} // namespace secbot_navigation
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);

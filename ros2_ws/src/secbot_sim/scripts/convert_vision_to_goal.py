@@ -18,7 +18,7 @@ class ConvertVisionToGoal(Node):
         # subs and pubs DECLARE ==========================
         self.declare_parameter("detections_topic", "/duck_detections")
         self.declare_parameter("camera_info_topic", "/camera_info")
-        self.declare_parameter("odom_topic", "/odom")
+        self.declare_parameter("odom_topic", "/odometry/filtered")
         self.declare_parameter("goal_topic", "/goal_pose")
 
         # subs and pubs ==============================

@@ -119,7 +119,7 @@ def generate_launch_description():
                 'detections_topic':    '/duck_detections',
                 'camera_info_topic':   '/camera1/camera_info',
                 'use_sim_time':        True,
-                'odom_topic':          '/odom',
+                'odom_topic':          '/odometry/filtered',
                 'camera_height':       0.34,
                 'camera_tilt_deg':     0,
                 'goal_standoff':       0.3,

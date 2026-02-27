@@ -1,8 +1,12 @@
 """
 MCU Subsystem Simulator Launch File — Secbot (URDF) Variant
 
-Same as mcu_sim.launch.py but spawns and publishes robot_description
-from my_robot_description/urdf/robot.urdf instead of my_bot.sdf.
+Tier 1: Pure hardware simulation only.
+Launches Gazebo, spawns the URDF robot, ROS-Gazebo bridge, robot_state_publisher,
+and the mcu_subsystem_sim node. No autonomy / navigation / vision nodes.
+
+Higher-level launch files (sim_autonomy_secbot, uwb_sim, etc.) include this
+and add their own autonomy stack on top.
 """
 
 import os
@@ -18,22 +22,16 @@ def generate_launch_description():
 
     # package directories =====================================
     pkg_secbot_sim      = get_package_share_directory('secbot_sim')
-    pkg_secbot_fusion   = get_package_share_directory('secbot_fusion')
-    pkg_secbot_nav      = get_package_share_directory('secbot_navigation')
-    pkg_secbot_vision   = get_package_share_directory('secbot_vision')
     pkg_my_robot        = get_package_share_directory('my_robot_description')
 
     # configs ===============================
-    vision_config    = os.path.join(pkg_secbot_vision,  'config', 'vision.yaml')
-    ekf_config_path  = os.path.join(pkg_secbot_fusion,  'config', 'ekf.yaml')
-    nav_config_path  = os.path.join(pkg_secbot_nav,     'config', 'nav_sim.yaml')
-    arena_config_path= os.path.join(pkg_secbot_nav,     'config', 'arena_layout.yaml')
     bridge_config    = os.path.join(pkg_my_robot,       'config', 'ros_gz_bridge.yaml')
 
     # world / robot files ===================================
     world_file        = os.path.join(pkg_secbot_sim,  'worlds', 'bot', 'my_bot_harmonic.sdf')
     robot_urdf_file   = os.path.join(pkg_my_robot,    'urdf', 'robot.urdf')
     gz_resource_path  = os.path.join(pkg_secbot_sim,  'worlds')
+    pkg_secbot_vision = get_package_share_directory('secbot_vision')
     spawn_yaml_path   = os.path.join(pkg_secbot_vision,'controllers', 'spawn_locations.yaml')
     yellow_box_sdf    = os.path.join(pkg_secbot_sim,  'worlds', 'proper_field', 'yellow_box.sdf')
 
@@ -133,38 +131,6 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_description, 'use_sim_time': True}],
     )
 
-    # Vision node =======================================
-    vision = Node(
-        package='secbot_vision',
-        executable='detector_node',
-        name='detector_node',
-        output='screen',
-        parameters=[vision_config, {'use_sim_time': True,
-                                    'image_topic': '/camera1/image'}]  # uniquely namespaced
-    )
-
-    # Vision → Goal converter ===========================
-    vision_to_goal = Node(
-        package='secbot_sim',
-        executable='convert_vision_to_goal.py',
-        name='vision_to_goal',
-        output='screen',
-        parameters=[{
-            'detections_topic':    '/duck_detections',
-            'camera_info_topic':   '/camera1/camera_info',
-            'use_sim_time':        True,
-            'odom_topic':          '/odom',
-            'camera_height':       0.34,
-            'camera_tilt_deg':     0,
-            'goal_standoff':       0.3,
-            'min_confidence':      60.0,
-            'use_largest_area':    True,
-            'priority_ids':        [3, 1, 7, 2],
-            'republish_hz':        1.0,
-            'target_timeout_sec':  1.0,
-        }]
-    )
-
     # ROS-Gazebo Bridge =================================
     bridge = Node(
         package='ros_gz_bridge',
@@ -226,34 +192,6 @@ def generate_launch_description():
     )
 
 
-    # EKF node (commented out until tuned) ==============
-    # ekf_node = Node(
-    #     package='robot_localization',
-    #     executable='ekf_node',
-    #     name='ekf_node',
-    #     output='screen',
-    #     parameters=[ekf_config_path, {'use_sim_time': True}],
-    #     remappings=[('/odom/unfiltered', '/odom')],
-    # )
-
-    pathing_node = Node(
-        package='secbot_navigation',
-        executable='pathing_node',
-        name='pathing_node',
-        output='screen',
-        parameters=[{
-            'use_sim':      True,
-            'use_sim_time': True,
-            'config_file':  nav_config_path,
-            'arena_file':   arena_config_path,
-        }],
-        # # Pipeline: pathing_node → /cmd_vel_in → mcu_subsystem (PID+S-curve)
-        # #                        → /cmd_vel_out → /cmd_vel → Gazebo DiffDrive
-        # remappings=[
-        #     ('/cmd_vel', '/cmd_vel_in'),
-        # ]
-    )
-
     return LaunchDescription([
         # simulation
         gz_sim,
@@ -268,7 +206,4 @@ def generate_launch_description():
         robot_state_publisher,
         bridge,
         mcu_subsystem,
-        vision,
-        vision_to_goal,
-        pathing_node,
     ])

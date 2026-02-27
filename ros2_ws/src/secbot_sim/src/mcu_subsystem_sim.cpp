@@ -137,9 +137,12 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   angular_profile_.configure(angular_cfg);
 
   // Configure localization
+  // Pre-compute effective ticks (encoder * gear_ratio) since the localization
+  // setup only accepts integer gear_ratio and ours is fractional (0.6).
+  int effective_ticks = static_cast<int>(
+      static_cast<double>(encoder_ticks_per_rev_) * gear_ratio_);
   loc_setup_ = std::make_unique<Drive::TankDriveLocalizationSetup>(
-      "sim", track_width_, wheel_diameter_, encoder_ticks_per_rev_,
-      static_cast<int>(gear_ratio_));
+      "sim", track_width_, wheel_diameter_, effective_ticks, 1);
   localization_ = std::make_unique<Drive::TankDriveLocalization>(*loc_setup_);
 
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);

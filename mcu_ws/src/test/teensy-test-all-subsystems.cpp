@@ -28,6 +28,7 @@
  * micro-ROS services:
  *   /mcu_robot/servo/set          mcu_msgs/srv/SetServo
  *   /mcu_robot/motor/set          mcu_msgs/srv/SetMotor
+ *   /mcu_robot/reset              mcu_msgs/srv/Reset
  *
  * micro-ROS subscriptions:
  *   /mcu_robot/lcd/append         std_msgs/String
@@ -68,6 +69,7 @@
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
+#include "robot/subsystems/ResetSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
 using namespace Subsystem;
@@ -182,6 +184,10 @@ static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
                                            &g_led, &g_oled);
 static DeploySubsystem g_deploy(g_deploy_setup);
 
+// --- Reset subsystem (micro-ROS service to reset all subsystems) ---
+static ResetSubsystemSetup g_reset_setup("reset_subsystem");
+static ResetSubsystem g_reset(g_reset_setup);
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -261,6 +267,13 @@ void setup() {
   g_mr.registerParticipant(&g_encoder_sub);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
+  g_mr.registerParticipant(&g_reset);
+
+  // 3a. Register subsystems as reset targets
+  g_reset.addTarget(&g_motor);
+  g_reset.addTarget(&g_servo);
+  g_reset.addTarget(&g_encoder_sub);
+  g_reset.addTarget(&g_led);
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)

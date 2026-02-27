@@ -57,6 +57,7 @@
 #include "robot/machines/HeartbeatSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ButtonSubsystem.h"
+#include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/DipSwitchSubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
 #include "robot/subsystems/LEDSubsystem.h"
@@ -65,7 +66,6 @@
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
-#include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
 using namespace Subsystem;
@@ -267,7 +267,7 @@ void setup() {
   g_led.beginThreaded(1024, 1, 50);            // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
-  g_deploy.beginThreaded(1024, 1, 20);          // 50 Hz deploy button
+  g_deploy.beginThreaded(1024, 1, 20);         // 50 Hz deploy button
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
 }
 

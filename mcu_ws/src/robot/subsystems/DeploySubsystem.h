@@ -76,9 +76,9 @@ class DeploySubsystem : public IMicroRosParticipant,
     CANCELLED = 7
   };
 
-  static constexpr uint8_t BUTTON_IDX = 3;          // Button 4 (0-indexed)
-  static constexpr uint8_t DIP_TARGET_IDX = 7;      // DIP 8: target select
-  static constexpr uint8_t DIP_FORCE_IDX = 6;       // DIP 7: force reflash
+  static constexpr uint8_t BUTTON_IDX = 3;      // Button 4 (0-indexed)
+  static constexpr uint8_t DIP_TARGET_IDX = 7;  // DIP 8: target select
+  static constexpr uint8_t DIP_FORCE_IDX = 6;   // DIP 7: force reflash
   static constexpr uint32_t HOLD_MS = 1000;
   static constexpr uint8_t NUM_PHASE_LEDS = 5;
 
@@ -157,15 +157,13 @@ class DeploySubsystem : public IMicroRosParticipant,
     status_msg_.data.size = 0;
 
     if (rclc_publisher_init_best_effort(
-            &pub_, node_,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+            &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
             setup_.trigger_topic_) != RCL_RET_OK) {
       return false;
     }
 
     if (rclc_subscription_init_best_effort(
-            &sub_, node_,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+            &sub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
             setup_.status_topic_) != RCL_RET_OK) {
       return false;
     }
@@ -224,14 +222,12 @@ class DeploySubsystem : public IMicroRosParticipant,
   void showDeployConfig() {
     bool dip_target = readDipTarget();
     bool dip_force = readDipForce();
-    const char* target_str =
-        dip_target ? "robot" : "teensy-test-all";
+    const char* target_str = dip_target ? "robot" : "teensy-test-all";
 
     char line[48];
     snprintf(line, sizeof(line), "Target: %s", target_str);
     oledPrint(line);
-    snprintf(line, sizeof(line), "Force:  %s",
-             dip_force ? "YES" : "no");
+    snprintf(line, sizeof(line), "Force:  %s", dip_force ? "YES" : "no");
     oledPrint(line);
   }
 
@@ -339,11 +335,11 @@ class DeploySubsystem : public IMicroRosParticipant,
       int new_idx = static_cast<int>(new_phase);
       for (uint8_t i = 0; i < NUM_PHASE_LEDS; i++) {
         if (i < new_idx)
-          setup_.led_->setPixel(i, 0, 32, 0);   // Green = done
+          setup_.led_->setPixel(i, 0, 32, 0);  // Green = done
         else if (i == new_idx)
-          setup_.led_->setPixel(i, 0, 0, 32);   // Blue = active
+          setup_.led_->setPixel(i, 0, 0, 32);  // Blue = active
         else
-          setup_.led_->setPixel(i, 0, 0, 0);    // Off = pending
+          setup_.led_->setPixel(i, 0, 0, 0);  // Off = pending
       }
       current_phase_ = new_phase;
     }
@@ -355,7 +351,8 @@ class DeploySubsystem : public IMicroRosParticipant,
    * During esp32_ota, messages follow the pattern "device: STATUS" where
    * STATUS is OK, FAIL, or SKIP (with optional reason). The active phase
    * LED color reflects the aggregate result:
-   *   blue = in progress, green = all OK, yellow = some skipped, red = any failed
+   *   blue = in progress, green = all OK, yellow = some skipped, red = any
+   * failed
    */
   void handleMessage(const char* message) {
     int phase_idx = static_cast<int>(current_phase_);
@@ -386,13 +383,13 @@ class DeploySubsystem : public IMicroRosParticipant,
 
     // Update LED color based on aggregate results
     if (ota_fail_ > 0) {
-      setup_.led_->setPixel(phase_idx, 32, 0, 0);    // Red = any failed
+      setup_.led_->setPixel(phase_idx, 32, 0, 0);  // Red = any failed
     } else if (ota_skip_ > 0 && ota_ok_ > 0) {
-      setup_.led_->setPixel(phase_idx, 32, 24, 0);   // Yellow = mixed
+      setup_.led_->setPixel(phase_idx, 32, 24, 0);  // Yellow = mixed
     } else if (ota_ok_ > 0) {
-      setup_.led_->setPixel(phase_idx, 0, 32, 0);    // Green = all OK so far
+      setup_.led_->setPixel(phase_idx, 0, 32, 0);  // Green = all OK so far
     } else if (ota_skip_ > 0) {
-      setup_.led_->setPixel(phase_idx, 32, 24, 0);   // Yellow = all skipped
+      setup_.led_->setPixel(phase_idx, 32, 24, 0);  // Yellow = all skipped
     }
   }
 

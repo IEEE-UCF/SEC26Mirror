@@ -36,12 +36,10 @@ class DeployNode : public rclcpp::Node {
         std::bind(&DeployNode::triggerCallback, this, std::placeholders::_1));
 
     // Publishers for MCU feedback
-    status_pub_ =
-        this->create_publisher<std_msgs::msg::String>(
-            "/mcu_robot/deploy/status", qos);
-    oled_pub_ =
-        this->create_publisher<std_msgs::msg::String>(
-            "/mcu_robot/lcd/append", qos);
+    status_pub_ = this->create_publisher<std_msgs::msg::String>(
+        "/mcu_robot/deploy/status", qos);
+    oled_pub_ = this->create_publisher<std_msgs::msg::String>(
+        "/mcu_robot/lcd/append", qos);
 
     // Poll orchestrator status file every 500ms
     status_timer_ = this->create_wall_timer(
@@ -66,12 +64,12 @@ class DeployNode : public rclcpp::Node {
     }
 
     if (msg->data.find("start:") == 0) {
-      std::string remainder = msg->data.substr(6);  // e.g. "robot" or "robot:force"
+      std::string remainder =
+          msg->data.substr(6);  // e.g. "robot" or "robot:force"
       bool force = false;
       std::string target = remainder;
       auto force_pos = remainder.rfind(":force");
-      if (force_pos != std::string::npos &&
-          force_pos + 6 == remainder.size()) {
+      if (force_pos != std::string::npos && force_pos + 6 == remainder.size()) {
         target = remainder.substr(0, force_pos);
         force = true;
       }

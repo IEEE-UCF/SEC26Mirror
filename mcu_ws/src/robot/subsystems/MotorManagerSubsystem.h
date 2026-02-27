@@ -115,7 +115,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
         in_reverse_[i] = true;
         if (setup_.driver_) {
           setup_.driver_->bufferDigital(dirChannel(i), !dirs_[i]);
-          setup_.driver_->bufferPWM(pwmChannel(i), MAX_PWM - NFPSHOP_REVERSE_DUTY);
+          setup_.driver_->bufferPWM(pwmChannel(i),
+                                    MAX_PWM - NFPSHOP_REVERSE_DUTY);
         }
       }
     }

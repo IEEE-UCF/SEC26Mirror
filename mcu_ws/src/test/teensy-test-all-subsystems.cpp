@@ -158,8 +158,8 @@ static ServoSubsystem g_servo(g_servo_setup);
 
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
-                                                   Drivers::UWBMode::TAG,
-                                                   ROBOT_UWB_TAG_ID, PIN_UWB_CS);
+                                                  Drivers::UWBMode::TAG,
+                                                  ROBOT_UWB_TAG_ID, PIN_UWB_CS);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
@@ -243,21 +243,20 @@ void setup() {
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);                // ROS agent
-  g_imu.beginThreaded(2048, 3, 20);           // 50 Hz
-  g_rc.beginThreaded(1024, 3, 5);             // IBUS polling
-  g_servo.beginThreaded(1024, 2, 50);         // 20 Hz state pub
-  g_motor.beginThreaded(1024, 2, 50);         // 20 Hz state pub
-  g_oled.beginThreaded(2048, 1, 50);          // 20 Hz display
-  g_battery.beginThreaded(1024, 1, 100);      // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);       // 10 Hz TOF
+  g_mr.beginThreaded(8192, 4);                 // ROS agent
+  g_imu.beginThreaded(2048, 3, 20);            // 50 Hz
+  g_rc.beginThreaded(1024, 3, 5);              // IBUS polling
+  g_servo.beginThreaded(1024, 2, 50);          // 20 Hz state pub
+  g_motor.beginThreaded(1024, 2, 50);          // 20 Hz state pub
+  g_oled.beginThreaded(2048, 1, 50);           // 20 Hz display
+  g_battery.beginThreaded(1024, 1, 100);       // 10 Hz
+  g_sensor.beginThreaded(1024, 1, 100);        // 10 Hz TOF
   g_dip.beginThreaded(1024, 1, 500);           // 2 Hz
   g_btn.beginThreaded(1024, 1, 20);            // 50 Hz
   g_led.beginThreaded(1024, 1, 50);            // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
-
 }
 
 void loop() { threads.delay(100); }

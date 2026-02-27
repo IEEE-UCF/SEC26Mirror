@@ -136,7 +136,7 @@ void UWBSimulation::uwb_simulate(double x, double y, double z) {
   // msg.label_name = labelName;
 
   for (auto it : realDistance) {
-    int id = it.first; // anchor id
+    int id = it.first;  // anchor id
 
     uwb_interfaces::msg::UWBDistance distance;
     distance.anchor_id = id;

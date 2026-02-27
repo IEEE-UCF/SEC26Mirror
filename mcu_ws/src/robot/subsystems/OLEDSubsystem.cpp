@@ -136,15 +136,14 @@ bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   lcd_text_buf_[0] = '\0';
 
   if (rclc_subscription_init_default(
-          &lcd_sub_, node_,
-          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+          &lcd_sub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
           "/mcu_robot/lcd/append") != RCL_RET_OK) {
     return false;
   }
 
   if (rclc_executor_add_subscription_with_context(
-          executor, &lcd_sub_, &lcd_msg_,
-          &OLEDSubsystem::appendCallback, this, ON_NEW_DATA) != RCL_RET_OK) {
+          executor, &lcd_sub_, &lcd_msg_, &OLEDSubsystem::appendCallback, this,
+          ON_NEW_DATA) != RCL_RET_OK) {
     return false;
   }
 
@@ -176,8 +175,7 @@ void OLEDSubsystem::appendCallback(const void* msg, void* ctx) {
   const auto* m = static_cast<const std_msgs__msg__String*>(msg);
   if (!self->takeMutex()) return;
 
-  const char* text =
-      (m->data.data && m->data.size > 0) ? m->data.data : "";
+  const char* text = (m->data.data && m->data.size > 0) ? m->data.data : "";
   self->appendText(text);
 
   self->giveMutex();

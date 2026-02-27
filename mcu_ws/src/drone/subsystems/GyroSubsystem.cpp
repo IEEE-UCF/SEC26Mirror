@@ -43,11 +43,14 @@ void GyroSubsystem::update() {
         float qk = val.un.arvrStabilizedRV.k;
 
         data_.roll = atan2f(2.0f * (qr * qi + qj * qk),
-                            1.0f - 2.0f * (qi * qi + qj * qj)) * 57.29577951f;
-        data_.pitch = asinf(constrain(2.0f * (qr * qj - qk * qi),
-                                       -0.999999f, 0.999999f)) * 57.29577951f;
+                            1.0f - 2.0f * (qi * qi + qj * qj)) *
+                     57.29577951f;
+        data_.pitch = asinf(constrain(2.0f * (qr * qj - qk * qi), -0.999999f,
+                                      0.999999f)) *
+                      57.29577951f;
         data_.yaw = atan2f(2.0f * (qr * qk + qi * qj),
-                           1.0f - 2.0f * (qj * qj + qk * qk)) * 57.29577951f;
+                           1.0f - 2.0f * (qj * qj + qk * qk)) *
+                    57.29577951f;
         break;
       }
       case SH2_GYROSCOPE_CALIBRATED: {

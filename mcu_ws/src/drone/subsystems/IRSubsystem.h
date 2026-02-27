@@ -11,8 +11,8 @@
 namespace Drone {
 
 struct IRConfig {
-  uint8_t ir_pin = 4;          // GPIO pin for IR LED
-  uint16_t address = 0xBB;    // NEC address (from ruleset)
+  uint8_t ir_pin = 4;       // GPIO pin for IR LED
+  uint16_t address = 0xBB;  // NEC address (from ruleset)
 };
 
 // Antenna codes (upper nibble of command byte)
@@ -22,9 +22,9 @@ static constexpr uint8_t ANTENNA_3_CODE = 0x50;
 static constexpr uint8_t ANTENNA_4_CODE = 0x60;
 
 // Color codes (lower nibble of command byte)
-static constexpr uint8_t COLOR_RED    = 0x09;
-static constexpr uint8_t COLOR_GREEN  = 0x0A;
-static constexpr uint8_t COLOR_BLUE   = 0x0C;
+static constexpr uint8_t COLOR_RED = 0x09;
+static constexpr uint8_t COLOR_GREEN = 0x0A;
+static constexpr uint8_t COLOR_BLUE = 0x0C;
 static constexpr uint8_t COLOR_PURPLE = 0x0F;
 
 class IRSubsystem {

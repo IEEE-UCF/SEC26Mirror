@@ -61,8 +61,8 @@ constexpr uint8_t PIN_SERVO_OE = 28;  // PCA9685 #0 OE (active LOW)
 constexpr uint8_t PIN_MOTOR_OE = 29;  // PCA9685 #1 OE (active LOW)
 
 // ── Misc GPIO ───────────────────────────────────────────────────────
-constexpr uint8_t PIN_RC_RX = 34;             // FlySky IBUS receiver (Serial8 RX)
-constexpr uint8_t PIN_RGB_LEDS = 35;          // WS2812B data line
+constexpr uint8_t PIN_RC_RX = 34;     // FlySky IBUS receiver (Serial8 RX)
+constexpr uint8_t PIN_RGB_LEDS = 35;  // WS2812B data line
 constexpr uint8_t PIN_BUTTON_INTERRUPT = 36;  // Standalone reset button
 
 // ── Not Connected ───────────────────────────────────────────────────

@@ -128,7 +128,8 @@ void RCSubsystem::publishRC() {
 
   updateRCMessage();
 #ifdef USE_TEENSYTHREADS
-  { Threads::Scope guard(g_microros_mutex);
+  {
+    Threads::Scope guard(g_microros_mutex);
     (void)rcl_publish(&pub_, &msg_, NULL);
   }
 #else

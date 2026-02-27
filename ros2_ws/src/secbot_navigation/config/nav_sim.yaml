@@ -12,7 +12,7 @@ topics:
   trajectory: "/trajectory"
 
 smoothing:
-  max_skip: 1
+  max_skip: 100
 
 trajectory:
   speed: 1.0

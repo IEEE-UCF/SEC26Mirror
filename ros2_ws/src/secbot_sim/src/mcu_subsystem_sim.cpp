@@ -738,13 +738,9 @@ void McuSubsystemSimulator::drivePublishCallback() {
       pub_x, pub_y, yaw, current_velocity_.getX() * IN_TO_M,
       current_velocity_.getTheta());
 
-  // TF broadcast so "odom" exists in /tf
-  geometry_msgs::msg::TransformStamped t;
-  t.header.stamp = msg.header.stamp;
-  t.header.frame_id = "odom";
-  t.child_frame_id = "base_link";
-  t.transform = msg.transform.transform;
-  tf_broadcaster_->sendTransform(t);
+  // NOTE: odom→base_link TF is published by the Gazebo bridge (/tf).
+  // Do NOT broadcast it here — duplicate TF publishers cause the robot
+  // to teleport to (0,0) when this node hasn't received gz_odom yet.
 }
 
 // IMU publish

@@ -191,9 +191,8 @@ void setup() {
   Serial.println(
       PSTR("\r\nSEC26 Robot — All Subsystems Test (TeensyThreads)\r\n"));
 
-  // 0. I2C bus mutexes + SPI for UWB
+  // 0. I2C bus mutexes
   I2CBus::initLocks();
-  SPI.begin();
 
   // 1. Mux reset (if wired)
   pinMode(PIN_MUX_RESET, OUTPUT);

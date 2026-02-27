@@ -21,31 +21,6 @@ The codebase is split into two workspaces:
 - **Source organization**:
   - `src/robot/`: Main Teensy41 robot firmware (uses micro-ROS)
   - `src/beacon/`: UWB beacon nodes (differentiated by `BEACON_ID` build flag)
-<<<<<<< HEAD
-  - `src/drone/`: Drone controller
-  - `src/field/`: Field element controllers (button, crank, earth, keypad, pressure)
-  - `src/test/`: Test programs
-- **Libraries**:
-  - `lib/subsystems/`: Core robot subsystem abstractions (RobotManager, McuSubsystem, TimedSubsystem, UWBSubsystem)
-  - `lib/robot/`, `lib/sensors/`, `lib/control/`, `lib/ir/`: Specific drivers and subsystem implementations
-  - External dependencies defined in `platformio.ini` (SEC-Base-Classes, Adafruit sensors, etc.)
-
-### ROS2 Workspace (`ros2_ws/`)
-
-ROS2 packages using Jazzy distribution:
-
-- `secbot_autonomy`: High-level autonomy and task planning
-- `secbot_navigation`: Navigation stack integration
-- `secbot_vision`: Computer vision for object detection
-- `secbot_fusion`: Sensor fusion
-- `secbot_uwb`: Ultra-wideband positioning
-- `secbot_bridge_i2c`: Hardware bridge for I2C communication
-- `secbot_health`: System health monitoring
-- `secbot_tf`: Transform frames
-- `secbot_sim`: Gazebo simulation
-- `secbot_msgs`: Custom ROS2 message definitions
-- `mcu_msgs`: Shared messages between MCU and ROS2 (symlinked to `mcu_ws/extra_packages/mcu_msgs`)
-=======
   - `src/drone/`: Drone controller (flight controller, IMU, height, IR subsystems)
   - `src/minibot/`: Mini-robot ESP32 firmware (MinibotMotorDriver, MinibotDriveSubsystem, UWB tag, micro-ROS WiFi)
   - `src/field/`: Field element controllers (button, crank, earth, keypad, pressure)
@@ -99,7 +74,6 @@ ROS2 packages using Jazzy distribution:
 - `secbot_msgs`: Custom messages (TaskStatus, DuckDetection) and actions (NavigatePath, ApproachTarget)
 - `mcu_msgs`: Shared MCU↔ROS2 messages (symlinked to `mcu_ws/extra_packages/mcu_msgs`)
 - `my_robot_description`: URDF robot description for visualization
->>>>>>> master
 
 ## Development Commands
 
@@ -112,40 +86,27 @@ All development happens inside Docker containers defined in `docker-compose.yml`
 - `BUILD_TARGET=dev`: Includes Gazebo, RViz, GDB, GUI tools (for PC/laptop development)
 - `BUILD_TARGET=prod`: Minimal runtime only (for robot deployment)
 
-**Start development container** (run on host):
 ```bash
-docker compose up -d
+docker compose up -d                      # Start container (on host)
+docker compose exec devcontainer bash     # Enter container (on host)
+docker compose down                       # Stop and clean (on host)
 ```
 
-**Enter the container** (run on host):
-```bash
-docker compose exec devcontainer bash
-```
-
-Once inside the container, you can run all PlatformIO and ROS2 commands.
-
-**Stop and clean** (run on host):
-```bash
-docker compose down
-```
+**Note**: On first run or after updating git submodules (e.g., `libs_external/`), you may need to recreate the Docker volume: `docker volume rm robot-setup_mcu_lib_external` then `docker compose up -d` to reseed.
 
 ### MCU Development (PlatformIO)
 
-All PlatformIO commands must be run from `/home/ubuntu/mcu_workspaces/sec26mcu` inside the container.
+All PlatformIO commands run from `/home/ubuntu/mcu_workspaces/sec26mcu` inside the container.
 
-**List all environments**:
 ```bash
-pio project config
+pio run -e <environment>                  # Build specific environment
+pio run -e <environment> --target upload  # Upload firmware
+pio run -e <environment> --target clean   # Clean build
+pio device monitor -e <environment>       # Monitor serial output (921600 baud)
 ```
 
-**Build specific environment**:
+Key environments:
 ```bash
-<<<<<<< HEAD
-pio run -e <environment>
-```
-
-Examples:
-=======
 pio run -e robot                          # Teensy41 main robot
 pio run -e beacon1                        # UWB beacon ID=10
 pio run -e beacon2                        # UWB beacon ID=11
@@ -164,142 +125,83 @@ pio run -e field-controller
 **Default build environments** (built by `pio run` with no `-e`): `robot`, `drone`, `minibot`, `beacon1`, `beacon2`, `beacon3`, `teensy-test-all-subsystems`.
 
 **Clean micro-ROS** (required after changing `mcu_msgs` definitions):
->>>>>>> master
 ```bash
-pio run -e robot              # Teensy41 main robot
-pio run -e beacon1            # UWB beacon with ID=10
-pio run -e beacon2            # UWB beacon with ID=11
-pio run -e drone              # Drone controller
-pio run -e field-button       # Field button element
-pio run -e field-pressure     # Field pressure sensor
+pio run -e robot -t clean_microros && pio run -e robot
 ```
+After cleaning, the next build auto-regenerates micro-ROS libraries from `extra_packages/mcu_msgs`.
 
-**Upload firmware**:
+**Flash robot (automated)**:
 ```bash
-<<<<<<< HEAD
-pio run -e <environment> --target upload
-=======
 /home/ubuntu/scripts/flash_mcu.sh        # Flashes Teensy with retries
->>>>>>> master
 ```
-
-**Clean build**:
-```bash
-pio run -e <environment> --target clean
-```
-
-**Clean micro-ROS** (when micro-ROS messages are outdated):
-```bash
-# Clean Teensy micro-ROS (for robot)
-pio run -e robot -t clean_microros
-```
-Note: After cleaning micro-ROS, the next build will automatically regenerate the micro-ROS libraries with updated message definitions from `extra_packages/mcu_msgs`.
-
-**Monitor serial output**:
-```bash
-pio device monitor -e <environment>
-```
-
-**Flash robot (automated script)**:
-```bash
-/home/ubuntu/scripts/flash_mcu.sh
-```
-This script handles flashing Teensy (robot) with retries and prebuilt artifact support.
 
 ### ROS2 Development
 
-All ROS2 commands must be run from `/home/ubuntu/ros2_workspaces` inside the container after sourcing ROS2:
+All commands run from `/home/ubuntu/ros2_workspaces` inside the container.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
+colcon build                              # Build all packages
+colcon build --packages-select <pkg>      # Build specific package
+source install/setup.bash                 # Source after building
+ros2 launch <package> <launch_file>       # Run launch file
 ```
 
-**Build workspace**:
+Example launches:
 ```bash
-colcon build
-```
-
-**Build specific package**:
-```bash
-colcon build --packages-select <package_name>
-```
-
-**Source workspace after building**:
-```bash
-source install/setup.bash
-```
-
-**Run launch files**:
-```bash
-ros2 launch <package_name> <launch_file>
-```
-
-Examples:
-```bash
-ros2 launch secbot_sim sim.launch.py                    # Start Gazebo simulation
-ros2 launch secbot_autonomy sim_autonomy.launch.py      # Autonomy in simulation
-ros2 launch secbot_vision vision.launch.py              # Vision system
-```
-
-**Build and run robot (automated script)**:
-```bash
-/home/ubuntu/scripts/start_robot.sh
+ros2 launch secbot_sim sim.launch.py
+ros2 launch secbot_autonomy sim_autonomy.launch.py
+ros2 launch secbot_vision vision.launch.py
+ros2 launch secbot_navigation sim_nav.launch.py
+ros2 launch secbot_uwb uwb_positioning.launch.py
+ros2 launch secbot_fusion fusion.launch.py
 ```
 
 ### Deployment
 
-The deployment pipeline is triggered by pushing to `prod` or by pressing the physical deploy button on the Pi. It uses Gitea Actions (`.gitea/workflows/pi-deploy.yml`) to:
-
-1. Build Teensy firmware on an amd64 runner (avoids ARM64 compile issues)
-2. Download artifacts and deploy on the Pi (`rpi-ros2` runner)
-3. Rebuild Docker container, flash MCU, build ROS 2, and launch nodes
-
-**Deploy all systems inside the container**:
 ```bash
-python3 /home/ubuntu/scripts/deploy-all.py [--skip-mcu] [--skip-ros] [--skip-launch]
+python3 /home/ubuntu/scripts/deploy-all.py             # Full deployment
+python3 /home/ubuntu/scripts/deploy-all.py --skip-mcu   # Skip MCU flash
+python3 /home/ubuntu/scripts/deploy-all.py --skip-ros   # Skip ROS build
+/home/ubuntu/scripts/start_robot.sh                      # Build ROS2 only
 ```
 
-**Flash Teensy only**:
+## Testing
+
+### Native Tests (run on PC, no hardware needed)
+
+Location: `mcu_ws/test/test_*/` | Framework: Unity | Naming: `test-<category>-<component>`
+
 ```bash
-bash /home/ubuntu/scripts/flash_mcu.sh
+pio test -e test-control-pid                    # Run single test suite
+pio test -e test-math-vector2d                  # Another example
+./mcu_ws/scripts/run_all_mcu_tests.sh           # Run all native + build hardware tests
 ```
 
-See `scripts/README.md` for full Pi setup instructions, button daemon configuration, CI/CD workflow details, and troubleshooting.
+Test suites (253+ tests total): `test-math-{pose2d,vector2d,pose3d}`, `test-control-{pid,arm-kinematics,trapezoidal-motion-profile,scurve-motion-profile,trajectory-controller}`, `test-drive-tankdrivelocalization`, `test-utils-{filters,units}`
 
-## Architecture Notes
+### Hardware Tests (require physical MCU)
 
-### Robot Firmware Architecture (Teensy41)
+Location: `mcu_ws/src/test/` | Naming: `teensy-test-<subsystem>` or `esp32-test-<subsystem>`
 
-The robot firmware (`src/robot/`) uses a subsystem-based architecture:
+```bash
+pio run -e teensy-test-battery-subsystem --target upload  # Build + flash
+pio device monitor -e teensy-test-battery-subsystem       # Watch output
+pio run -e teensy-test-all-subsystems --target upload     # Flash all-subsystems test
+```
 
-<<<<<<< HEAD
-- **RobotManager**: Manages update timing for all subsystems using configurable timers (MS_1000, MS_200, MS_50, MS_20, etc.)
-- **RobotObject**: Wraps drivers and subsystems with timing configuration
-- **MCUSubsystem**: State machine for robot lifecycle (init → arm → begin → update/pause → reset)
-- **Subsystems**: Battery, Sensors (TOF), Arm, RC, Heartbeat, etc.
-- **micro-ROS**: Provides ROS2 communication via serial or network transport
-=======
 Hardware test environments: `teensy-test-battery-subsystem`, `teensy-test-sensor-subsystem`, `teensy-test-oled-subsystem`, `teensy-test-all-subsystems`, `teensy-test-rc-subsystem`, `teensy-test-arm-servos`, `teensy-test-drive-motors`, `esp32-test-microros-wifi`, `esp32-test-simple-wifi`.
->>>>>>> master
 
-Entry point: `src/robot/main.cpp` includes `machines/RobotLogic.h` which instantiates all subsystems and wires callbacks.
+See `mcu_ws/test/README.md` for detailed test documentation.
 
-### PlatformIO Configuration
+## Architecture
 
-The `platformio.ini` uses inheritance for hardware bases:
+### Robot Firmware (Teensy41) — Threading Model
 
-- `[esp32_base]`: Standard ESP32 configuration
-- `[teensy_base]`: Teensy41 configuration
-- `[esp32_microros]`: ESP32 + micro-ROS (extends esp32_base + microros_base)
-- `[teensy_microros]`: Teensy41 + micro-ROS (extends teensy_base + microros_base)
+Entry point: `src/robot/main.cpp` → includes `machines/RobotLogic.h` which instantiates all subsystems.
 
-Concrete environments use `build_src_filter` to select specific source files and `extends` to inherit base configurations.
+Each subsystem runs as an independent **TeensyThreads** task with configurable priority and update rate:
 
-<<<<<<< HEAD
-### Micro-ROS Integration
-
-Micro-ROS libraries are stored in `mcu_ws/libs_external/` (separate for esp32 and teensy) and mounted as Docker volumes. The distro is configured to match ROS2 Jazzy. Transport defaults to serial (`MICRO_ROS_TRANSPORT_ARDUINO_SERIAL`).
-=======
 | Priority | Subsystem | Rate | Stack |
 |----------|-----------|------|-------|
 | 4 (highest) | micro-ROS Manager | — | 8192 |
@@ -323,15 +225,9 @@ Micro-ROS libraries are stored in `mcu_ws/libs_external/` (separate for esp32 an
 - **Motor Manager**: Runs at 1000 Hz to handle NFPShop brushless motor reverse-pulse timing (~3ms pulse every ~103ms at low duty to prevent controller fault).
 - **OLED Display**: Uses hardware SPI1 (pins 26/27) — software SPI is unreliable under TeensyThreads preemption.
 - **UWB Init**: Must call `SPI.begin()` before `g_uwb.init()`. The DW3000 library has a hardcoded `RST_PIN 27` in `DW3000Constants.h` that conflicts with OLED SPI1 SCK — `UWBDriver.cpp` skips `hardReset()` when no reset pin is wired to avoid this.
->>>>>>> master
 
-### Message Sharing
+Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`) for ROS2 lifecycle.
 
-<<<<<<< HEAD
-`mcu_msgs` package is shared between ROS2 and MCU workspaces via symlink:
-- Source: `ros2_ws/src/mcu_msgs`
-- Linked to: `mcu_ws/extra_packages/mcu_msgs`
-=======
 ### I2C Bus Layout
 
 ```
@@ -439,9 +335,19 @@ pio run -e robot -t clean_microros && pio run -e robot
 ### Simulation
 
 `secbot_sim` includes `mcu_subsystem_sim` — a C++ node that emulates all MCU subsystems with physics (drive kinematics, S-curve profiles, PID). It publishes the same topics as the real Teensy firmware, so all ROS2 nodes work identically in simulation. Uses Gazebo Harmonic (dev build only).
->>>>>>> master
 
 ## Common Workflows
+
+### Adding a new robot subsystem
+
+1. Create header in `mcu_ws/src/robot/subsystems/` (header-only preferred for simple subsystems)
+2. If it needs ROS2: implement `IMicroRosParticipant` (override `onCreate`/`onDestroy`)
+3. Use setup pattern: `SubsystemSetup` class extending `Classes::BaseSetup` with configurable topic/service names
+4. Instantiate in `mcu_ws/src/robot/machines/RobotLogic.h`
+5. Register with micro-ROS manager: `g_mr.registerParticipant(&subsystem)`
+6. Start threaded: `subsystem.beginThreaded(stackSize, priority, updateRateMs)`
+7. If the subsystem has a `.cpp` file, add it to build_src_filter in relevant environments
+8. Build: `pio run -e robot`
 
 ### Adding a new field element
 
@@ -454,62 +360,32 @@ pio run -e robot -t clean_microros && pio run -e robot
    ```
 3. Build: `pio run -e field-<name>`
 
-### Adding a new robot subsystem
+### Adding/changing mcu_msgs
 
-1. Create header/implementation in `mcu_ws/lib/subsystems/` or `mcu_ws/src/robot/subsystems/`
-2. Instantiate in `mcu_ws/src/robot/machines/RobotLogic.h`
-3. Wire callbacks and register with RobotManager
-4. Add RobotObject with appropriate TimerConfig
-5. Build robot: `pio run -e robot`
+1. Edit `.msg`/`.srv`/`.action` files in `ros2_ws/src/mcu_msgs/`
+2. Update `ros2_ws/src/mcu_msgs/CMakeLists.txt` to include new files in `rosidl_generate_interfaces`
+3. Rebuild ROS2: `colcon build --packages-select mcu_msgs`
+4. Clean and rebuild micro-ROS for affected MCU targets (see above)
 
-### Testing in simulation
+## CI/CD
 
-1. Build ROS2 workspace: `colcon build`
-2. Source: `source install/setup.bash`
-3. Launch simulation: `ros2 launch secbot_sim sim.launch.py`
-4. Launch sim versions of other nodes (e.g., `sim_autonomy.launch.py`)
+Hosted on **Gitea** (not GitHub). Workflows in `.gitea/workflows/`:
 
-## Testing
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `test-mcu.yml` | PR touching mcu_ws or mcu_msgs | Runs all native PlatformIO unit tests |
+| `platformio-robot.yml` | PR touching mcu_ws or mcu_msgs | Builds ALL non-test PlatformIO environments |
+| `build-ws.yml` | PR/push to master touching ros2_ws | Docker image build + colcon build |
+| `pi-deploy.yml` | Push to `prod` or `CD-testing` | Full deployment to Raspberry Pi robot |
+| `prod-push.yml` | Push to `master` | Auto-syncs master → prod branch |
+| `auto-format.yml` | PR labeled `format` | Runs clang-format, auto-commits |
+| `commit-linter.yml` | All PRs | Enforces Conventional Commits |
+| `test-multiarch.yml` | Manual dispatch only | Multi-architecture runner test |
 
-### MCU Test Architecture
+Commits must follow **Conventional Commits** format (enforced by CI): `feat:`, `fix:`, `chore:`, `refactor:`, etc.
 
-The MCU workspace uses PlatformIO's Unity test framework with two test types:
+## Network Configuration
 
-<<<<<<< HEAD
-**Native Tests** (`test-*` environments):
-- Run on PC without hardware (no Arduino framework)
-- Test math/control code (PID, motion profiles, trajectory, filters, units, kinematics, pose/vector math)
-- Fast execution, integrated into CI/CD
-- Location: `mcu_ws/test/test_*/`
-
-**MCU Hardware Tests** (`teensy-test-*`, `esp32-test-*` environments):
-- Run on physical hardware with connected sensors/peripherals
-- Test subsystems (Battery, Sensors, micro-ROS)
-- Require hardware setup (some need multiple MCUs)
-- Location: `mcu_ws/src/test/`
-
-**Running tests**:
-```bash
-# Run all native tests
-pio test
-
-# Run specific native test
-pio test -e test-control-pid
-
-# Build MCU hardware test (requires upload to hardware)
-pio run -e teensy-test-battery-subsystem
-pio run -e teensy-test-battery-subsystem --target upload
-
-# Run all tests (automated)
-./mcu_ws/scripts/run_all_mcu_tests.sh
-```
-
-**Naming convention**:
-- Native: `test-<category>-<component>` (e.g., `test-control-pid`)
-- Hardware: `teensy-test-<subsystem>` or `esp32-test-<subsystem>`
-
-See `mcu_ws/test/README.md` for detailed test documentation.
-=======
 - **WiFi SSID**: UCFIEEEBot | **Password**: goodlife
 - **Pi IP** (AP mode): 192.168.4.1 | **Subnet**: 192.168.4.x/24
 - **micro-ROS agent**: UDP port 8888 on Pi
@@ -517,4 +393,3 @@ See `mcu_ws/test/README.md` for detailed test documentation.
 - **ESP32 transport**: WiFi UDP to Pi agent
 - **Beacon IPs**: beacon1=192.168.4.20, beacon2=192.168.4.21, beacon3=192.168.4.22
 - **Minibot IP**: 192.168.4.24
->>>>>>> master

@@ -88,7 +88,7 @@ class McuSubsystemSimulator : public rclcpp::Node {
   float track_width_;
   float wheel_diameter_;
   int encoder_ticks_per_rev_;
-  int gear_ratio_;
+  double gear_ratio_;
   float max_velocity_;
   float max_angular_velocity_;
   float max_wheel_velocity_;  // max single-wheel vel at PWM=255

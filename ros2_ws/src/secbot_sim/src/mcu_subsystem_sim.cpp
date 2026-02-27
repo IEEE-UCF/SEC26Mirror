@@ -42,7 +42,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   this->declare_parameter("track_width", 12.0);
   this->declare_parameter("wheel_diameter", 4.0);
   this->declare_parameter("encoder_ticks_per_rev", 2048);
-  this->declare_parameter("gear_ratio", 1);
+  this->declare_parameter("gear_ratio", 1.0);
   this->declare_parameter("max_velocity", 24.0);
   this->declare_parameter("max_angular_velocity", 3.0);
   this->declare_parameter("max_wheel_velocity", 48.0);
@@ -76,7 +76,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       static_cast<float>(this->get_parameter("wheel_diameter").as_double());
   encoder_ticks_per_rev_ =
       this->get_parameter("encoder_ticks_per_rev").as_int();
-  gear_ratio_ = this->get_parameter("gear_ratio").as_int();
+  gear_ratio_ = this->get_parameter("gear_ratio").as_double();
   max_velocity_ =
       static_cast<float>(this->get_parameter("max_velocity").as_double());
   max_angular_velocity_ = static_cast<float>(
@@ -86,7 +86,8 @@ McuSubsystemSimulator::McuSubsystemSimulator()
 
   // Derived constants (same math as TankDriveLocalizationSetup constructor)
   float wheel_circumference = static_cast<float>(M_PI) * wheel_diameter_;
-  long ticks_per_rev = static_cast<long>(encoder_ticks_per_rev_) * gear_ratio_;
+  long ticks_per_rev = static_cast<long>(
+      static_cast<double>(encoder_ticks_per_rev_) * gear_ratio_);
   inches_per_tick_ = wheel_circumference / static_cast<float>(ticks_per_rev);
 
   // Configure PID controllers (same config for both wheels)
@@ -138,7 +139,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   // Configure localization
   loc_setup_ = std::make_unique<Drive::TankDriveLocalizationSetup>(
       "sim", track_width_, wheel_diameter_, encoder_ticks_per_rev_,
-      gear_ratio_);
+      static_cast<int>(gear_ratio_));
   localization_ = std::make_unique<Drive::TankDriveLocalization>(*loc_setup_);
 
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);

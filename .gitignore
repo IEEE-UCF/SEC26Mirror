@@ -79,3 +79,4 @@ ros2_ws/src/log
 **/build/
 **/install/
 **/log/
+PROJECT_STATUS.md

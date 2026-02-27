@@ -124,7 +124,7 @@ bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   lcd_msg_.data.size = 0;
   lcd_text_buf_[0] = '\0';
 
-  if (rclc_subscription_init_default(
+  if (rclc_subscription_init_best_effort(
           &lcd_sub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
           "/mcu_robot/lcd/append") != RCL_RET_OK) {
     return false;
@@ -136,7 +136,7 @@ bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
     return false;
   }
 
-  if (rclc_subscription_init_default(
+  if (rclc_subscription_init_best_effort(
           &scroll_sub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
           "/mcu_robot/lcd/scroll") != RCL_RET_OK) {
     return false;
@@ -185,11 +185,29 @@ void OLEDSubsystem::scrollCallback(const void* msg, void* ctx) {
 // ──────────────────────────────────────────────────────────
 
 void OLEDSubsystem::appendText(const char* text) {
+  static constexpr int WRAP_INDENT = 2;
   const char* p = text;
   while (*p) {
     const char* nl = p;
     while (*nl && *nl != '\n') ++nl;
-    appendOneLine(p, static_cast<int>(nl - p));
+    int seg_len = static_cast<int>(nl - p);
+    if (seg_len <= MAX_LINE_LEN) {
+      appendOneLine(p, seg_len);
+    } else {
+      appendOneLine(p, MAX_LINE_LEN);
+      int remaining = seg_len - MAX_LINE_LEN;
+      const char* wp = p + MAX_LINE_LEN;
+      int wrap_width = MAX_LINE_LEN - WRAP_INDENT;
+      while (remaining > 0) {
+        char wrap_buf[MAX_LINE_LEN + 1];
+        memset(wrap_buf, ' ', WRAP_INDENT);
+        int chunk = remaining < wrap_width ? remaining : wrap_width;
+        memcpy(wrap_buf + WRAP_INDENT, wp, chunk);
+        appendOneLine(wrap_buf, WRAP_INDENT + chunk);
+        wp += chunk;
+        remaining -= chunk;
+      }
+    }
     p = (*nl == '\n') ? nl + 1 : nl;
   }
   dirty_ = true;

@@ -9,110 +9,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # 0. Build MCU artifacts on amd64 to avoid ARM64 compile issues
-  build-mcu-artifacts:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Prepare MCU extra packages (mcu_msgs)
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p mcu_ws/extra_packages
-          if [ -d ros2_ws/src/mcu_msgs ]; then
-            rm -rf mcu_ws/extra_packages/mcu_msgs
-            cp -a ros2_ws/src/mcu_msgs mcu_ws/extra_packages/mcu_msgs
-          else
-            echo "mcu_msgs not found at ros2_ws/src/mcu_msgs" >&2
-            exit 1
-          fi
-
-      - name: Cache PlatformIO packages and build artifacts
-        id: pio-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.platformio
-            mcu_ws/.pio
-            mcu_ws/.pioenvs
-            mcu_ws/libs_external/esp32/micro_ros_platformio/build
-            mcu_ws/libs_external/esp32/micro_ros_platformio/libmicroros
-            mcu_ws/libs_external/teensy/micro_ros_platformio/build
-            mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
-            ~/.cache/pip
-          key: platformio-lite-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**') }}
-          restore-keys: |
-            platformio-lite-${{ runner.os }}-
-
-      - name: Show PlatformIO cache status
-        run: |
-          if [ "${{ steps.pio-cache.outputs.cache-hit }}" = 'true' ]; then
-            echo "::notice::PlatformIO cache hit"
-          else
-            echo "::notice::PlatformIO cache miss"
-          fi
-
-      - name: Clean microros if cache restored from fallback
-        if: steps.pio-cache.outputs.cache-hit != 'true'
-        working-directory: mcu_ws/
-        run: |
-          echo "::notice::Cache restored from fallback key, cleaning microros"
-          pio run -e robot -t clean_microros || true
-
-      - name: Install CMake
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake
-
-      - name: Install PlatformIO
-        run: pip install platformio
-
-      - name: Build robot PlatformIO environment
-        working-directory: mcu_ws/
-        shell: bash
-        run: |
-          pio pkg install || true
-          # Build only the required environment to speed up CI
-          pio run -e robot
-
-      - name: Preview MCU artifacts (count + list)
-        shell: bash
-        run: |
-          set -euxo pipefail
-          shopt -s globstar nullglob
-          files=(
-            mcu_ws/.pio/build/robot/firmware.*
-            mcu_ws/.pio/build/robot/**/*.hex
-            mcu_ws/.pio/build/robot/**/*.elf
-          )
-          echo "Found ${#files[@]} files to upload:";
-          for f in "${files[@]}"; do echo " - $f"; done
-
-      - name: Upload MCU build artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: mcu-build-artifacts
-          path: |
-            mcu_ws/.pio/build/robot/firmware.*
-            mcu_ws/.pio/build/robot/**/*.hex
-            mcu_ws/.pio/build/robot/**/*.elf
-          if-no-files-found: ignore
-          retention-days: 7
-  # 1. Robot Job - Always Runs
   deploy-robot:
-    needs: build-mcu-artifacts
     runs-on: rpi-ros2
-    
+
     # Force all steps to run inside your specific directory
     defaults:
       run:
@@ -122,36 +21,33 @@ jobs:
       - name: 🌐 Check internet connectivity
         run: |
           echo "Checking internet connectivity..."
-          if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
-            echo "✅ Internet reachable (ping)"
-          elif curl --max-time 5 -sf https://gitea.syndric.org/api/v1/version >/dev/null 2>&1; then
-            echo "✅ Gitea reachable (curl)"
+          if curl --max-time 5 -sf https://gitea.syndric.org/api/v1/version >/dev/null 2>&1; then
+            echo "✅ Gitea reachable"
           else
             echo "❌ No internet connectivity — aborting deployment"
             exit 1
           fi
 
-      - name: 📦 Download MCU build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: mcu-build-artifacts
-          path: /home/ieee/SEC26/mcu_ws/prebuilt
-        continue-on-error: true
-
-      - name: 📄 List downloaded artifacts
+      - name: 💡 Clear LEDs and start deploy indicator
         run: |
-          echo "Listing prebuilt artifacts (if any):"
-          ls -R mcu_ws/prebuilt || echo "No prebuilt artifacts found"
-      - name: LEDs On
-        run: |
-          echo "⚡ LED Flashing (systemd transient unit) during deployment"
+          echo "💡 Clearing RGB LEDs and starting GPIO deploy indicator"
+          # Clear the 5 RGB LEDs via ROS2 (if container is running)
+          docker compose -f docker-compose.yml --project-directory . exec -T devcontainer \
+            bash -c "source /opt/ros/jazzy/setup.bash && ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor '{r: 0, g: 0, b: 0}'" 2>/dev/null || true
+          # Flash GPIO boot LED during deployment
           sudo systemctl stop sec26-bootled 2>/dev/null || true
           sudo systemd-run --unit=sec26-bootled \
             bash -c 'while true; do gpioset -c gpiochip0 17=1; sleep 0.2; gpioset -c gpiochip0 17=0; sleep 0.2; done'
+
       - name: 📂 Pull Latest Code (Robot)
         run: |
           echo "📂 Navigating to /home/ieee/SEC26..."
           git config --global --add safe.directory /home/ieee/SEC26
+
+          # Save current HEAD before updating so we can diff against it later
+          PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+          echo "$PREV_SHA" > /tmp/deploy_prev_sha
+
           git fetch --all
           echo "🔀 Switching to branch: ${{ gitea.ref_name }}"
           git reset --hard origin/${{ gitea.ref_name }}
@@ -160,62 +56,90 @@ jobs:
           echo "🔧 Fixing permissions..."
           chmod +x scripts/start_robot.sh
 
-      - name: 🧪 Run Verification Script
+          NEW_SHA=$(git rev-parse HEAD)
+          echo "📊 Deploy diff: ${PREV_SHA:0:8}..${NEW_SHA:0:8}"
+          if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" != "$NEW_SHA" ]; then
+            echo "Changed files:"
+            git diff --name-only "$PREV_SHA" "$NEW_SHA" | head -50
+          fi
+
+      - name: 🔨 Build MCU firmware (inside Docker)
         run: |
-          echo "🧪 Running test script on the Pi..."
-          # The verification script runs from the working-directory/scripts
-          python3 scripts/test_deploy.py
+          echo "🔨 Building MCU firmware via Docker..."
+          PREV_SHA=$(cat /tmp/deploy_prev_sha 2>/dev/null || echo "")
+
+          # Clean micro-ROS libs if mcu_msgs or microros config changed
+          if [ -n "$PREV_SHA" ] && git diff --name-only "$PREV_SHA" HEAD 2>/dev/null | grep -qE "mcu_msgs/|custom_microros\.meta|libs_external/"; then
+            echo "📦 mcu_msgs or microros config changed — cleaning micro-ROS libraries"
+            docker compose -f docker-compose.yml --project-directory . exec -T devcontainer \
+              bash -c "cd /home/ubuntu/mcu_workspaces/sec26mcu && pio run -e robot -t clean_microros" || true
+          fi
+
+          docker compose -f docker-compose.yml --project-directory . exec -T devcontainer \
+            bash -c "cd /home/ubuntu/mcu_workspaces/sec26mcu && pio run" || {
+            echo "⚠️ Docker exec failed — container may not be running, will build after restart"
+          }
 
       - name: 🚀 Build and Deploy (Docker)
         run: |
           echo "🚀 Rebuilding from: /home/ieee/SEC26/docker-compose.yml"
           COMPOSE_FILE="docker-compose.yml"
-          
-          # Check if Dockerfile has changed
-          if git diff HEAD~1 HEAD --name-only 2>/dev/null | grep -q "Dockerfile\|docker-compose"; then
+
+          # Check if Dockerfile/docker-compose changed since last deploy
+          PREV_SHA=$(cat /tmp/deploy_prev_sha 2>/dev/null || echo "")
+          if [ -n "$PREV_SHA" ] && git diff "$PREV_SHA" HEAD --name-only 2>/dev/null | grep -q "Dockerfile\|docker-compose"; then
             echo "📝 Dockerfile or docker-compose changed; full down/rebuild/up cycle"
             docker compose -f $COMPOSE_FILE --project-directory . down || true
           else
             echo "📝 No Dockerfile/docker-compose changes; only stopping and restarting"
             docker compose -f $COMPOSE_FILE --project-directory . stop || true
           fi
-          
+
           # Rebuild the image
           docker compose -f $COMPOSE_FILE --project-directory . build
-          
+
           # Start the container
           docker compose -f $COMPOSE_FILE --project-directory . up -d
 
-      - name: ▶️ Run and activate ROS2 things
-        env:
-          EVENT_NAME: ${{ gitea.event_name }}
+      - name: ▶️ Trigger deploy orchestrator
         run: |
-          # 4. Wait a moment for container to stabilize
+          # Wait for container to stabilize
           sleep 5
 
-          # 5. Determine if MCU sources changed in latest commit range
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "🟠 Manual dispatch detected; forcing MCU flash"
-            CHANGED_MCU="mcu_ws/"
-          else
-            if git rev-parse HEAD~1 >/dev/null 2>&1; then
-              CHANGED_MCU=$(git diff --name-only HEAD~1 HEAD | grep '^mcu_ws/' || true)
-            else
-              # No previous commit available; default to flashing MCU once
-              CHANGED_MCU="mcu_ws/"
+          # Write trigger file for the deploy orchestrator
+          mkdir -p scripts/.deploy
+          cat > scripts/.deploy/trigger << TRIGGER
+          target=robot
+          branch=${{ gitea.ref_name }}
+          online=true
+          timestamp=$(date +%s)
+          TRIGGER
+          # Clean up whitespace from heredoc indentation
+          sed -i 's/^[[:space:]]*//' scripts/.deploy/trigger
+
+          echo "Trigger file written, waiting for orchestrator to complete..."
+
+          # Poll status file for completion (timeout after 15 minutes)
+          TIMEOUT=900
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            if [ -f scripts/.deploy/status ]; then
+              PHASE=$(grep '^phase=' scripts/.deploy/status | cut -d= -f2)
+              MSG=$(grep '^message=' scripts/.deploy/status | cut -d= -f2)
+              echo "Phase: $PHASE — $MSG"
+              if [ "$PHASE" = "done" ]; then
+                echo "Deployment completed successfully!"
+                exit 0
+              elif [ "$PHASE" = "failed" ]; then
+                echo "Deployment failed: $MSG"
+                exit 1
+              fi
             fi
-          fi
-
-          if [ -z "$CHANGED_MCU" ]; then
-            echo "ℹ️ No changes detected in mcu_ws; skipping MCU flash"
-            MCU_FLAG="--skip-mcu"
-          else
-            echo "🔧 Changes detected in mcu_ws; will flash MCU"
-            MCU_FLAG=""
-          fi
-
-          # 6. Run unified deployment script inside container (conditional MCU flash, ROS build, then launch test node)
-          docker exec -u ubuntu sec26-devcontainer-1 bash -c "python3 /home/ubuntu/scripts/deploy-all.py $MCU_FLAG"
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
+          done
+          echo "Deployment timed out after ${TIMEOUT}s"
+          exit 1
 
       - name: 🧹 Cleanup
         run: |

@@ -43,6 +43,7 @@
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
+#include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
 using namespace Subsystem;
@@ -169,6 +170,11 @@ static IntakeBridgeSubsystemSetup g_bridge_setup(
     /*duck_detect_threshold_mm*/ 50, /*motor_speed*/ 200);
 static IntakeBridgeSubsystem g_bridge(g_bridge_setup);
 
+// --- Deploy subsystem (button-triggered deployment) ---
+static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
+                                           &g_led, &g_oled);
+static DeploySubsystem g_deploy(g_deploy_setup);
+
 // --- Drive subsystem ---
 // TODO: Replace placeholder pin values with actual hardware wiring config
 // static DriveBaseSetup g_drive_base_setup( ... encoder/motor configs ... );
@@ -224,16 +230,22 @@ void setup() {
   g_motor.init();
   g_intake.init();
   g_bridge.init();
+  g_deploy.init();
   SPI.begin();
   g_uwb.init();
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
   // g_drive.init();  // TODO: uncomment when DriveSubsystem is configured
 
-  // 2a. Startup LED flash (green)
-  g_led.setAll(0, 32, 0);
+  // 2a. Clear LEDs on startup
+  g_led.setAll(0, 0, 0);
   FastLED.show();
 
-  // 2b. Wire battery → OLED status line
+  // 2b. OLED startup debug info
+  g_oled.appendText("SEC26 Robot v1.0");
+  g_oled.appendText("Subsystems OK");
+  g_oled.appendText("Waiting for uROS...");
+
+  // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
   // 3. Register micro-ROS participants
@@ -252,6 +264,7 @@ void setup() {
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_intake);
   g_mr.registerParticipant(&g_bridge);
+  g_mr.registerParticipant(&g_deploy);
   // g_mr.registerParticipant(&g_drive);  // TODO: uncomment when configured
 
   // 4. Start threaded tasks
@@ -271,6 +284,7 @@ void setup() {
   g_uwb.beginThreaded(2048, 2, 50);           // 20 Hz UWB ranging
   g_arm.beginThreaded(1024, 2, 20);           // 50 Hz arm
   g_intake.beginThreaded(1024, 2, 20);        // 50 Hz intake
+  g_deploy.beginThreaded(1024, 1, 20);        // 50 Hz deploy button
   // g_drive.beginThreaded(2048, 3, 20);      // TODO: uncomment when configured
   threads.addThread(pca_task, nullptr, 1024); // 50 Hz PWM flush
 }

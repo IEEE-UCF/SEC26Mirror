@@ -65,6 +65,7 @@
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
+#include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
 using namespace Subsystem;
@@ -168,6 +169,11 @@ static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
                                                 PIN_MOTOR_OE, NUM_MOTORS);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
+// --- Deploy subsystem (button-triggered deployment) ---
+static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
+                                           &g_led, &g_oled);
+static DeploySubsystem g_deploy(g_deploy_setup);
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -214,15 +220,21 @@ void setup() {
   g_led.init();
   g_servo.init();
   g_motor.init();
+  g_deploy.init();
   SPI.begin();
   g_uwb.init();
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
 
-  // 2a. Startup LED flash (green) — show immediately before threads start
-  g_led.setAll(0, 32, 0);
+  // 2a. Clear LEDs on startup
+  g_led.setAll(0, 0, 0);
   FastLED.show();
 
-  // 2b. Wire battery → OLED status line
+  // 2b. OLED startup debug info
+  g_oled.appendText("SEC26 Test v1.0");
+  g_oled.appendText("Subsystems OK");
+  g_oled.appendText("Waiting for uROS...");
+
+  // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
   // 3. Register micro-ROS participants
@@ -238,6 +250,7 @@ void setup() {
   g_mr.registerParticipant(&g_servo);
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_uwb);
+  g_mr.registerParticipant(&g_deploy);
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
@@ -254,6 +267,7 @@ void setup() {
   g_led.beginThreaded(1024, 1, 50);            // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
+  g_deploy.beginThreaded(1024, 1, 20);          // 50 Hz deploy button
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
 }
 

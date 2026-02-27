@@ -1,11 +1,24 @@
 #include "BatterySubsystem.h"
 
+#include <cstdio>
+
+#include "OLEDSubsystem.h"
+
 namespace Subsystem {
 
 bool BatterySubsystem::init() { return setup_.driver_->init(); }
 
 void BatterySubsystem::update() {
   setup_.driver_->update();
+
+  // Update OLED status line with battery info every cycle
+  if (oled_ && setup_.driver_) {
+    char buf[OLEDSubsystem::MAX_LINE_LEN + 1];
+    float v = setup_.driver_->getVoltage();
+    float ma = setup_.driver_->getCurrentmA();
+    snprintf(buf, sizeof(buf), "%.1fV  %.0fmA", v, ma);
+    oled_->setStatusLine(buf);
+  }
 
   if (!pub_.impl) return;
   uint32_t now = millis();
@@ -57,7 +70,13 @@ void BatterySubsystem::publishData() {
   msg_.energy = 0.0f;
   msg_.charge_use = 0.0f;
 
+#ifdef USE_TEENSYTHREADS
+  { Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

@@ -8,7 +8,7 @@ bool BNO085Driver::init() {
 
   initSuccess_ = true;
 
-  if (!imu_.begin_I2C(BNO08x_I2CADDR_DEFAULT, &setup_.wire_)) {
+  if (!imu_.begin_I2C(setup_.addr_, &setup_.wire_)) {
     initSuccess_ = false;
     return initSuccess_;
   }
@@ -23,6 +23,7 @@ bool BNO085Driver::init() {
 }
 
 void BNO085Driver::update() {
+  if (!initSuccess_) return;
   I2CBus::Lock lock(setup_.wire_);
 
   while (imu_.getSensorEvent(&sensorValue_)) {

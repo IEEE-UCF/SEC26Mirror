@@ -14,6 +14,8 @@
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
+#include <std_msgs/msg/string.h>
+#include <micro_ros_utilities/string_utilities.h>
 #include <stdio.h>
 
 #ifdef USE_TEENSYTHREADS
@@ -94,14 +96,26 @@ class MicrorosManager : public Classes::BaseSubsystem {
   // Query agent connection state
   bool isConnected() const;
 
+  // Returns index of participant that failed onCreate, or -1 if all succeeded.
+  int lastFailedParticipant() const { return last_failed_participant_; }
+
+  /**
+   * Publish a debug string to /mcu_robot/debug (best-effort).
+   * Safe to call from any thread — acquires g_microros_mutex internally.
+   * Silently drops messages when not connected.
+   */
+  void debugLog(const char* text);
+
  private:
   const MicrorosManagerSetup setup_;
   rclc_support_t support_;
   rcl_node_t node_;
   rclc_executor_t executor_;
   rcl_allocator_t allocator_;
-  // No publishers owned by the manager; subsystems own their pubs/subs
-  // Cached pose/state removed as TF/state publishing is delegated
+  // Debug publisher — manager-owned, publishes to /mcu_robot/debug
+  rcl_publisher_t debug_pub_{};
+  std_msgs__msg__String debug_msg_{};
+
   // Registered participants (increase capacity as subsystems are added)
   static constexpr size_t MAX_PARTICIPANTS = 16;
   IMicroRosParticipant* participants_[MAX_PARTICIPANTS] = {nullptr};
@@ -120,6 +134,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
 #else
   std::mutex mutex_;
 #endif
+  int last_failed_participant_ = -1;
   bool create_entities();
   void destroy_entities();
 
@@ -130,5 +145,13 @@ class MicrorosManager : public Classes::BaseSubsystem {
 };
 
 }  // namespace Subsystem
+
+// Global mutex for serializing micro-ROS transport access across threads.
+// The XRCE-DDS session is NOT thread-safe: concurrent rcl_publish, ping,
+// and executor-spin calls corrupt the serial stream.  All code that touches
+// the session must hold this mutex.
+#ifdef USE_TEENSYTHREADS
+extern Threads::Mutex g_microros_mutex;
+#endif
 
 #endif

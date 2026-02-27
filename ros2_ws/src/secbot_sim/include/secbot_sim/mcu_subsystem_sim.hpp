@@ -14,13 +14,14 @@
 #include <cmath>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
-#include <mcu_msgs/msg/arm_command.hpp>
 #include <mcu_msgs/msg/battery_health.hpp>
 #include <mcu_msgs/msg/drive_base.hpp>
+#include <mcu_msgs/msg/arm_command.hpp>
 #include <mcu_msgs/msg/intake_bridge_command.hpp>
 #include <mcu_msgs/msg/intake_bridge_state.hpp>
 #include <mcu_msgs/msg/intake_state.hpp>
 #include <mcu_msgs/msg/mcu_state.hpp>
+#include <std_msgs/msg/int16.hpp>
 #include <mcu_msgs/msg/mini_robot_state.hpp>
 #include <mcu_msgs/msg/rc.hpp>
 #include <memory>
@@ -29,7 +30,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
-#include <std_msgs/msg/int16.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <vector>
 
@@ -88,7 +88,7 @@ class McuSubsystemSimulator : public rclcpp::Node {
   float track_width_;
   float wheel_diameter_;
   int encoder_ticks_per_rev_;
-  int gear_ratio_;
+  double gear_ratio_;
   float max_velocity_;
   float max_angular_velocity_;
   float max_wheel_velocity_;  // max single-wheel vel at PWM=255

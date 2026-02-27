@@ -7,7 +7,7 @@
  * I2C bus layout:
  *   Wire  (Wire0) — TCA9548A mux (0x70), TCA9555 GPIO expander (0x20),
  *                   INA219 power sensor (0x40, behind mux ch0)
- *   Wire1         — BNO085 IMU (0x4A)
+ *   Wire1         — BNO085 IMU (0x4B)
  *   Wire2         — PCA9685 PWM driver #1 (0x40), PCA9685 #2 (0x41)
  */
 
@@ -177,6 +177,9 @@ void setup() {
   g_bridge.init();
   // g_drive.init();  // TODO: uncomment when DriveSubsystem is configured
 
+  // 1a. Wire battery → OLED status line
+  g_battery.setOLED(&g_oled);
+
   // 2. Register micro-ROS participants
   g_mr.registerParticipant(&g_oled);
   g_mr.registerParticipant(&g_hb);
@@ -198,13 +201,11 @@ void setup() {
   g_arm.beginThreaded(1024, 2, 20);       // 50 Hz movement
   g_battery.beginThreaded(1024, 1, 100);  // 10 Hz battery
   g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
-  g_hb.beginThreaded(512, 1, 200);        // 5 Hz heartbeat
+  g_hb.beginThreaded(1024, 1, 200);        // 5 Hz heartbeat
   g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   // g_drive.beginThreaded(2048, 3, 20);  // 50 Hz drive control
-  threads.addThread(pca_task, nullptr, 512);  // 50 Hz PWM flush
+  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
 
-  Serial.println(PSTR("setup(): threads started."));
-  Serial.flush();
 }
 
 void loop() { threads.delay(100); }  // yield to subsystem threads

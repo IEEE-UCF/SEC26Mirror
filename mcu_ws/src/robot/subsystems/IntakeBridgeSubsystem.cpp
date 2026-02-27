@@ -132,12 +132,8 @@ bool IntakeBridgeSubsystem::onCreate(rcl_node_t* node,
 }
 
 void IntakeBridgeSubsystem::onDestroy() {
-  if (state_pub_.impl) {
-    (void)rcl_publisher_fini(&state_pub_, node_);
-  }
-  if (cmd_sub_.impl) {
-    (void)rcl_subscription_fini(&cmd_sub_, node_);
-  }
+  state_pub_ = rcl_get_zero_initialized_publisher();
+  cmd_sub_ = rcl_get_zero_initialized_subscription();
   mcu_msgs__msg__IntakeBridgeState__fini(&state_msg_);
   mcu_msgs__msg__IntakeBridgeCommand__fini(&cmd_msg_);
   node_ = nullptr;
@@ -334,7 +330,13 @@ void IntakeBridgeSubsystem::publishState() {
   state_msg_.retract_count = retract_count_;
   state_msg_.time_in_state_ms = millis() - state_entry_time_ms_;
 
+#ifdef USE_TEENSYTHREADS
+  { Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+  }
+#else
   (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

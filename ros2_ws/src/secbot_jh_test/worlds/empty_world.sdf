@@ -1,0 +1,161 @@
+<?xml version="1.0" ?>
+<sdf version="1.10">
+    <world name="car_world">
+        <gravity>0 0 -9.8</gravity>
+        <physics name="1ms" type="ignored">
+            <max_step_size>0.001</max_step_size>
+            <real_time_factor>1.0</real_time_factor>
+            
+        </physics>
+        <plugin
+            filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics">
+        </plugin>
+        <plugin
+            filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands">
+        </plugin>
+        <plugin
+            filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster">
+        </plugin>
+        <light type="directional" name="sun">
+            <cast_shadows>true</cast_shadows>
+            <pose>0 0 10 0 0 0</pose>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+            <attenuation>
+                <range>1000</range>
+                <constant>0.9</constant>
+                <linear>0.01</linear>
+                <quadratic>0.001</quadratic>
+            </attenuation>
+            <direction>-0.5 0.1 -0.9</direction>
+        </light>
+        <model name="ground_plane">
+            <static>true</static>
+            <link name="link">
+                <collision name="collision">
+                    <geometry>
+                        <plane>
+                            <normal>0 0 1</normal>
+                        </plane>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <plane>
+                            <normal>0 0 1</normal>
+                            <size>100 100</size>
+                        </plane>
+                    </geometry>
+                    <material>
+                        <ambient>0.8 0.8 0.8 1</ambient>
+                        <diffuse>0.8 0.8 0.8 1</diffuse>
+                        <specular>0.8 0.8 0.8 1</specular>
+                    </material>
+                </visual>
+            </link>
+        </model>
+    </world>
+</sdf>
+<!-- #run gz sim empty_world.sdf......should probably show a literal empty world with a sun.... -->
+<!--Every SDF world starts with these tags...
+***********************DEFINING A WORLD***************************
+"<sdf version = "1.8">
+    <world name = "world_demo">
+    ....
+    ....imaginary code here
+    </world>
+</sdf>"
+Basically a mix between python parsing and html code....
+SDFormat(Simulation Description FOrmat) is an XML format that describes objects and enviornments for robot simulators, visualization, and control
+***********************PHYSICS***************************
+<physics name = "1ms" type = "ignored">
+    <max_step_size>.001</max_step_size>
+    <real_time_factor>1.0</real_time_factor>
+</physics>
+The physics tag specifies the type and properties FOR THE PHYSICS ENGINE(this is FOR GAZEBO!!)
+You get to choose the type of physics library to implement with options such as Ode, Bullet, Simbody and Dart etc.
+For now we leave as ignored
+
+As for the 
+    -<max_step_size>: this is for the accuracy of calculations, the smaller it is the better the results BUT needs more computational power! 
+    -<real_time_factor>: the ration of simulation time to real time....so maybe in this case this is known as 1s maybe.....
+***********************PLUGINS***************************
+plugins are a dynamically loaded chunk of code????<-.-.-.- what does this mean????
+you are allowed to have plugins for:
+    -Physics
+    -UserCommands
+***********************GUI***************************
+<gui fullscreen="0">
+    ...
+    ...imaginary code here
+</gui>
+Under the gui tag we specify anything related to the GUI of gazebo, but be aware that when you say gz sim is for the physical objects and the physics of them
+anything to do with the GUI of the gazebo platform must be in some sort of config...unless this is truly necessary we probably do not need this
+there are a couple of others such as:
+    -World Control Plugins: Responsible in giving gui elements that control the world..ex) a play/pause button for the simulation
+    -World Stats Plugins:this one might be needed....this one is for displaying the world statistics like:
+        -Pass of Time
+        -Iterations
+        -etc
+    -Entity Trees:Lists all current models in world and their links,visuals and collisions.
+    -Transform Control: Plugin that allows for the manipulation of different components of the world....
+Plugins can be added from the GUI using the plugin drop-down menu 
+on the top right corner...wonder if it works
+***********************LIGHT***************************
+<light type="directional" name="sun"> //specifies the light source of the world, can be point, directional, or spot
+    <cast_shadows>true</cast_shadows>//when true the light WILL cast shadows
+    <pose>0 0 10 0 0 0</pose> //x,y,z,roll,pitch,yaw....in that order
+    <diffuse>0.8 0.8 0.8 1</diffuse>//part of cast shadows light diffusing
+    <specular>0.2 0.2 0.2 1</specular>//part of cast shadows specular light color
+    <attenuation>//specifies light attenuation properties
+        <range>1000</range>//range of the light
+        <constant>0.9</constant>//constant attenuation factor
+        <linear>0.01</linear>//linear attenuation factor
+        <quadratic>0.001</quadratic>//quadratic attenuation factor
+    </attenuation>//direction of the light
+    <direction>-0.5 0.1 -0.9</direction>
+</light>
+***********************Adding Models***************************
+You are allowed to use the Gazebo Fuels website for already made physical models(robots,drones, tom the cat etc.) but for our purposes we can add the model 
+we have in our personal directories.
+HOWEVER, this requires you to be able to append the model in the GZ_SIM_RESOURCE_PATH now since we are working with ROS2 anyway lets just allow
+the build system inside it to do the hardwork for us....we are going to need the .sdf that contains the object in question in this case we're going to do a:
+    -1.coke can .sdf file
+    -2.python file that runs the ROS2 code
+    -3.a yaml file for the topics for ROS2 and gazebo
+
+the arguement would go a little something like this.....
+ros2 launch ros_gz_sim gz_sim.launch.py gz_args:=empty.sdf
+now replace "gz_sim.lanuch.py" with a custom python file you have made for yourself
+
+but before we go too deep
+let's just see how the integration is set....
+"Gazebo can be integrated within a ROS2 system. Let's start describing the different types of integrations that you can achieve betweem Gazebo and ROS:
+    -Use ROS to launch Gazebo: ROS prescribes a specific way to launch all the pieces needed in your system. There is a dedicated laucnh mechanism to orchestarte the launch of all your
+    components and many tooling around it. Gazebo can be launched this way...this is pretty much your lanuch python files we are going to see in a bit....look for the launch folder
+    -Use ROS to interact with Gazebo topics via the roz_gz bridge: Once Gazebo is up and running, it's very common to communicate WITH the simulation. A comman way to perform this communication is via topics.
+    Gazebo has its own middleware, Gazebo Transport, that exposes a set of topics and services quite similar to ROS. The ros_gz bridge allows you to create a bridge between Gazebo and your ROS system, that translates between Gazebo Transport and ROS 2 as needed....
+    **this one is a little weird to me, seems like we literally have msgs in ROS and msgs in Gazebo and then topics in ROS and topics in Gazebo....super weird
+    I believe for this one we focus on the cofig folder, we create the yaml files in here...**
+    -use ROS to spawn a Gazebo model: Gazebo worlds can include modesl that are loaded at STARTUP(which is the goal righ here). However, sometimes you need to spawn models at runtime. 
+    This task can be performed using ROS2
+"
+Now as for the communicatio once inside the simulation...the file(lanuch file maybe???) I think gives you the ability to establish communication between Gazebo, the bridge, and other potential ROS nodes(which IS what we want).
+FOr some reason the bridge is entirely necessary if you want to communicate with ROS2 nodes
+More documentation at https://gazebosim.org/docs/latest/ros2_overview/
+but if you do well enough I think the bridge alone is suffice....
+
+
+EITHER WAY!!
+this is the basic enviornment with physics(gravity/collision), light(the sun), and a ground plane
+***********************LINK***************************
+This is considerded as a physical link of the piece of the object
+so for example if you wanted to make a frame link(rigid body) then you'd have the
+    ..Inertial properties(<inertial>): How heavy the part is(mass) and how that weight is distributed(inertia)
+    ..Visual(<visual>): This is the "graphics" layer . . This is for the mesh files which you may or may NOT have
+    ..Collision(<collision>): This is the "hitbox". It tells the simulator when your object has bumped into another object(make the same as the frame???)
+    
+-->

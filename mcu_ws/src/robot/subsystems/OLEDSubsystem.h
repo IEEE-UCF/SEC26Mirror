@@ -7,11 +7,10 @@
  * display shows a scrollable window over the most-recent lines.
  *
  * ── ROS2 interface ───────────────────────────────────────────────────────────
- *   /mcu_robot/lcd/append   service  mcu_msgs/srv/LCDAppend
- *                           Request:  string text  (\n splits into lines)
- *                           Response: bool accepted
+ *   /mcu_robot/lcd/append   subscription  std_msgs/String
+ *                           Append text to the terminal (\n splits into lines)
  *
- *   /mcu_robot/lcd/scroll   topic    std_msgs/Int8
+ *   /mcu_robot/lcd/scroll   subscription  std_msgs/Int8
  *                           -1 = scroll up (older), +1 = scroll down (newer)
  *
  * ── Internal C++ API (thread-safe) ───────────────────────────────────────────
@@ -29,9 +28,9 @@
 
 #include <Adafruit_SSD1306.h>
 #include <BaseSubsystem.h>
-#include <mcu_msgs/srv/lcd_append.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/int8.h>
+#include <std_msgs/msg/string.h>
 
 #ifdef USE_TEENSYTHREADS
 #include <TeensyThreads.h>
@@ -108,6 +107,13 @@ class OLEDSubsystem : public IMicroRosParticipant,
    */
   void scrollBy(int8_t delta);
 
+  /**
+   * Set a persistent status line displayed at the top of the screen (row 0).
+   * When set, the scrollable terminal area shifts to rows 1–7.
+   * Pass nullptr or "" to clear the status line and reclaim the full display.
+   */
+  void setStatusLine(const char* text);
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 50) {
@@ -117,6 +123,10 @@ class OLEDSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  // ── Status line (persistent top row) ─────────────────────────────────────
+  char status_line_[MAX_LINE_LEN + 1] = {};
+  bool has_status_line_ = false;
+
   // ── Ring buffer ───────────────────────────────────────────────────────────
   char lines_[MAX_LINES][MAX_LINE_LEN + 1] = {};
   int next_write_ = 0;     // next write index in ring
@@ -129,15 +139,12 @@ class OLEDSubsystem : public IMicroRosParticipant,
   void renderLines();
   void flushDisplay();
 
-  // ── micro-ROS: LCD append service ─────────────────────────────────────────
-  void handleAppend(const mcu_msgs__srv__LCDAppend_Request* req,
-                    mcu_msgs__srv__LCDAppend_Response* res);
-  static void appendServiceCallback(const void* req, void* res, void* ctx);
+  // ── micro-ROS: LCD append subscription ───────────────────────────────────
+  static void appendCallback(const void* msg, void* ctx);
 
   char lcd_text_buf_[TEXT_BUF_CAP] = {};
-  mcu_msgs__srv__LCDAppend_Request lcd_req_{};
-  mcu_msgs__srv__LCDAppend_Response lcd_res_{};
-  rcl_service_t lcd_srv_{};
+  std_msgs__msg__String lcd_msg_{};
+  rcl_subscription_t lcd_sub_{};
 
   // ── micro-ROS: scroll topic ───────────────────────────────────────────────
   static void scrollCallback(const void* msg, void* ctx);

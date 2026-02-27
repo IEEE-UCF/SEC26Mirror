@@ -32,6 +32,8 @@
 
 namespace Subsystem {
 
+class OLEDSubsystem;  // forward declaration
+
 class BatterySubsystemSetup : public Classes::BaseSetup {
  public:
   BatterySubsystemSetup(const char* _id, Drivers::I2CPowerDriver* driver)
@@ -59,6 +61,9 @@ class BatterySubsystem : public IMicroRosParticipant,
 
   void publishData();
 
+  /** Set an OLED subsystem to receive a persistent battery status line. */
+  void setOLED(OLEDSubsystem* oled) { oled_ = oled; }
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 100) {
@@ -69,6 +74,7 @@ class BatterySubsystem : public IMicroRosParticipant,
 
  private:
   const BatterySubsystemSetup setup_;
+  OLEDSubsystem* oled_ = nullptr;
   rcl_publisher_t pub_{};
   mcu_msgs__msg__BatteryHealth msg_{};
   rcl_node_t* node_ = nullptr;

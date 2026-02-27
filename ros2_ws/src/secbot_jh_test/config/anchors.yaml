@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    static_anchor_ids: [10, 11]
+    beacons:
+      10: 
+        type: "stationary"
+        position: {x: 0.0, y: 0.0, z: 0.15}
+        description: "Stationary beacon at origin"
+      11:
+        type: "stationary"
+        position: {x: 3.0, y: 3.0, z: 0.15}
+        description: "Stationary beacon at far corner"      
+      12:
+        type: "moving"
+        position: {x: -2.0, y: -2.0, z: 0.0}
+        # odometry_topic: "robot/pose" #could this be a ros2 topic??
+        use_odometry_fusion: true
+        description: "Moving beacon on main robot"
+
+    tags:
+      20:
+        description: "Drone-UWB-tag"
+        position: {x: 5.0, y: 0.0, z: 0.0}
+        # publish_topic: "/uwb/pose/drone"
+        enable_3d_positiong: true

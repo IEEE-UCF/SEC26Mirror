@@ -28,8 +28,8 @@ int main(int argc, char* argv[]) {
   tcgetattr(fileno(stdin), &old_terminal_settings);
   new_terminal_settings = old_terminal_settings;
   new_terminal_settings.c_lflag &= ~ICANON;
-  new_terminal_settings.c_cc[VMIN] = 1;  // terminal blocks until at least ONE
-                                         // character is placed in the stream
+  new_terminal_settings.c_cc[VMIN] = 1;   // terminal blocks until at least ONE
+                                          // character is placed in the stream
   new_terminal_settings.c_cc[VTIME] = 0;  // send immedatelly
 
   tcsetattr(fileno(stdin), TCSANOW,

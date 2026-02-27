@@ -254,19 +254,25 @@ void setup() {
   g_mr.registerParticipant(&g_bridge);
   // g_mr.registerParticipant(&g_drive);  // TODO: uncomment when configured
 
-  // 3. Start FreeRTOS tasks
-  //                       stackSize  priority  rateMs
-  g_mr.beginThreaded(8192, 4);            // highest — ROS agent
-  g_imu.beginThreaded(2048, 3, 20);       // 50 Hz sensor fusion
-  g_oled.beginThreaded(2048, 1, 50);      // 20 Hz display refresh
-  g_rc.beginThreaded(1024, 3, 5);         // fast IBUS polling
-  g_arm.beginThreaded(1024, 2, 20);       // 50 Hz movement
-  g_battery.beginThreaded(1024, 1, 100);  // 10 Hz battery
-  g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
-  g_hb.beginThreaded(1024, 1, 200);       // 5 Hz heartbeat
-  g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
-  // g_drive.beginThreaded(2048, 3, 20);  // 50 Hz drive control
-  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
+  // 4. Start threaded tasks
+  //                                 stack  pri   rate(ms)
+  g_mr.beginThreaded(8192, 4);                // ROS agent
+  g_imu.beginThreaded(2048, 3, 10);           // 100 Hz
+  // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
+  g_servo.beginThreaded(1024, 2, 25);         // 40 Hz state pub
+  g_motor.beginThreaded(1024, 2, 1);          // 1000 Hz — NFPShop reverse-pulse
+  g_oled.beginThreaded(2048, 1, 25);          // 40 Hz display
+  g_battery.beginThreaded(1024, 1, 100);      // 10 Hz
+  g_sensor.beginThreaded(1024, 1, 100);       // 10 Hz TOF
+  g_dip.beginThreaded(1024, 1, 500);          // 2 Hz
+  g_btn.beginThreaded(1024, 1, 20);           // 50 Hz
+  g_led.beginThreaded(1024, 1, 50);           // 20 Hz
+  g_hb.beginThreaded(1024, 1, 200);           // 5 Hz
+  g_uwb.beginThreaded(2048, 2, 50);           // 20 Hz UWB ranging
+  g_arm.beginThreaded(1024, 2, 20);           // 50 Hz arm
+  g_intake.beginThreaded(1024, 2, 20);        // 50 Hz intake
+  // g_drive.beginThreaded(2048, 3, 20);      // TODO: uncomment when configured
+  threads.addThread(pca_task, nullptr, 1024); // 50 Hz PWM flush
 }
 
 // RC polled from main loop — IBusBM NOTIMER doesn't work from TeensyThreads

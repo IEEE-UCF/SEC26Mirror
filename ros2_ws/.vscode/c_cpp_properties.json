@@ -1,34 +1,23 @@
 {
-    "configurations": [
-        {
-            "name": "ROS2 (Jazzy)",
-            "intelliSenseMode": "gcc-x64",
-            "compilerPath": "/usr/bin/g++",
-            "compileCommands": [
-                "/home/ubuntu/ros2_workspaces/build/compile_commands.json"
-            ],
-            "includePath": [
-                "${workspaceFolder}/src/**",
-                "${workspaceFolder}/install/**",
-                "${workspaceFolder}/build/**",
-                "/usr/include",
-                "/opt/ros/jazzy/include/**",
-                "/opt/ros/jazzy/include/rclcpp/rclcpp",
-                "${workspaceFolder}/src/sec26ros/secbot_jh_test",
-                "${workspaceFolder}/src/sec26ros/secbot_jh_test/include",
-                "/opt/ros/jazzy/include/rclcpp",
-                "/opt/ros/jazzy/include/std_msgs",
-                "/opt/ros/jazzy/include/rcl_interfaces",
-                "${workspaceFolder}/install/mcu_msgs/include/mcu_msgs",
-                "/usr/include/gz/transport13",
-                "/usr/include/gz/msgs10",
-                "/usr/include/gz/utils2"
-            ],
-            "defines": [
-                "ROS2",
-                "_DEBUG"
-            ]
-        }
-    ],
-    "version": 4
+  "configurations": [
+    {
+      "name": "ROS2 (Jazzy)",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/g++",
+      "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+      "includePath": [
+        "${workspaceFolder}/src/**",
+        "${workspaceFolder}/install/**",
+        "${workspaceFolder}/build/**",
+        "/usr/include",
+        "/usr/local/include",
+        "/opt/ros/jazzy/include"
+      ],
+      "defines": [
+        "ROS2",
+        "_DEBUG"
+      ]
+    }
+  ],
+  "version": 4
 }

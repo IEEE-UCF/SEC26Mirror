@@ -178,6 +178,7 @@ def generate_launch_description():
     )
 
     # Load central motion config
+    # FIX GEAR_RATIO LATER CANNOT BE FLOAT/DOUBLE, ONLY TAKES INT
     motion_config_path = os.path.join(get_package_share_directory('my_robot_description'), 'config', 'motion_config.yaml')
     motion_params = {}
     if os.path.exists(motion_config_path):

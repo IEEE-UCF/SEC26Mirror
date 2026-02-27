@@ -28,16 +28,10 @@ static constexpr double kAngularVelocityVariance = 0.00003;
 static constexpr double kLinearAccelerationVariance = 0.0001;
 
 McuSubsystemSimulator::McuSubsystemSimulator()
-    : Node("mcu_subsystem_sim"),
-      current_mode_(DriveMode::MANUAL),
-      left_motor_pwm_(0),
-      right_motor_pwm_(0),
-      left_encoder_accum_(0.0),
-      right_encoder_accum_(0.0),
-      prev_left_ticks_(0),
-      prev_right_ticks_(0),
-      sim_yaw_(0.0f),
-      prev_vel_x_(0.0) {
+    : Node("mcu_subsystem_sim"), current_mode_(DriveMode::MANUAL),
+      left_motor_pwm_(0), right_motor_pwm_(0), left_encoder_accum_(0.0),
+      right_encoder_accum_(0.0), prev_left_ticks_(0), prev_right_ticks_(0),
+      sim_yaw_(0.0f), prev_vel_x_(0.0) {
   RCLCPP_INFO(this->get_logger(), "Starting MCU Subsystem Simulator");
 
   // Declare all parameters
@@ -294,7 +288,7 @@ void McuSubsystemSimulator::trajectoryCallback(
 
   // Keep waypoints in meters — TrajectoryController config (lookahead,
   // tolerances) is in meters, so the pose and waypoints must also be in meters.
-  for (const auto& ps : msg->poses) {
+  for (const auto &ps : msg->poses) {
     TrajectoryController::Waypoint wp{};
     wp.x = static_cast<float>(ps.pose.position.x);
     wp.y = static_cast<float>(ps.pose.position.y);
@@ -312,7 +306,7 @@ void McuSubsystemSimulator::trajectoryCallback(
   }
 
   // Reset controller state BEFORE setTrajectory if your API supports it
-  traj_controller_.clearTrajectory();  // safe even if empty
+  traj_controller_.clearTrajectory(); // safe even if empty
   traj_controller_.setTrajectory(active_traj_.data(), active_traj_.size());
 
   current_mode_ = DriveMode::TRAJECTORY_DRIVE;
@@ -334,79 +328,77 @@ void McuSubsystemSimulator::trajectoryCallback(
 void McuSubsystemSimulator::driveCommandCallback(
     const mcu_msgs::msg::DriveBase::SharedPtr msg) {
   switch (msg->drive_mode) {
-    case mcu_msgs::msg::DriveBase::DRIVE_VECTOR: {
-      if (current_mode_ == DriveMode::TRAJECTORY_DRIVE &&
-          !active_traj_.empty()) {
-        RCLCPP_WARN_THROTTLE(
-            this->get_logger(), *this->get_clock(), 2000,
-            "Ignoring DRIVE_VECTOR because trajectory is active");
-        return;
-      }
-
-      // Same as RobotDriveBase::driveVelocity()
-      float vx = msg->goal_velocity.linear.x;
-      float omega = msg->goal_velocity.angular.z;
-
-      current_mode_ = DriveMode::VELOCITY_DRIVE;
-      target_velocity_ = Vector2D(vx, 0.0f, omega);
-
-      // Reset profiles to current velocity to avoid jumps
-      linear_profile_.reset(
-          {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
-      angular_profile_.reset(
-          {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
-
-      // Set target velocity as goal
-      linear_profile_.setGoal(
-          {target_velocity_.getX(), target_velocity_.getX()});
-      angular_profile_.setGoal(
-          {target_velocity_.getTheta(), target_velocity_.getTheta()});
-
-      left_pid_.reset();
-      right_pid_.reset();
-
-      RCLCPP_DEBUG(this->get_logger(), "Drive VELOCITY: vx=%.2f, omega=%.2f",
-                   vx, omega);
-      break;
+  case mcu_msgs::msg::DriveBase::DRIVE_VECTOR: {
+    if (current_mode_ == DriveMode::TRAJECTORY_DRIVE && !active_traj_.empty()) {
+      RCLCPP_WARN_THROTTLE(
+          this->get_logger(), *this->get_clock(), 2000,
+          "Ignoring DRIVE_VECTOR because trajectory is active");
+      return;
     }
 
-    case mcu_msgs::msg::DriveBase::DRIVE_GOAL: {
-      // Same as DriveSubsystem::drive_callback DRIVE_GOAL case
-      double qz = msg->goal_transform.transform.rotation.z;
-      double qw = msg->goal_transform.transform.rotation.w;
-      float target_yaw = std::atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
+    // Same as RobotDriveBase::driveVelocity()
+    float vx = msg->goal_velocity.linear.x;
+    float omega = msg->goal_velocity.angular.z;
 
-      current_mode_ = DriveMode::POSE_DRIVE;
-      target_pose_ =
-          Pose2D(msg->goal_transform.transform.translation.x,
-                 msg->goal_transform.transform.translation.y, target_yaw);
+    current_mode_ = DriveMode::VELOCITY_DRIVE;
+    target_velocity_ = Vector2D(vx, 0.0f, omega);
 
-      left_pid_.reset();
-      right_pid_.reset();
+    // Reset profiles to current velocity to avoid jumps
+    linear_profile_.reset(
+        {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
+    angular_profile_.reset(
+        {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
 
-      RCLCPP_DEBUG(this->get_logger(), "Drive POSE: x=%.2f, y=%.2f, theta=%.2f",
-                   target_pose_.getX(), target_pose_.getY(), target_yaw);
-      break;
-    }
+    // Set target velocity as goal
+    linear_profile_.setGoal({target_velocity_.getX(), target_velocity_.getX()});
+    angular_profile_.setGoal(
+        {target_velocity_.getTheta(), target_velocity_.getTheta()});
 
-    default: {
-      // Stop (same as real MCU default case)
-      current_mode_ = DriveMode::VELOCITY_DRIVE;
-      target_velocity_ = Vector2D(0, 0, 0);
-      gz_cmd_v_ = 0.0;
-      gz_cmd_w_ = 0.0;
+    left_pid_.reset();
+    right_pid_.reset();
 
-      linear_profile_.reset(
-          {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
-      angular_profile_.reset(
-          {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
-      linear_profile_.setGoal({0.0f, 0.0f});
-      angular_profile_.setGoal({0.0f, 0.0f});
+    RCLCPP_DEBUG(this->get_logger(), "Drive VELOCITY: vx=%.2f, omega=%.2f", vx,
+                 omega);
+    break;
+  }
 
-      left_pid_.reset();
-      right_pid_.reset();
-      break;
-    }
+  case mcu_msgs::msg::DriveBase::DRIVE_GOAL: {
+    // Same as DriveSubsystem::drive_callback DRIVE_GOAL case
+    double qz = msg->goal_transform.transform.rotation.z;
+    double qw = msg->goal_transform.transform.rotation.w;
+    float target_yaw = std::atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
+
+    current_mode_ = DriveMode::POSE_DRIVE;
+    target_pose_ =
+        Pose2D(msg->goal_transform.transform.translation.x,
+               msg->goal_transform.transform.translation.y, target_yaw);
+
+    left_pid_.reset();
+    right_pid_.reset();
+
+    RCLCPP_DEBUG(this->get_logger(), "Drive POSE: x=%.2f, y=%.2f, theta=%.2f",
+                 target_pose_.getX(), target_pose_.getY(), target_yaw);
+    break;
+  }
+
+  default: {
+    // Stop (same as real MCU default case)
+    current_mode_ = DriveMode::VELOCITY_DRIVE;
+    target_velocity_ = Vector2D(0, 0, 0);
+    gz_cmd_v_ = 0.0;
+    gz_cmd_w_ = 0.0;
+
+    linear_profile_.reset(
+        {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
+    angular_profile_.reset(
+        {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
+    linear_profile_.setGoal({0.0f, 0.0f});
+    angular_profile_.setGoal({0.0f, 0.0f});
+
+    left_pid_.reset();
+    right_pid_.reset();
+    break;
+  }
   }
 }
 
@@ -460,7 +452,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
   float dt = static_cast<float>((current_time - last_update_time_).seconds());
   last_update_time_ = current_time;
 
-  if (dt < 0.001f) return;
+  if (dt < 0.001f)
+    return;
 
   // First we simulate physics, motor PWM -> wheel velocity -> encoder ticks
   simulatePhysics(dt);
@@ -497,19 +490,19 @@ void McuSubsystemSimulator::updateTimerCallback() {
 
   // Then we dispatch control mode (same switch as RobotDriveBase::update)
   switch (current_mode_) {
-    case DriveMode::MANUAL:
-      gz_cmd_v_ = 0.0;
-      gz_cmd_w_ = 0.0;
-      break;
-    case DriveMode::VELOCITY_DRIVE:
-      velocityControl(dt);
-      break;
-    case DriveMode::POSE_DRIVE:
-      setPointControl(dt);
-      break;
-    case DriveMode::TRAJECTORY_DRIVE:
-      trajectoryControl(dt);
-      break;
+  case DriveMode::MANUAL:
+    gz_cmd_v_ = 0.0;
+    gz_cmd_w_ = 0.0;
+    break;
+  case DriveMode::VELOCITY_DRIVE:
+    velocityControl(dt);
+    break;
+  case DriveMode::POSE_DRIVE:
+    setPointControl(dt);
+    break;
+  case DriveMode::TRAJECTORY_DRIVE:
+    trajectoryControl(dt);
+    break;
   }
 
   // THEN WE FINALLY SAVE PREVIOUS STATE (same as real MCU)
@@ -535,7 +528,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
 
 // velocityControl, mirrors RobotDriveBase::velocityControl exactly
 void McuSubsystemSimulator::velocityControl(float dt) {
-  if (dt < 0.001f) return;
+  if (dt < 0.001f)
+    return;
 
   // S-curve motion profiles -> smooth ramped velocities
   MotionState linear_state = linear_profile_.update(dt);
@@ -614,7 +608,8 @@ void McuSubsystemSimulator::setPointControl(float dt) {
 
 // trajectoryControl, mirrors RobotDriveBase::trajectoryControl exactly
 void McuSubsystemSimulator::trajectoryControl(float dt) {
-  if (dt < 0.001f) return;
+  if (dt < 0.001f)
+    return;
 
   static constexpr float M_TO_IN = 39.37007874f;
 
@@ -775,7 +770,7 @@ void McuSubsystemSimulator::imuPublishCallback() {
   msg.angular_velocity_covariance[8] = kAngularVelocityVariance;
 
   // Linear acceleration from velocity change
-  double dt = 0.02;  // 50 Hz publish rate
+  double dt = 0.02; // 50 Hz publish rate
   double accel_x =
       (static_cast<double>(current_velocity_.getX()) - prev_vel_x_) / dt;
   prev_vel_x_ = current_velocity_.getX();
@@ -855,7 +850,8 @@ void McuSubsystemSimulator::intakeSpeedCallback(
     const std_msgs::msg::Int16::SharedPtr msg) {
   sim_intake_speed_ = msg->data;
 
-  if (msg->data > 0 && sim_intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE) {
+  if (msg->data > 0 &&
+      sim_intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE) {
     sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_SPINNING;
     intake_state_time_ = std::chrono::steady_clock::now();
     sim_duck_detected_ = false;
@@ -879,27 +875,26 @@ void McuSubsystemSimulator::bridgeCommandCallback(
   bridge_cmd_time_ = std::chrono::steady_clock::now();
 
   switch (msg->command) {
-    case mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND:
-      if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_STOWED) {
-        sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING;
-        RCLCPP_INFO(this->get_logger(), "[SIM] Bridge extending");
-      }
-      break;
-    case mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT:
-      if (sim_bridge_state_ ==
-              mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED ||
-          sim_bridge_state_ ==
-              mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING) {
-        sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING;
-        bridge_cmd_time_ = std::chrono::steady_clock::now();
-        RCLCPP_INFO(this->get_logger(), "[SIM] Bridge retracting");
-      }
-      break;
-    case mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW:
-    default:
-      sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_STOWED;
-      RCLCPP_INFO(this->get_logger(), "[SIM] Bridge stowed");
-      break;
+  case mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND:
+    if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_STOWED) {
+      sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING;
+      RCLCPP_INFO(this->get_logger(), "[SIM] Bridge extending");
+    }
+    break;
+  case mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT:
+    if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED ||
+        sim_bridge_state_ ==
+            mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING) {
+      sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING;
+      bridge_cmd_time_ = std::chrono::steady_clock::now();
+      RCLCPP_INFO(this->get_logger(), "[SIM] Bridge retracting");
+    }
+    break;
+  case mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW:
+  default:
+    sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_STOWED;
+    RCLCPP_INFO(this->get_logger(), "[SIM] Bridge stowed");
+    break;
   }
 }
 
@@ -919,8 +914,7 @@ void McuSubsystemSimulator::bridgePublishCallback() {
       std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
           .count();
 
-  if (sim_bridge_state_ ==
-          mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING &&
+  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING &&
       sec >= 2.0) {
     sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED;
     RCLCPP_INFO(this->get_logger(), "[SIM] Bridge fully extended");
@@ -942,21 +936,18 @@ void McuSubsystemSimulator::bridgePublishCallback() {
     double ext_sec =
         std::chrono::duration_cast<std::chrono::duration<double>>(ext_elapsed)
             .count();
-    msg.duck_detected = (ext_sec >= 1.0);  // auto-detect after 1s in sim
+    msg.duck_detected = (ext_sec >= 1.0); // auto-detect after 1s in sim
     msg.tof_distance_mm = msg.duck_detected ? 30 : 200;
   } else {
     msg.duck_detected = false;
     msg.tof_distance_mm = 0;
   }
 
-  if (sim_bridge_state_ ==
-      mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING)
-    msg.rack_motor_state =
-        mcu_msgs::msg::IntakeBridgeState::MOTOR_EXTENDING;
+  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING)
+    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_EXTENDING;
   else if (sim_bridge_state_ ==
            mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING)
-    msg.rack_motor_state =
-        mcu_msgs::msg::IntakeBridgeState::MOTOR_RETRACTING;
+    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_RETRACTING;
   else
     msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_OFF;
 
@@ -1025,9 +1016,9 @@ void McuSubsystemSimulator::mcuStatePublishCallback() {
   mcu_state_pub_->publish(msg);
 }
 
-}  // namespace secbot_sim
+} // namespace secbot_sim
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<secbot_sim::McuSubsystemSimulator>();
   rclcpp::spin(node);

@@ -1,7 +1,7 @@
 # UWB Beacon Configuration
 # This file defines the beacon setup for the UWB positioning system
 
-uwb_positioning_node:
+/**:
   ros__parameters:
     # Frame IDs
     map_frame: "map"

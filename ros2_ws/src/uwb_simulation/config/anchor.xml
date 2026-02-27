@@ -1,0 +1,47 @@
+<!--renamed id's and locations to match beacons.yaml in secbot_uwb-->
+<!--also removed anchor id4 to match 3 beacon setup in secbot_uwb-->
+
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<anchors>
+	<anchor id = "10">
+        <x>0</x>
+        <y>0</y>
+        <z>0</z>
+    </anchor>
+    <anchor id = "11">
+        <x>3.0</x>
+        <y>3.0</y>
+        <z>0.15</z>
+    </anchor>
+    <anchor id = "13">
+        <x>3.0</x>
+        <y>0.0</y>
+        <z>0.15</z>
+    </anchor>
+    <!--<anchor id = "4">
+        <x>0.0</x>
+        <y>0.0</y>
+        <z>2.0</z>
+    </anchor>
+    <! <anchor id = "5">
+        <x>15.0</x>
+        <y>10.0</y>
+        <z>2.0</z>
+    </anchor> -->
+    <!-- <anchor id = "6">
+        <x>15.0</x>
+        <y>15.0</y>
+        <z>0.0</z>
+    </anchor>
+    <anchor id = "7">
+        <x>20.0</x>
+        <y>15.0</y>
+        <z>0.0</z>
+    </anchor>
+    <anchor id = "6">
+        <x>15.0</x>
+        <y>20.0</y>
+        <z>0.0</z>
+    </anchor> -->
+
+</anchors>

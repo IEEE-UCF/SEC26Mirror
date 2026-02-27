@@ -28,8 +28,9 @@ class firstPublisher : public rclcpp::Node {  // creates the node class by
   // see...) and then initializes the private member 'count' to the value zero
   firstPublisher() : Node("name_of_publisher"), count(0) {
     publisher_object = this->create_publisher<std_msgs::msg::String>(
-        "my_first_topic", 10);  // publisher_object..type=String...name="my_first_topic"...size=10
-                                // bytes?
+        "my_first_topic",
+        10);  // publisher_object..type=String...name="my_first_topic"...size=10
+              // bytes?
     auto executor_callback = [this]() -> void {
       auto message = std_msgs::msg::String();
       message.data = "Hello, World! " + std::to_string(this->count++);

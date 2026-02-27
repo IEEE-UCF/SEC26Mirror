@@ -148,8 +148,8 @@ static MotorManagerSubsystem g_motor(g_motor_setup);
 
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
-                                                   Drivers::UWBMode::TAG,
-                                                   ROBOT_UWB_TAG_ID, PIN_UWB_CS);
+                                                  Drivers::UWBMode::TAG,
+                                                  ROBOT_UWB_TAG_ID, PIN_UWB_CS);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
@@ -256,23 +256,23 @@ void setup() {
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);                // ROS agent
-  g_imu.beginThreaded(2048, 3, 10);           // 100 Hz
+  g_mr.beginThreaded(8192, 4);       // ROS agent
+  g_imu.beginThreaded(2048, 3, 10);  // 100 Hz
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 25);         // 40 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);          // 1000 Hz — NFPShop reverse-pulse
-  g_oled.beginThreaded(2048, 1, 25);          // 40 Hz display
-  g_battery.beginThreaded(1024, 1, 100);      // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);       // 10 Hz TOF
-  g_dip.beginThreaded(1024, 1, 500);          // 2 Hz
-  g_btn.beginThreaded(1024, 1, 20);           // 50 Hz
-  g_led.beginThreaded(1024, 1, 50);           // 20 Hz
-  g_hb.beginThreaded(1024, 1, 200);           // 5 Hz
-  g_uwb.beginThreaded(2048, 2, 50);           // 20 Hz UWB ranging
-  g_arm.beginThreaded(1024, 2, 20);           // 50 Hz arm
-  g_intake.beginThreaded(1024, 2, 20);        // 50 Hz intake
+  g_servo.beginThreaded(1024, 2, 25);     // 40 Hz state pub
+  g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
+  g_oled.beginThreaded(2048, 1, 25);      // 40 Hz display
+  g_battery.beginThreaded(1024, 1, 100);  // 10 Hz
+  g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
+  g_dip.beginThreaded(1024, 1, 500);      // 2 Hz
+  g_btn.beginThreaded(1024, 1, 20);       // 50 Hz
+  g_led.beginThreaded(1024, 1, 50);       // 20 Hz
+  g_hb.beginThreaded(1024, 1, 200);       // 5 Hz
+  g_uwb.beginThreaded(2048, 2, 50);       // 20 Hz UWB ranging
+  g_arm.beginThreaded(1024, 2, 20);       // 50 Hz arm
+  g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   // g_drive.beginThreaded(2048, 3, 20);      // TODO: uncomment when configured
-  threads.addThread(pca_task, nullptr, 1024); // 50 Hz PWM flush
+  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
 }
 
 // RC polled from main loop — IBusBM NOTIMER doesn't work from TeensyThreads

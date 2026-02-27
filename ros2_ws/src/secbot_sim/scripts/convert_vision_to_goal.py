@@ -62,6 +62,7 @@ class ConvertVisionToGoal(Node):
         self.robot_y = None
         self.robot_yaw = None
 
+        self.last_published_goal = None
         self.visited_positions = []  # list of (x, y) where goals were reached
         
 
@@ -107,11 +108,12 @@ class ConvertVisionToGoal(Node):
         self.robot_yaw = convert_yaw(msg.pose.pose.orientation)
 
 
-    # when pathing_node says we reached a goal, record robot position as visited ====
+    # when pathing_node says we reached a goal, record GOAL (yellow box) pose as visited ====
     def on_goal_reached(self, msg: Bool):
-        if msg.data and self.robot_x is not None:
-            self.visited_positions.append((self.robot_x, self.robot_y))
-            self.get_logger().info(f"GOAL REACHED — marked visited at ({self.robot_x:.2f}, {self.robot_y:.2f}), total visited: {len(self.visited_positions)}")
+        if msg.data and self.last_published_goal is not None:
+            self.visited_positions.append(self.last_published_goal)
+            self.get_logger().info(f"GOAL REACHED — marked visited at ({self.last_published_goal[0]:.2f}, {self.last_published_goal[1]:.2f}), total visited: {len(self.visited_positions)}")
+            self.last_published_goal = None # Reset it
 
     def is_near_visited(self, gx, gy):
         for vx, vy in self.visited_positions:
@@ -215,6 +217,7 @@ class ConvertVisionToGoal(Node):
             out.pose.position.z = 0.0
             out.pose.orientation.w = 1.0
 
+            self.last_published_goal = (goal_x, goal_y)
             self.goal_publish.publish(out)
 
             u = float(detection.x + detection.w * 0.5)

@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include <FastLED.h>
 #include <BaseSubsystem.h>
+#include <FastLED.h>
 #include <mcu_msgs/msg/led_color.h>
 #include <microros_manager_robot.h>
 
@@ -53,8 +53,8 @@ class LEDSubsystem : public IMicroRosParticipant,
       : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override {
-    num_leds_ = (setup_.numLeds_ <= LED_MAX_COUNT) ? setup_.numLeds_
-                                                    : LED_MAX_COUNT;
+    num_leds_ =
+        (setup_.numLeds_ <= LED_MAX_COUNT) ? setup_.numLeds_ : LED_MAX_COUNT;
     // Force pin 35 to GPIO output mode.  Serial8.begin() (called by IBusBM
     // for IBUS RC) sets pin 35's IOMUX to UART8-TX, stealing it from
     // FastLED.  IBUS is RX-only (pin 34), so releasing TX is safe.
@@ -85,9 +85,7 @@ class LEDSubsystem : public IMicroRosParticipant,
     }
   }
 
-  void pause() override {
-    FastLED.clear(true);
-  }
+  void pause() override { FastLED.clear(true); }
 
   void reset() override { pause(); }
 

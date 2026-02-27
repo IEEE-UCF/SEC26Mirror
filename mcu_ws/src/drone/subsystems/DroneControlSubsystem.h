@@ -1,12 +1,13 @@
 #pragma once
 // DroneControlSubsystem: PID flight controller for ESP32 quadcopter
-// Made for BNO085 IMU (onboard fusion, no Madgwick needed) + VL53L1X altitude hold
+// Made for BNO085 IMU (onboard fusion, no Madgwick needed) + VL53L1X altitude
+// hold
 
 #include <Arduino.h>
 
 namespace Drone {
 
-//  PID gains (tune on the real drone!) 
+//  PID gains (tune on the real drone!)
 struct PIDGains {
   float kp = 0.0f;
   float ki = 0.0f;
@@ -14,40 +15,40 @@ struct PIDGains {
   float i_limit = 25.0f;  // integrator saturation
 };
 
-//  PID state for one axis 
+//  PID state for one axis
 struct PIDState {
   float error_prev = 0.0f;
   float integral = 0.0f;
   float derivative = 0.0f;
 };
 
-//  Motor pin config 
+//  Motor pin config
 struct MotorConfig {
-  uint8_t pin_fl = 12;  // front left (CCW)
-  uint8_t pin_fr = 13;  // front right (CW)
-  uint8_t pin_rr = 14;  // rear right (CCW)
-  uint8_t pin_rl = 15;  // rear left (CW)
-  uint32_t pwm_freq = 20000;   // Hz
-  uint8_t pwm_resolution = 10; // bits (0-1023)
+  uint8_t pin_fl = 12;          // front left (CCW)
+  uint8_t pin_fr = 13;          // front right (CW)
+  uint8_t pin_rr = 14;          // rear right (CCW)
+  uint8_t pin_rl = 15;          // rear left (CW)
+  uint32_t pwm_freq = 20000;    // Hz
+  uint8_t pwm_resolution = 10;  // bits (0-1023)
 };
 
-//  Full flight controller config 
+//  Full flight controller config
 struct FlightConfig {
   // Angle PID (outer loop)  output is desired rate
-  PIDGains roll_angle  = {0.2f, 0.3f, 0.05f, 25.0f};
+  PIDGains roll_angle = {0.2f, 0.3f, 0.05f, 25.0f};
   PIDGains pitch_angle = {0.2f, 0.3f, 0.05f, 25.0f};
 
   // Rate PID (inner loop)  output is motor correction
-  PIDGains roll_rate   = {0.15f, 0.2f, 0.0002f, 25.0f};
-  PIDGains pitch_rate  = {0.15f, 0.2f, 0.0002f, 25.0f};
-  PIDGains yaw_rate    = {0.3f, 0.05f, 0.00015f, 25.0f};
+  PIDGains roll_rate = {0.15f, 0.2f, 0.0002f, 25.0f};
+  PIDGains pitch_rate = {0.15f, 0.2f, 0.0002f, 25.0f};
+  PIDGains yaw_rate = {0.3f, 0.05f, 0.00015f, 25.0f};
 
   // Altitude PID
-  PIDGains altitude    = {0.8f, 0.15f, 0.4f, 0.3f};
+  PIDGains altitude = {0.8f, 0.15f, 0.4f, 0.3f};
   float hover_throttle = 0.45f;  // base throttle to hover (tune this!)
 
   // Angle limits (degrees)
-  float max_roll  = 30.0f;
+  float max_roll = 30.0f;
   float max_pitch = 30.0f;
   float max_yaw_rate = 160.0f;  // deg/s
 
@@ -55,23 +56,23 @@ struct FlightConfig {
   MotorConfig motors;
 };
 
-//  IMU data fed into the controller each tick 
+//  IMU data fed into the controller each tick
 struct IMUData {
-  float roll  = 0.0f;  // degrees, from BNO085
-  float pitch = 0.0f;  // degrees
-  float yaw   = 0.0f;  // degrees
-  float gyro_x = 0.0f; // deg/s, raw gyro
+  float roll = 0.0f;    // degrees, from BNO085
+  float pitch = 0.0f;   // degrees
+  float yaw = 0.0f;     // degrees
+  float gyro_x = 0.0f;  // deg/s, raw gyro
   float gyro_y = 0.0f;
   float gyro_z = 0.0f;
 };
 
-//  Setpoint from mission or ROS command 
+//  Setpoint from mission or ROS command
 struct FlightSetpoint {
-  float roll_des   = 0.0f;  // desired roll angle (degrees)
-  float pitch_des  = 0.0f;  // desired pitch angle (degrees)
-  float yaw_rate_des = 0.0f; // desired yaw rate (deg/s)
-  float throttle   = 0.0f;  // 0.0 to 1.0 (overridden if altitude hold active)
-  float altitude_des = 0.0f; // desired altitude (meters, for altitude hold)
+  float roll_des = 0.0f;      // desired roll angle (degrees)
+  float pitch_des = 0.0f;     // desired pitch angle (degrees)
+  float yaw_rate_des = 0.0f;  // desired yaw rate (deg/s)
+  float throttle = 0.0f;      // 0.0 to 1.0 (overridden if altitude hold active)
+  float altitude_des = 0.0f;  // desired altitude (meters, for altitude hold)
   bool altitude_hold = false;
 };
 
@@ -80,29 +81,29 @@ class DroneControlSubsystem {
   explicit DroneControlSubsystem(const FlightConfig& cfg = FlightConfig{})
       : cfg_(cfg) {}
 
-  //  Lifecycle 
+  //  Lifecycle
   void init();
   void update(const IMUData& imu, float altitude_m, float dt);
   void disarm();
   void arm();
   bool isArmed() const { return armed_; }
 
-  //  Set desired state 
+  //  Set desired state
   void setSetpoint(const FlightSetpoint& sp) { sp_ = sp; }
 
-  //  Read motor outputs (0.0 to 1.0) 
+  //  Read motor outputs (0.0 to 1.0)
   float getMotor(uint8_t idx) const { return (idx < 4) ? motors_[idx] : 0.0f; }
 
-  //  Config access 
+  //  Config access
   FlightConfig& config() { return cfg_; }
 
  private:
-  //  PID helpers 
+  //  PID helpers
   float computePID(const PIDGains& g, PIDState& s, float error, float dt,
                    bool use_measurement_derivative, float measurement_rate);
   void resetPIDStates();
 
-  //  Control stages (dRehmFlight pattern) 
+  //  Control stages (dRehmFlight pattern)
   void controlAngle(const IMUData& imu, float dt);
   void controlAltitude(float altitude_m, float dt);
   void controlMixer();
@@ -113,10 +114,10 @@ class DroneControlSubsystem {
   bool armed_ = false;
 
   // PID outputs
-  float roll_pid_  = 0.0f;
+  float roll_pid_ = 0.0f;
   float pitch_pid_ = 0.0f;
-  float yaw_pid_   = 0.0f;
-  float throttle_  = 0.0f;
+  float yaw_pid_ = 0.0f;
+  float throttle_ = 0.0f;
 
   // PID states
   PIDState roll_angle_pid_;

@@ -201,11 +201,10 @@ void setup() {
   g_arm.beginThreaded(1024, 2, 20);       // 50 Hz movement
   g_battery.beginThreaded(1024, 1, 100);  // 10 Hz battery
   g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
-  g_hb.beginThreaded(1024, 1, 200);        // 5 Hz heartbeat
+  g_hb.beginThreaded(1024, 1, 200);       // 5 Hz heartbeat
   g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   // g_drive.beginThreaded(2048, 3, 20);  // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
-
 }
 
 void loop() { threads.delay(100); }  // yield to subsystem threads

@@ -42,9 +42,8 @@ MissionNode::MissionNode() : Node("mission_node") {
       this->create_publisher<std_msgs::msg::Int16>("/intake_speed", 10);
   drone_cmd_pub_ = this->create_publisher<mcu_msgs::msg::DroneControl>(
       "/mcu_drone/control", 10);
-  bridge_cmd_pub_ =
-      this->create_publisher<mcu_msgs::msg::IntakeBridgeCommand>(
-          "/mcu_robot/intake_bridge/command", 10);
+  bridge_cmd_pub_ = this->create_publisher<mcu_msgs::msg::IntakeBridgeCommand>(
+      "/mcu_robot/intake_bridge/command", 10);
 
   // Subscribers
   goal_reached_sub_ = this->create_subscription<std_msgs::msg::Bool>(
@@ -373,8 +372,7 @@ void MissionNode::stepMission() {
     // -- ROBOT START (readiness checks + settle) --
     case MissionPhase::ROBOT_START: {
       if (phase_entry_) {
-        RCLCPP_INFO(this->get_logger(),
-                    "Robot starting, settling for 0.5s...");
+        RCLCPP_INFO(this->get_logger(), "Robot starting, settling for 0.5s...");
         phase_entry_ = false;
       }
       auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
@@ -765,16 +763,14 @@ void MissionNode::stepMission() {
             RCLCPP_INFO(this->get_logger(),
                         "Antenna aligned, starting intake bridge");
             // Send extend command and start intake
-            sendBridgeCommand(
-                mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
+            sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
             setIntakeSpeed(INTAKE_CAPTURE_SPEED);
             phase_timer_ = std::chrono::steady_clock::now();
           }
           if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
             sub_step_ = SolveSubStep::EXECUTE_TASK;
             bridge_step_ = IntakeBridgeStep::EXTEND;
-            sendBridgeCommand(
-                mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
+            sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
             setIntakeSpeed(INTAKE_CAPTURE_SPEED);
             phase_timer_ = std::chrono::steady_clock::now();
           }
@@ -801,8 +797,7 @@ void MissionNode::stepMission() {
                 sendBridgeCommand(
                     mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT);
                 phase_timer_ = std::chrono::steady_clock::now();
-                RCLCPP_INFO(this->get_logger(),
-                            "Retracting bridge (duck=%s)",
+                RCLCPP_INFO(this->get_logger(), "Retracting bridge (duck=%s)",
                             bridge_duck_detected_ ? "yes" : "timeout");
               }
               break;
@@ -823,8 +818,7 @@ void MissionNode::stepMission() {
 
           // Overall pressure solve timeout
           if (checkStateTimeout(15.0)) {
-            sendBridgeCommand(
-                mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
+            sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
             setIntakeSpeed(INTAKE_OFF_SPEED);
             transitionTo(MissionPhase::DEPOSIT_DUCK);
           }

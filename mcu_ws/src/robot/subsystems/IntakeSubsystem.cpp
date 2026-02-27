@@ -266,7 +266,8 @@ void IntakeSubsystem::publishState() {
 
   // Publish (non-blocking, best effort)
 #ifdef USE_TEENSYTHREADS
-  { Threads::Scope guard(g_microros_mutex);
+  {
+    Threads::Scope guard(g_microros_mutex);
     (void)rcl_publish(&state_pub_, &state_msg_, NULL);
   }
 #else

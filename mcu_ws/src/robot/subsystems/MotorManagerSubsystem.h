@@ -182,7 +182,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     for (uint8_t i = 0; i < setup_.numMotors_; i++) pub_data_[i] = speeds_[i];
     pub_msg_.data.size = setup_.numMotors_;
 #ifdef USE_TEENSYTHREADS
-    { Threads::Scope guard(g_microros_mutex);
+    {
+      Threads::Scope guard(g_microros_mutex);
       (void)rcl_publish(&pub_, &pub_msg_, NULL);
     }
 #else

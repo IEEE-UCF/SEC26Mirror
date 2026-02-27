@@ -8,7 +8,9 @@
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <ESP32WifiSubsystem.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <microros_manager_robot.h>
 
 #include "../MinibotDriveSubsystem.h"
@@ -32,6 +34,16 @@ using namespace Subsystem;
 #define MINIBOT_TAG_ID 2
 static const uint8_t ANCHOR_IDS[] = {10, 11, 12, 13};
 static const uint8_t NUM_ANCHORS = 4;
+
+// --- WiFi subsystem (manages connection lifecycle + auto-reconnect) ---
+static IPAddress g_local_ip(LOCAL_IP);
+static ESP32WifiSubsystemSetup g_wifi_setup(
+    "wifi", WIFI_SSID, WIFI_PASSWORD, g_local_ip,
+    IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0),
+    /*connection_timeout_ms=*/10000,
+    /*reconnect_interval_ms=*/5000,
+    /*max_retries=*/0);  // 0 = infinite retries
+static ESP32WifiSubsystem g_wifi(g_wifi_setup);
 
 // SELF EXPLAINTORY!!!
 static MicrorosManagerSetup g_mr_setup("microros_manager");
@@ -63,6 +75,21 @@ void setup() {
   delay(2000);
   Serial.println("Minibot starting...");
 
+  // Step 1: WiFi connection (managed by ESP32WifiSubsystem with auto-reconnect)
+  g_wifi.init();
+  g_wifi.begin();
+  Serial.println("Waiting for WiFi...");
+  while (!g_wifi.isConnected()) {
+    g_wifi.update();
+    delay(10);
+  }
+  Serial.printf("WiFi connected: %s\n", WiFi.localIP().toString().c_str());
+
+  // ArduinoOTA for wireless firmware updates (needs WiFi up)
+  ArduinoOTA.setHostname("sec26-minibot");
+  ArduinoOTA.begin();
+  Serial.println("[OTA] Ready as sec26-minibot");
+
   SPI.begin();
 
   bool ok = true;
@@ -82,12 +109,7 @@ void setup() {
   // Register micro-ROS participants
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_drive);
-  g_mr.begin();
-
-  // ArduinoOTA for wireless firmware updates
-  ArduinoOTA.setHostname("sec26-minibot");
-  ArduinoOTA.begin();
-  Serial.println("[OTA] Ready as sec26-minibot");
+  g_mr.begin();  // Registers UDP transport only, no WiFi.begin()
 
   g_uwb.begin();
   g_drive.begin();
@@ -126,6 +148,7 @@ void setup() {
 }
 
 void loop() {
+  g_wifi.update();  // WiFi reconnection monitoring
   ArduinoOTA.handle();
   g_mr.update();
   g_uwb.update();

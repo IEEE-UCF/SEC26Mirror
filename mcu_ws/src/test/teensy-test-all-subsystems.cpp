@@ -22,6 +22,7 @@
  *   /mcu_robot/buttons            std_msgs/UInt8          10 Hz
  *   /mcu_robot/servo/state        std_msgs/Float32Multi..  5 Hz
  *   /mcu_robot/motor/state        std_msgs/Float32Multi..  5 Hz
+ *   /mcu_robot/encoders           std_msgs/Float32Multi.. 50 Hz
  *   /mcu_robot/uwb/ranging        mcu_msgs/UWBRanging     10 Hz
  *
  * micro-ROS services:
@@ -61,6 +62,7 @@
 #include "robot/subsystems/DipSwitchSubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
 #include "robot/subsystems/LEDSubsystem.h"
+#include "robot/subsystems/EncoderSubsystem.h"
 #include "robot/subsystems/MotorManagerSubsystem.h"
 #include "robot/subsystems/OLEDSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
@@ -169,6 +171,12 @@ static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
                                                 PIN_MOTOR_OE, NUM_MOTORS);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
+// --- Encoder subsystem (QTimer hardware FG pulse counting, pins 2-9) ---
+static Encoders::QTimerEncoder g_qtimer_encoder;
+static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
+                                                  &g_qtimer_encoder, &g_motor);
+static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
+
 // --- Deploy subsystem (button-triggered deployment) ---
 static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
                                            &g_led, &g_oled);
@@ -220,6 +228,7 @@ void setup() {
   g_led.init();
   g_servo.init();
   g_motor.init();
+  g_encoder_sub.init();
   g_deploy.init();
   SPI.begin();
   g_uwb.init();
@@ -249,6 +258,7 @@ void setup() {
   g_mr.registerParticipant(&g_led);
   g_mr.registerParticipant(&g_servo);
   g_mr.registerParticipant(&g_motor);
+  g_mr.registerParticipant(&g_encoder_sub);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
 
@@ -259,6 +269,7 @@ void setup() {
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
   g_servo.beginThreaded(1024, 2, 25);  // 20 Hz state pub
   g_motor.beginThreaded(1024, 2, 1);  // 1000 Hz — NFPShop reverse-pulse timing
+  g_encoder_sub.beginThreaded(1024, 2, 20);  // 50 Hz encoder reading
   g_oled.beginThreaded(2048, 1, 25);           // 20 Hz display
   g_battery.beginThreaded(1024, 1, 100);       // 10 Hz
   g_sensor.beginThreaded(1024, 1, 100);        // 10 Hz TOF

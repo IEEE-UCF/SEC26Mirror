@@ -4,9 +4,9 @@
  * @date 2026-02-26
  *
  * Each motor uses two consecutive PCA9685 channels:
- *   even channel = PWM (inverted: 4095 = stopped, 0 = full speed)
- *   odd  channel = DIR (digital HIGH/LOW)
- * Motor 0 -> ch 0,1;  Motor 1 -> ch 2,3;  ...  Motor 7 -> ch 14,15.
+ *   Motors 0-3: even channel = PWM, odd channel = DIR
+ *   Motors 4-7: even channel = DIR, odd channel = PWM (swapped)
+ * Motor 0 -> ch 0(PWM),1(DIR);  ...  Motor 4 -> ch 8(DIR),9(PWM); ...
  *
  * NFPShop brushless motor quirk: a brief reverse pulse (~3ms) is applied
  * every ~103ms to prevent the integrated controller from entering a fault
@@ -90,8 +90,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
       speeds_[i] = 0.0f;
       dirs_[i] = true;
       if (setup_.driver_) {
-        setup_.driver_->bufferPWM(i * 2, MAX_PWM);
-        setup_.driver_->bufferDigital(i * 2 + 1, true);
+        setup_.driver_->bufferPWM(pwmChannel(i), MAX_PWM);
+        setup_.driver_->bufferDigital(dirChannel(i), true);
       }
     }
     // Flush immediately so motors don't twitch on startup
@@ -114,8 +114,9 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
         // Enter reverse pulse window
         in_reverse_[i] = true;
         if (setup_.driver_) {
-          setup_.driver_->bufferDigital(i * 2 + 1, !dirs_[i]);
-          setup_.driver_->bufferPWM(i * 2, MAX_PWM - NFPSHOP_REVERSE_DUTY);
+          setup_.driver_->bufferDigital(dirChannel(i), !dirs_[i]);
+          setup_.driver_->bufferPWM(pwmChannel(i),
+                                    MAX_PWM - NFPSHOP_REVERSE_DUTY);
         }
       }
     }
@@ -222,16 +223,23 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  /** Get the PWM channel for a motor (swapped for motors 4-7). */
+  static uint8_t pwmChannel(uint8_t motor) {
+    return (motor < 4) ? (motor * 2) : (motor * 2 + 1);
+  }
+
+  /** Get the DIR channel for a motor (swapped for motors 4-7). */
+  static uint8_t dirChannel(uint8_t motor) {
+    return (motor < 4) ? (motor * 2 + 1) : (motor * 2);
+  }
+
   /** Write the normal (non-reverse-pulse) output for a motor. */
   void applyMotorOutput(uint8_t motor) {
-    uint8_t pwmCh = motor * 2;
-    uint8_t dirCh = motor * 2 + 1;
-
     // Inverted PWM: MAX_PWM = stopped, 0 = full speed
     uint16_t duty = MAX_PWM - (uint16_t)(fabsf(speeds_[motor]) * MAX_PWM);
 
-    setup_.driver_->bufferDigital(dirCh, dirs_[motor]);
-    setup_.driver_->bufferPWM(pwmCh, duty);
+    setup_.driver_->bufferDigital(dirChannel(motor), dirs_[motor]);
+    setup_.driver_->bufferPWM(pwmChannel(motor), duty);
     in_reverse_[motor] = false;
   }
 

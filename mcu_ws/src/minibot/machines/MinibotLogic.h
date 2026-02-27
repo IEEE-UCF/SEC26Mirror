@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <SPI.h>
 #include <microros_manager_robot.h>
 
@@ -83,6 +84,11 @@ void setup() {
   g_mr.registerParticipant(&g_drive);
   g_mr.begin();
 
+  // ArduinoOTA for wireless firmware updates
+  ArduinoOTA.setHostname("sec26-minibot");
+  ArduinoOTA.begin();
+  Serial.println("[OTA] Ready as sec26-minibot");
+
   g_uwb.begin();
   g_drive.begin();
 
@@ -120,6 +126,7 @@ void setup() {
 }
 
 void loop() {
+  ArduinoOTA.handle();
   g_mr.update();
   g_uwb.update();
   g_drive.update();

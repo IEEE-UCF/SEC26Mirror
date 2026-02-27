@@ -8,6 +8,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -83,6 +84,16 @@ void setup() {
   Serial.printf("WiFi status: %d (3=connected)\n", WiFi.status());
   Serial.flush();
 
+  // Step 1b: ArduinoOTA for wireless firmware updates
+  {
+    char hostname[32];
+    snprintf(hostname, sizeof(hostname), "sec26-beacon-%d", BEACON_ID);
+    ArduinoOTA.setHostname(hostname);
+    ArduinoOTA.begin();
+    Serial.printf("[OTA] Ready as %s\n", hostname);
+    Serial.flush();
+  }
+
   // Step 2: SPI for DW3000
   SPI.begin();
 
@@ -137,6 +148,7 @@ void setup() {
 }
 
 void loop() {
+  ArduinoOTA.handle();
   g_mr.update();
   g_hb.update();
   g_uwb.update();

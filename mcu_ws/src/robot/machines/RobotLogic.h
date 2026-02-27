@@ -33,6 +33,7 @@
 #include "robot/subsystems/ArmSubsystem.h"
 #include "robot/subsystems/BatterySubsystem.h"
 #include "robot/subsystems/ButtonSubsystem.h"
+#include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/DipSwitchSubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
 #include "robot/subsystems/IntakeBridgeSubsystem.h"
@@ -148,8 +149,8 @@ static MotorManagerSubsystem g_motor(g_motor_setup);
 
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
-                                                   Drivers::UWBMode::TAG,
-                                                   ROBOT_UWB_TAG_ID, PIN_UWB_CS);
+                                                  Drivers::UWBMode::TAG,
+                                                  ROBOT_UWB_TAG_ID, PIN_UWB_CS);
 static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
@@ -168,6 +169,11 @@ static IntakeBridgeSubsystemSetup g_bridge_setup(
     /*extend_timeout_ms*/ 3000, /*retract_timeout_ms*/ 3000,
     /*duck_detect_threshold_mm*/ 50, /*motor_speed*/ 200);
 static IntakeBridgeSubsystem g_bridge(g_bridge_setup);
+
+// --- Deploy subsystem (button-triggered deployment) ---
+static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
+                                           &g_led, &g_oled);
+static DeploySubsystem g_deploy(g_deploy_setup);
 
 // --- Drive subsystem ---
 // TODO: Replace placeholder pin values with actual hardware wiring config
@@ -224,16 +230,22 @@ void setup() {
   g_motor.init();
   g_intake.init();
   g_bridge.init();
+  g_deploy.init();
   SPI.begin();
   g_uwb.init();
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
   // g_drive.init();  // TODO: uncomment when DriveSubsystem is configured
 
-  // 2a. Startup LED flash (green)
-  g_led.setAll(0, 32, 0);
+  // 2a. Clear LEDs on startup
+  g_led.setAll(0, 0, 0);
   FastLED.show();
 
-  // 2b. Wire battery → OLED status line
+  // 2b. OLED startup debug info
+  g_oled.appendText("SEC26 Robot v1.0");
+  g_oled.appendText("Subsystems OK");
+  g_oled.appendText("Waiting for uROS...");
+
+  // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
   // 3. Register micro-ROS participants
@@ -252,27 +264,29 @@ void setup() {
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_intake);
   g_mr.registerParticipant(&g_bridge);
+  g_mr.registerParticipant(&g_deploy);
   // g_mr.registerParticipant(&g_drive);  // TODO: uncomment when configured
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);                // ROS agent
-  g_imu.beginThreaded(2048, 3, 10);           // 100 Hz
+  g_mr.beginThreaded(8192, 4);       // ROS agent
+  g_imu.beginThreaded(2048, 3, 10);  // 100 Hz
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 25);         // 40 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);          // 1000 Hz — NFPShop reverse-pulse
-  g_oled.beginThreaded(2048, 1, 25);          // 40 Hz display
-  g_battery.beginThreaded(1024, 1, 100);      // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);       // 10 Hz TOF
-  g_dip.beginThreaded(1024, 1, 500);          // 2 Hz
-  g_btn.beginThreaded(1024, 1, 20);           // 50 Hz
-  g_led.beginThreaded(1024, 1, 50);           // 20 Hz
-  g_hb.beginThreaded(1024, 1, 200);           // 5 Hz
-  g_uwb.beginThreaded(2048, 2, 50);           // 20 Hz UWB ranging
-  g_arm.beginThreaded(1024, 2, 20);           // 50 Hz arm
-  g_intake.beginThreaded(1024, 2, 20);        // 50 Hz intake
+  g_servo.beginThreaded(1024, 2, 25);     // 40 Hz state pub
+  g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
+  g_oled.beginThreaded(2048, 1, 25);      // 40 Hz display
+  g_battery.beginThreaded(1024, 1, 100);  // 10 Hz
+  g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
+  g_dip.beginThreaded(1024, 1, 500);      // 2 Hz
+  g_btn.beginThreaded(1024, 1, 20);       // 50 Hz
+  g_led.beginThreaded(1024, 1, 50);       // 20 Hz
+  g_hb.beginThreaded(1024, 1, 200);       // 5 Hz
+  g_uwb.beginThreaded(2048, 2, 50);       // 20 Hz UWB ranging
+  g_arm.beginThreaded(1024, 2, 20);       // 50 Hz arm
+  g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
+  g_deploy.beginThreaded(1024, 1, 20);    // 50 Hz deploy button
   // g_drive.beginThreaded(2048, 3, 20);      // TODO: uncomment when configured
-  threads.addThread(pca_task, nullptr, 1024); // 50 Hz PWM flush
+  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
 }
 
 // RC polled from main loop — IBusBM NOTIMER doesn't work from TeensyThreads

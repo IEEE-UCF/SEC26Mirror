@@ -41,8 +41,9 @@ services:
     # This uses the network mode from the .env file (either 'host' for Linux or 'bridge' for Win/Mac)
     network_mode: ${NETWORK_MODE_CONFIG}
     privileged: true
-    # Keep the container running
-    command: sleep infinity
+    restart: unless-stopped
+    # Start micro-ROS agents and keep container alive
+    command: bash /home/ubuntu/scripts/container-entrypoint.sh
     depends_on:
       init-bootstrap:
         condition: service_completed_successfully

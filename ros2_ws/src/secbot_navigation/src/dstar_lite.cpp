@@ -37,9 +37,11 @@ DStarLite::DStarLite(GridMap &grid_map, Node start, Node goal,
 }
 
 // === Heuristic ===
-// The manhattan distance h(a,b) = |r_a - r_b| + |c_a - c_b|
+// Octile distance: consistent with 8-directional movement (cardinal=1, diagonal=sqrt(2))
 double DStarLite::distance_between_points(const Node &a, const Node &b) const {
-  return std::abs(a.r - b.r) + std::abs(a.c - b.c);
+  double dr = std::abs(a.r - b.r);
+  double dc = std::abs(a.c - b.c);
+  return std::max(dr, dc) + (std::sqrt(2.0) - 1.0) * std::min(dr, dc);
 }
 
 // === Calculate Key ===
@@ -57,11 +59,13 @@ DStarLite::Priority DStarLite::calculate_priority(const Node &s) const {
 }
 
 // === Edge Cost ===
+// Cardinal moves cost 1.0, diagonal moves cost sqrt(2)
 double DStarLite::cost(const Node &a, const Node &b) const {
   if (!map_.is_free(a) || !map_.is_free(b)) {
     return INF;
   }
-  return 1.0;
+  bool diagonal = (a.r != b.r) && (a.c != b.c);
+  return diagonal ? std::sqrt(2.0) : 1.0;
 }
 
 // === Priority Queue Operations ===

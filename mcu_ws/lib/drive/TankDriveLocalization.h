@@ -40,7 +40,7 @@ class TankDriveLocalizationSetup {
     wheel_radius = wheel_diameter * 0.5f;
     wheel_circumference = M_PI * wheel_diameter;
     ticks_per_revolution = raw_ticks_per_rev * gear_ratio;
-    inches_per_tick = wheel_circumference / ticks_per_revolution;
+    dist_per_tick = wheel_circumference / ticks_per_revolution;
   }
 
   const char* id;
@@ -55,7 +55,7 @@ class TankDriveLocalizationSetup {
   float wheel_radius;
   float wheel_circumference;
   long ticks_per_revolution;
-  float inches_per_tick;
+  float dist_per_tick;
 
   // Starting pose
   float start_x;

@@ -175,7 +175,7 @@ static TrajectoryController::Config createTrajControllerConfig() {
 static Drive::TankDriveLocalizationSetup createLocalizationSetup() {
   Drive::TankDriveLocalizationSetup setup;
   setup.track_width = DriveConfig::WHEEL_TRACK_WIDTH;
-  setup.inches_per_tick = DriveConfig::INCHES_PER_TICK;
+  setup.dist_per_tick = DriveConfig::INCHES_PER_TICK;
   return setup;
 }
 

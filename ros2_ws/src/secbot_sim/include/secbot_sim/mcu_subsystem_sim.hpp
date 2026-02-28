@@ -92,7 +92,7 @@ class McuSubsystemSimulator : public rclcpp::Node {
   float max_velocity_;
   float max_angular_velocity_;
   float max_wheel_velocity_;  // max single-wheel vel at PWM=255
-  float inches_per_tick_;     // derived
+  float dist_per_tick_;     // derived
 
   // Parameters
   int num_tof_sensors_;

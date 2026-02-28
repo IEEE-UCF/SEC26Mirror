@@ -37,6 +37,9 @@ void ImuSubsystem::update() {
 
   setup_.driver_->update();
 
+  // Cache yaw for cross-thread access (e.g., DriveSubsystem localization)
+  yaw_rad_ = setup_.driver_->getData().yaw;
+
   if (!pub_.impl) return;
   publishData();
 }

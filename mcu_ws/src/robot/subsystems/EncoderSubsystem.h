@@ -93,7 +93,8 @@ class EncoderSubsystem : public IMicroRosParticipant,
     // Capture all encoder counters and apply direction signs
     setup_.encoder_->captureAll(dirs);
 
-    // Compute ticks/sec from accumulated ticks and elapsed time
+    // Compute ticks/sec from deltas (accumulated ticks are preserved for
+    // localization — never reset)
     uint32_t now_us = micros();
     uint32_t dt_us = now_us - last_capture_us_;
     last_capture_us_ = now_us;
@@ -102,11 +103,10 @@ class EncoderSubsystem : public IMicroRosParticipant,
     float dt_inv = 1000000.0f / (float)dt_us;
     for (uint8_t i = 0; i < NUM_CHANNELS; i++) {
       int32_t ticks = setup_.encoder_->getTicks(i);
-      tick_rates_[i] = (float)ticks * dt_inv;
+      int32_t delta = ticks - prev_ticks_[i];
+      prev_ticks_[i] = ticks;
+      tick_rates_[i] = (float)delta * dt_inv;
     }
-
-    // Reset accumulators for next interval
-    setup_.encoder_->resetAll();
 
     // Publish
     if (!pub_.impl) return;
@@ -117,7 +117,10 @@ class EncoderSubsystem : public IMicroRosParticipant,
 
   void reset() override {
     if (setup_.encoder_) setup_.encoder_->resetAll();
-    for (uint8_t i = 0; i < NUM_CHANNELS; i++) tick_rates_[i] = 0.0f;
+    for (uint8_t i = 0; i < NUM_CHANNELS; i++) {
+      tick_rates_[i] = 0.0f;
+      prev_ticks_[i] = 0;
+    }
   }
 
   const char* getInfo() override {
@@ -152,6 +155,12 @@ class EncoderSubsystem : public IMicroRosParticipant,
   /** @brief Get tick rate for a channel (signed ticks/sec). */
   float getTickRate(uint8_t channel) const {
     return (channel < NUM_CHANNELS) ? tick_rates_[channel] : 0.0f;
+  }
+
+  /** @brief Get accumulated signed ticks for a channel (for localization). */
+  int32_t getAccumulatedTicks(uint8_t channel) const {
+    if (!setup_.encoder_ || channel >= NUM_CHANNELS) return 0;
+    return setup_.encoder_->getTicks(channel);
   }
 
 #ifdef USE_TEENSYTHREADS
@@ -189,6 +198,7 @@ class EncoderSubsystem : public IMicroRosParticipant,
 
   const EncoderSubsystemSetup setup_;
   float tick_rates_[NUM_CHANNELS] = {};
+  int32_t prev_ticks_[NUM_CHANNELS] = {};
   uint32_t last_capture_us_ = 0;
 
   rcl_publisher_t pub_{};

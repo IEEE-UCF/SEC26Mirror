@@ -25,7 +25,9 @@
  *   /mcu_robot/encoders           std_msgs/Float32Multi.. 50 Hz
  *   /mcu_robot/uwb/ranging        mcu_msgs/UWBRanging     10 Hz
  *   /mcu_robot/crank/state        std_msgs/UInt8           5 Hz
+ *   /mcu_robot/keypad/state       std_msgs/UInt8           5 Hz
  *   /mcu_robot/deploy/trigger     std_msgs/String          on event
+ *   drive_base/status             mcu_msgs/DriveBase      20 Hz
  *
  * micro-ROS services:
  *   /mcu_robot/servo/set          mcu_msgs/srv/SetServo
@@ -37,7 +39,10 @@
  *   /mcu_robot/lcd/scroll         std_msgs/Int8
  *   /mcu_robot/led/set_all        mcu_msgs/LedColor
  *   /mcu_robot/crank/command      std_msgs/UInt8
+ *   /mcu_robot/keypad/command     std_msgs/UInt8
  *   /mcu_robot/deploy/status      std_msgs/String
+ *   drive_base/command            mcu_msgs/DriveBase
+ *   drive_base/reset_pose         geometry_msgs/Pose
  */
 
 #include <Arduino.h>
@@ -49,6 +54,7 @@
 #include "DebugLog.h"
 
 // Pin & address constants
+#include "robot/RobotConfig.h"
 #include "robot/RobotConstants.h"
 #include "robot/RobotPins.h"
 
@@ -76,9 +82,11 @@
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/CrankSubsystem.h"
+#include "robot/subsystems/KeypadSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
 #include "robot/subsystems/ResetSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
+#include "robot/drive-base/DriveSubsystem.h"
 
 using namespace Subsystem;
 
@@ -201,6 +209,25 @@ static DeploySubsystem g_deploy(g_deploy_setup);
 static ResetSubsystemSetup g_reset_setup("reset_subsystem");
 static ResetSubsystem g_reset(g_reset_setup);
 
+// --- Drive subsystem (tank drive, uses motor + encoder + IMU) ---
+static Drive::TankDriveLocalizationSetup g_loc_setup(
+    "drive_localization",
+    RobotConfig::TRACK_WIDTH_M,
+    RobotConfig::WHEEL_DIAMETER_M,
+    RobotConfig::RAW_TICKS_PER_REVOLUTION,
+    RobotConfig::GEAR_RATIO,
+    RobotConfig::START_X, RobotConfig::START_Y, RobotConfig::START_THETA);
+
+static DriveSubsystemSetup g_drive_setup(
+    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup);
+
+static DriveSubsystem g_drive(g_drive_setup);
+
+// --- Keypad subsystem (servo on PCA9685 #0, channel 1 + drive press) ---
+static KeypadSubsystemSetup g_keypad_setup("keypad_subsystem", &g_servo,
+                                            KEYPAD_SERVO_IDX, &g_drive);
+static KeypadSubsystem g_keypad(g_keypad_setup);
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -252,13 +279,15 @@ void setup() {
   g_btn.init();      DEBUG_PRINTLN("[INIT] Buttons OK");
   g_led.init();      DEBUG_PRINTLN("[INIT] LEDs OK");
   g_servo.init();    DEBUG_PRINTLN("[INIT] Servo OK");
-  g_crank.init();
-  g_motor.init();    DEBUG_PRINTLN("[INIT] Motor Manager OK");
-  g_encoder_sub.init();
-  g_deploy.init();   DEBUG_PRINTLN("[INIT] Deploy OK");
+  g_crank.init();        DEBUG_PRINTLN("[INIT] Crank OK");
+  g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
+  g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
+  g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
   SPI.begin();
-  g_uwb.init();      DEBUG_PRINTLN("[INIT] UWB OK");
+  g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+  g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
+  g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
 
   // 2a. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
@@ -290,13 +319,18 @@ void setup() {
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
+  g_mr.registerParticipant(&g_drive);
+  g_mr.registerParticipant(&g_keypad);
 
   // 3a. Register subsystems as reset targets
   g_reset.addTarget(&g_motor);
   g_reset.addTarget(&g_servo);
   g_reset.addTarget(&g_encoder_sub);
   g_reset.addTarget(&g_led);
-  DEBUG_PRINTF("[INIT] Registered 13 participants\n");
+  g_reset.addTarget(&g_drive);
+  g_reset.addTarget(&g_crank);
+  g_reset.addTarget(&g_keypad);
+  DEBUG_PRINTF("[INIT] Registered %d participants\n", 18);
 
   // 4. Start threaded tasks
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
@@ -317,6 +351,8 @@ void setup() {
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
   g_deploy.beginThreaded(1024, 1, 20);         // 50 Hz deploy button
   g_crank.beginThreaded(1024, 1, 50);          // 20 Hz crank
+  g_keypad.beginThreaded(1024, 1, 50);         // 20 Hz keypad
+  g_drive.beginThreaded(4096, 3, 20);          // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }

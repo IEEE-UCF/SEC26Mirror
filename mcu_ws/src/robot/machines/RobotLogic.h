@@ -48,6 +48,7 @@
 #include "robot/subsystems/ResetSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/CrankSubsystem.h"
+#include "robot/subsystems/KeypadSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
@@ -276,6 +277,11 @@ static void configureDriveSetup() {
 
 static DriveSubsystem g_drive(g_drive_setup);
 
+// --- Keypad subsystem (servo on PCA9685 #0, channel 1 + drive press) ---
+static KeypadSubsystemSetup g_keypad_setup("keypad_subsystem", &g_servo,
+                                            KEYPAD_SERVO_IDX, &g_drive);
+static KeypadSubsystem g_keypad(g_keypad_setup);
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -328,9 +334,9 @@ void setup() {
   g_btn.init();          DEBUG_PRINTLN("[INIT] Buttons OK");
   g_led.init();          DEBUG_PRINTLN("[INIT] LEDs OK");
   g_servo.init();        DEBUG_PRINTLN("[INIT] Servo OK");
-  g_crank.init();
+  g_crank.init();        DEBUG_PRINTLN("[INIT] Crank OK");
   g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
-  g_encoder_sub.init();
+  g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
   g_intake.init();       DEBUG_PRINTLN("[INIT] Intake OK");
   g_bridge.init();       DEBUG_PRINTLN("[INIT] Intake Bridge OK");
   g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
@@ -338,7 +344,8 @@ void setup() {
   g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
   configureDriveSetup();
-  g_drive.init();
+  g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
+  g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
 
   // 2a. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
@@ -374,6 +381,7 @@ void setup() {
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
   g_mr.registerParticipant(&g_drive);
+  g_mr.registerParticipant(&g_keypad);
 
   // 3a. Register subsystems as reset targets
   g_reset.addTarget(&g_motor);
@@ -384,7 +392,9 @@ void setup() {
   g_reset.addTarget(&g_bridge);
   g_reset.addTarget(&g_led);
   g_reset.addTarget(&g_drive);
-  DEBUG_PRINTF("[INIT] Registered 16 participants\n");
+  g_reset.addTarget(&g_crank);
+  g_reset.addTarget(&g_keypad);
+  DEBUG_PRINTF("[INIT] Registered %d participants\n", 21);
 
   // 4. Start threaded tasks
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
@@ -407,6 +417,7 @@ void setup() {
   g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   g_deploy.beginThreaded(1024, 1, 20);    // 50 Hz deploy button
   g_crank.beginThreaded(1024, 1, 50);     // 20 Hz crank
+  g_keypad.beginThreaded(1024, 1, 50);   // 20 Hz keypad
   g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");

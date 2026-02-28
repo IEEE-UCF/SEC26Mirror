@@ -42,6 +42,9 @@ ESP32_DEVICES = [
     ("drone", "192.168.4.25", "drone"),
 ]
 
+# PlatformIO environments that use micro-ROS (need clean_microros on mcu_msgs change)
+MICROROS_ENVS = ["robot", "beacon1", "beacon2", "beacon3", "minibot"]
+
 DOCKER_COMPOSE = "docker compose"
 CONTAINER_NAME = "sec26-devcontainer-1"
 MCU_WS = "/home/ubuntu/mcu_workspaces/sec26mcu"
@@ -334,8 +337,43 @@ def step_git_restore(original_branch: str | None):
                   e.stderr[:200] if e.stderr else str(e))
 
 
-def detect_changes() -> tuple[bool, bool]:
-    """Step 2: Detect what changed. Returns (mcu_changed, ros_changed)."""
+def _classify_changed_files(files: list[str]) -> tuple[bool, bool, bool]:
+    """Classify a list of changed file paths.
+
+    Returns (mcu_changed, ros_changed, microros_rebuild).
+    microros_rebuild is True when changes require a micro-ROS clean rebuild:
+      - mcu_msgs definitions (ros2_ws/src/mcu_msgs/)
+      - micro_ros_platformio submodules (mcu_ws/libs_external/)
+      - PlatformIO build config (mcu_ws/platformio.ini)
+      - extra_packages (mcu_ws/extra_packages/)
+    This matches the CI cache key in platformio-robot.yml.
+    """
+    mcu = any(f.startswith("mcu_ws/") for f in files)
+    ros = any(f.startswith("ros2_ws/")
+              or f.startswith("Dockerfile")
+              or f.startswith("docker-compose")
+              for f in files)
+
+    microros_rebuild = any(
+        f.startswith("ros2_ws/src/mcu_msgs/")
+        or f.startswith("mcu_ws/libs_external/")
+        or f.startswith("mcu_ws/extra_packages/")
+        or f == "mcu_ws/platformio.ini"
+        or f == "mcu_ws/custom_microros.meta"
+        for f in files
+    )
+
+    if microros_rebuild:
+        mcu = True  # micro-ROS changes require MCU firmware rebuild
+
+    return mcu, ros, microros_rebuild
+
+
+def detect_changes() -> tuple[bool, bool, bool]:
+    """Step 2: Detect what changed.
+
+    Returns (mcu_changed, ros_changed, microros_rebuild).
+    """
     base_sha = get_last_deployed_sha()
     current_sha = get_current_sha()
 
@@ -347,7 +385,7 @@ def detect_changes() -> tuple[bool, bool]:
     # If last deployed SHA matches HEAD, nothing has changed
     if base_sha and current_sha and base_sha == current_sha:
         log.info("[DETECT] HEAD matches last deploy — no git changes detected")
-        return False, False
+        return False, False, False
 
     # Diff against last deployed SHA
     if base_sha:
@@ -356,11 +394,7 @@ def detect_changes() -> tuple[bool, bool]:
                          cwd=str(REPO_DIR), check=False)
             if result.returncode == 0 and result.stdout.strip():
                 files = result.stdout.strip().splitlines()
-                mcu = any(f.startswith("mcu_ws/") for f in files)
-                ros = any(f.startswith("ros2_ws/")
-                          or f.startswith("Dockerfile")
-                          or f.startswith("docker-compose")
-                          for f in files)
+                mcu, ros, microros_rebuild = _classify_changed_files(files)
                 log.info("[DETECT] %d files changed since last deploy (%s..%s):",
                          len(files), base_sha[:8],
                          current_sha[:8] if current_sha else "HEAD")
@@ -368,8 +402,9 @@ def detect_changes() -> tuple[bool, bool]:
                     log.info("[DETECT]   %s", f)
                 if len(files) > 30:
                     log.info("[DETECT]   ... and %d more", len(files) - 30)
-                log.info("[DETECT] Result: MCU=%s, ROS=%s", mcu, ros)
-                return mcu, ros
+                log.info("[DETECT] Result: MCU=%s, ROS=%s, microros_rebuild=%s",
+                         mcu, ros, microros_rebuild)
+                return mcu, ros, microros_rebuild
         except Exception as e:
             log.warning("[DETECT] SHA diff failed: %s", e)
 
@@ -380,15 +415,13 @@ def detect_changes() -> tuple[bool, bool]:
         result = run("git diff HEAD~1 HEAD --name-only", cwd=str(REPO_DIR),
                       check=False)
         files = result.stdout.strip().splitlines() if result.stdout.strip() else []
-        mcu = any(f.startswith("mcu_ws/") for f in files)
-        ros = any(f.startswith("ros2_ws/") or f.startswith("Dockerfile")
-                  or f.startswith("docker-compose")
-                  for f in files)
-        log.info("[DETECT] HEAD~1 fallback: MCU=%s, ROS=%s", mcu, ros)
-        return mcu, ros
+        mcu, ros, microros_rebuild = _classify_changed_files(files)
+        log.info("[DETECT] HEAD~1 fallback: MCU=%s, ROS=%s, microros_rebuild=%s",
+                 mcu, ros, microros_rebuild)
+        return mcu, ros, microros_rebuild
     except Exception:
         log.warning("[DETECT] All detection failed — assuming everything changed")
-        return True, True
+        return True, True, True
 
 
 def find_firmware_binary(env_name: str) -> str | None:
@@ -465,6 +498,45 @@ def build_firmware_in_docker(env_name: str) -> str | None:
         log.error("  [BUILD] Failed to build %s: %s",
                   env_name, e.stderr[:200] if e.stderr else str(e))
         return None
+
+
+def step_clean_microros() -> bool:
+    """Clean shared micro-ROS libraries (libs_external).
+
+    Required when mcu_msgs definitions, micro_ros_platformio submodules,
+    custom_microros.meta, or platformio.ini change so that libmicroros is
+    regenerated. All environments share the same libs_external, so a single
+    clean suffices. Also clears cached firmware binaries for all micro-ROS
+    environments to force fresh rebuilds.
+    """
+    write_status("clean_microros", "Cleaning micro-ROS libraries...")
+    log.info("")
+    log.info("─── Clean micro-ROS ─────────────────────────────────────")
+    log.info("  [MICROROS] micro-ROS rebuild needed — cleaning shared libs")
+
+    t0 = time.time()
+
+    # Single clean — all envs share libs_external
+    try:
+        run(f"docker exec {CONTAINER_NAME} bash -c "
+            f"'cd {MCU_WS} && pio run -e robot -t clean_microros'",
+            timeout=120, check=False)
+    except Exception as e:
+        log.warning("  [MICROROS] Clean failed: %s", e)
+
+    # Clear cached firmware binaries so stale builds aren't reused
+    fw_cache = DEPLOY_DIR / "firmware"
+    for env in MICROROS_ENVS:
+        fw_dir = fw_cache / env
+        if fw_dir.exists():
+            for f in fw_dir.iterdir():
+                f.unlink()
+            log.info("  [MICROROS] Cleared cached firmware for %s", env)
+
+    elapsed = time.time() - t0
+    log.info("  [MICROROS] Clean complete (%s)", fmt_duration(elapsed))
+    write_status("clean_microros", f"micro-ROS cleaned ({fmt_duration(elapsed)})")
+    return True
 
 
 def step_esp32_ota(config: dict, force: bool = False) -> bool:
@@ -724,9 +796,9 @@ def run_pipeline(config: dict):
         if force:
             log.info("[DETECT] FORCE mode — skipping change detection, "
                      "flashing everything")
-            mcu_changed, ros_changed = True, True
+            mcu_changed, ros_changed, microros_rebuild = True, True, False
         else:
-            mcu_changed, ros_changed = detect_changes()
+            mcu_changed, ros_changed, microros_rebuild = detect_changes()
 
         if not mcu_changed and not ros_changed:
             log.info("")
@@ -738,13 +810,19 @@ def run_pipeline(config: dict):
             write_status("done", "No changes - nothing to deploy")
             return
 
+        # If micro-ROS rebuild needed, MCU firmware must be force-flashed
+        # (new micro-ROS libs → different binary)
+        force_mcu = force or microros_rebuild
+
         log.info("")
         log.info("  Deploy plan:")
+        if microros_rebuild:
+            log.info("    [x] Clean micro-ROS (micro-ROS rebuild needed)")
         if mcu_changed:
             log.info("    [x] ESP32 OTA flash%s",
-                     " (FORCED)" if force else "")
+                     " (FORCED)" if force_mcu else "")
             log.info("    [x] Teensy flash%s",
-                     " (FORCED)" if force else "")
+                     " (FORCED)" if force_mcu else "")
         else:
             log.info("    [ ] ESP32 OTA flash (no MCU changes)")
             log.info("    [ ] Teensy flash (no MCU changes)")
@@ -757,9 +835,17 @@ def run_pipeline(config: dict):
             log.info("    [ ] Docker restart (no ROS changes)")
             log.info("    [ ] Colcon build (no ROS changes)")
 
+        # Step 2b: Clean micro-ROS if rebuild needed
+        if microros_rebuild:
+            if not step_clean_microros():
+                return
+            steps_run.append("Clean micro-ROS")
+            if check_cancelled():
+                return
+
         # Step 3: ESP32 OTA
         if mcu_changed:
-            if not step_esp32_ota(config, force=force):
+            if not step_esp32_ota(config, force=force_mcu):
                 return
             steps_run.append("ESP32 OTA")
             if check_cancelled():
@@ -767,7 +853,7 @@ def run_pipeline(config: dict):
 
         # Step 4: Teensy flash (last MCU step — reboots MCU)
         if mcu_changed:
-            if not step_teensy_flash(config, force=force):
+            if not step_teensy_flash(config, force=force_mcu):
                 return
             steps_run.append("Teensy flash")
             if check_cancelled():

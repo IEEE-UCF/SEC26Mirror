@@ -19,11 +19,11 @@
 #include <hal/NativeGPIO.h>
 #include <hal/PCA9685GPIO.h>
 
+#include "CD74HC4067Driver.h"
 #include "DriveSubsystem.h"
 #include "EncoderDriver.h"
+#include "MCP23017Driver.h"
 #include "MotorDriver.h"
-#include "drivers/CD74HC4067Driver.h"
-#include "drivers/MCP23017Driver.h"
 #include "robot/PCA9685Driver.h"
 
 namespace DriveConfig {

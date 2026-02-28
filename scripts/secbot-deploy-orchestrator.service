@@ -1,0 +1,16 @@
+[Unit]
+Description=SEC26 Deploy Orchestrator
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ieee
+WorkingDirectory=/home/ieee/SEC26
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/ieee/SEC26/scripts/deploy-orchestrator.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

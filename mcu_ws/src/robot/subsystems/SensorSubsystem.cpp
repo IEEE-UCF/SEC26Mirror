@@ -16,9 +16,7 @@ bool SensorSubsystem::init() {
 
 void SensorSubsystem::update() {
   if (!pub_.impl) return;
-  if (everyMs(100)) {  // Publish every 100 ms (10 Hz)
-    publishData();
-  }
+  publishData();
 }
 
 void SensorSubsystem::reset() { pause(); }
@@ -64,9 +62,9 @@ void SensorSubsystem::onDestroy() {
     msg_.data.size = 0;
     msg_.data.capacity = 0;
   }
-  if (pub_.impl) {
-    (void)rcl_publisher_fini(&pub_, node_);
-  }
+  // destroy_entities() finalises the rcl_node before calling onDestroy, so
+  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
+  pub_ = rcl_get_zero_initialized_publisher();
   node_ = nullptr;
 }
 
@@ -85,7 +83,14 @@ void SensorSubsystem::publishData() {
     }
   }
 
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

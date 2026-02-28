@@ -1,7 +1,8 @@
-#include <crank.h>
 #include <field-colors.h>
 #include <field-element.h>
 #include <raw-rgb-analog-led.h>
+
+#include "crank.h"
 
 // Pin configs
 const uint8_t ledPin = 13;

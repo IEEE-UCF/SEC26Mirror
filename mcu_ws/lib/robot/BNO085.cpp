@@ -3,21 +3,29 @@
 namespace Drivers {
 
 bool BNO085Driver::init() {
+  I2CBus::Lock lock(setup_.wire_);
+  setup_.wire_.begin();
+
   initSuccess_ = true;
 
-  if (!imu_.begin_I2C()) {
+  if (!imu_.begin_I2C(setup_.addr_, &setup_.wire_)) {
     initSuccess_ = false;
     return initSuccess_;
   }
+
   if (!imu_.enableReport(SH2_ACCELEROMETER) ||
       !imu_.enableReport(SH2_GYROSCOPE_CALIBRATED) ||
       !imu_.enableReport(SH2_ROTATION_VECTOR)) {
     initSuccess_ = false;
   }
+
   return initSuccess_;
 }
 
 void BNO085Driver::update() {
+  if (!initSuccess_) return;
+  I2CBus::Lock lock(setup_.wire_);
+
   while (imu_.getSensorEvent(&sensorValue_)) {
     switch (sensorValue_.sensorId) {
       case SH2_ACCELEROMETER:
@@ -59,4 +67,4 @@ const char* BNO085Driver::getInfo() {
   return infoBuffer_;
 }
 
-};  // namespace Drivers
+}  // namespace Drivers

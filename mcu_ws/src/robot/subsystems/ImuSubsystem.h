@@ -14,7 +14,9 @@
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
 
-#include "TimedSubsystem.h"
+#ifdef USE_TEENSYTHREADS
+#include <TeensyThreads.h>
+#endif
 
 namespace Subsystem {
 
@@ -26,10 +28,10 @@ class ImuSubsystemSetup : public Classes::BaseSetup {
 };
 
 class ImuSubsystem : public IMicroRosParticipant,
-                     public Subsystem::TimedSubsystem {
+                     public Classes::BaseSubsystem {
  public:
   explicit ImuSubsystem(const ImuSubsystemSetup& setup)
-      : Subsystem::TimedSubsystem(setup), setup_(setup) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}
@@ -42,6 +44,25 @@ class ImuSubsystem : public IMicroRosParticipant,
   void onDestroy() override;
 
   void publishData();
+
+#ifdef USE_TEENSYTHREADS
+  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+                     uint32_t updateRateMs = 20) {
+    task_delay_ms_ = updateRateMs;
+    threads.addThread(taskFunction, this, stackSize);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<ImuSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      threads.delay(self->task_delay_ms_);
+    }
+  }
+  uint32_t task_delay_ms_ = 20;
+#endif
 
  private:
   void initCovariances();

@@ -35,16 +35,10 @@ bool ImuSubsystem::init() {
 void ImuSubsystem::update() {
   if (!setup_.driver_) return;
 
-  // Update sensor at 50Hz
-  if (everyMs(20)) {
-    setup_.driver_->update();
-  }
+  setup_.driver_->update();
 
-  // Publish at 50Hz to match the sensor update rate!
   if (!pub_.impl) return;
-  if (everyMs(20, 1)) {
-    publishData();
-  }
+  publishData();
 }
 
 void ImuSubsystem::reset() { pause(); }
@@ -75,9 +69,9 @@ bool ImuSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void ImuSubsystem::onDestroy() {
-  if (pub_.impl) {
-    (void)rcl_publisher_fini(&pub_, node_);
-  }
+  // destroy_entities() finalises the rcl_node before calling onDestroy, so
+  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
+  pub_ = rcl_get_zero_initialized_publisher();
   sensor_msgs__msg__Imu__fini(&msg_);
   node_ = nullptr;
 }
@@ -146,7 +140,14 @@ void ImuSubsystem::publishData() {
   msg_.linear_acceleration.y = data.accel_y;
   msg_.linear_acceleration.z = data.accel_z;
 
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

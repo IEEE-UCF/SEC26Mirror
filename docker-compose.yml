@@ -11,6 +11,10 @@ services:
       - QT_X11_NO_MITSHM=1
       - ARDUINO_DIRECTORIES_USER=/home/ubuntu/.arduino15
       - PLATFORMIO_CORE_DIR=/home/ubuntu/.platformio
+      # Onshape API credentials for URDF/STL export (set in root .env)
+      - ONSHAPE_API=${ONSHAPE_API}
+      - ONSHAPE_ACCESS_KEY=${ONSHAPE_ACCESS_KEY}
+      - ONSHAPE_SECRET_KEY=${ONSHAPE_SECRET_KEY}
     volumes:
       # --- Source Code (Synced with Host) ---
       - ./ros2_ws/src:/home/ubuntu/ros2_workspaces/src/sec26ros:delegated
@@ -37,8 +41,9 @@ services:
     # This uses the network mode from the .env file (either 'host' for Linux or 'bridge' for Win/Mac)
     network_mode: ${NETWORK_MODE_CONFIG}
     privileged: true
-    # Keep the container running
-    command: sleep infinity
+    restart: unless-stopped
+    # Start micro-ROS agents and keep container alive
+    command: bash /home/ubuntu/scripts/container-entrypoint.sh
     depends_on:
       init-bootstrap:
         condition: service_completed_successfully

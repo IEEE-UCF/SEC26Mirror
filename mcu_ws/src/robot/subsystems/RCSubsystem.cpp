@@ -9,12 +9,18 @@
 
 namespace Subsystem {
 
-bool RCSubsystem::init() { return true; }
+bool RCSubsystem::init() {
+  // Initialize IBUS communication on the specified serial port.
+  // Done in init() (not begin()) so Serial8.begin() runs synchronously
+  // before LED init — Serial8 TX shares pin 35 with WS2812B, and
+  // FastLED.addLeds must run after to reclaim the pin for GPIO.
+  // IBUS is RX-only so losing TX on pin 35 is fine.
+  ibus_.begin(*setup_.serial, IBUSBM_NOTIMER);
+  return true;
+}
 
 void RCSubsystem::begin() {
-  // Initialize IBUS communication on the specified serial port
-  // IBUSBM_NOTIMER means we handle timing ourselves
-  ibus_.begin(*setup_.serial, IBUSBM_NOTIMER);
+  // Serial already started in init(); nothing to do here.
 }
 
 void RCSubsystem::update() {
@@ -23,7 +29,9 @@ void RCSubsystem::update() {
 
   // Publish RC data at regular intervals
   if (!pub_.impl) return;
-  if (everyMs(PUBLISH_INTERVAL_MS)) {
+  uint32_t now = millis();
+  if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
+    last_publish_ms_ = now;
     publishRC();
   }
 }
@@ -52,40 +60,37 @@ bool RCSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void RCSubsystem::onDestroy() {
-  if (pub_.impl) {
-    (void)rcl_publisher_fini(&pub_, node_);
-  }
+  // destroy_entities() finalises the rcl_node before calling onDestroy, so
+  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
+  pub_ = rcl_get_zero_initialized_publisher();
   mcu_msgs__msg__RC__fini(&msg_);
   node_ = nullptr;
 }
 
 void RCSubsystem::updateRCData() {
-  if (updateTimer_ >= UPDATE_DELAY_MS) {
-    updateTimer_ -= UPDATE_DELAY_MS;
-    ibus_.loop();  // Process incoming IBUS data
+  ibus_.loop();  // Process incoming IBUS data
 
-    // Read and map all 10 channels
-    int32_t newChannels[10];
+  // Read and map all 10 channels
+  int32_t newChannels[10];
+  for (int i = 0; i < 10; i++) {
+    // Read raw channel data (1000-2000), constrain, then map to -255 to 255
+    newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000, 0,
+                         1000, -255, 255);
+  }
+
+  // Failsafe/mode check: if channel 9 is at its minimum (-255 after mapping),
+  // zero out specific control channels (kill switch behavior)
+  if (newChannels[9] == -255) {
+    data_.channels[0] = 0;     // e.g., Roll/Aileron
+    data_.channels[1] = 0;     // e.g., Pitch/Elevator
+    data_.channels[2] = 0;     // e.g., Throttle
+    data_.channels[3] = 0;     // e.g., Yaw/Rudder
+    data_.channels[5] = 0;     // e.g., Auxiliary channel
+    data_.channels[9] = -255;  // Keep failsafe switch state
+  } else {
+    // If not in failsafe, update all channels with new readings
     for (int i = 0; i < 10; i++) {
-      // Read raw channel data (1000-2000), constrain, then map to -255 to 255
-      newChannels[i] = map(constrain(ibus_.readChannel(i), 1000, 2000) - 1000,
-                           0, 1000, -255, 255);
-    }
-
-    // Failsafe/mode check: if channel 9 is at its minimum (-255 after mapping),
-    // zero out specific control channels (kill switch behavior)
-    if (newChannels[9] == -255) {
-      data_.channels[0] = 0;     // e.g., Roll/Aileron
-      data_.channels[1] = 0;     // e.g., Pitch/Elevator
-      data_.channels[2] = 0;     // e.g., Throttle
-      data_.channels[3] = 0;     // e.g., Yaw/Rudder
-      data_.channels[5] = 0;     // e.g., Auxiliary channel
-      data_.channels[9] = -255;  // Keep failsafe switch state
-    } else {
-      // If not in failsafe, update all channels with new readings
-      for (int i = 0; i < 10; i++) {
-        data_.channels[i] = newChannels[i];
-      }
+      data_.channels[i] = newChannels[i];
     }
   }
 }
@@ -122,7 +127,14 @@ void RCSubsystem::publishRC() {
   if (!pub_.impl) return;
 
   updateRCMessage();
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

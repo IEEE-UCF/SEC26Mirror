@@ -9,12 +9,20 @@
 #define MICROROS_MANAGER_H
 #include <BaseSubsystem.h>
 // microros includes
+#include <micro_ros_utilities/string_utilities.h>
 #include <rcl/error_handling.h>
 #include <rcl/rcl.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
+#include <std_msgs/msg/string.h>
 #include <stdio.h>
+
+#ifdef USE_TEENSYTHREADS
+#include <TeensyThreads.h>
+#else
+#include <mutex>
+#endif
 
 #include "microros_setup.h"
 
@@ -70,16 +78,47 @@ class MicrorosManager : public Classes::BaseSubsystem {
   // Register a participant; it will be created/destroyed with the manager
   void registerParticipant(IMicroRosParticipant* participant);
 
+#ifdef USE_TEENSYTHREADS
+  // TeensyThreads task entry point — pass `this` as pvParams
+  static void taskFunction(void* pvParams);
+
+  // Create and start the micro-ROS thread
+  void beginThreaded(uint32_t stackSize, int priority = 1);
+#endif
+
+  // Mutex for thread-safe access to the executor
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex& getMutex();
+#else
+  std::mutex& getMutex();
+#endif
+
+  // Query agent connection state
+  bool isConnected() const;
+
+  // Returns index of participant that failed onCreate, or -1 if all succeeded.
+  int lastFailedParticipant() const { return last_failed_participant_; }
+
+  /**
+   * Publish a debug string to /mcu_robot/debug (best-effort).
+   * Safe to call from any thread — acquires g_microros_mutex internally.
+   * Silently drops messages when not connected.
+   */
+  void debugLog(const char* text);
+
  private:
   const MicrorosManagerSetup setup_;
   rclc_support_t support_;
   rcl_node_t node_;
   rclc_executor_t executor_;
   rcl_allocator_t allocator_;
-  // No publishers owned by the manager; subsystems own their pubs/subs
-  // Cached pose/state removed as TF/state publishing is delegated
-  // Registered participants
-  IMicroRosParticipant* participants_[8] = {nullptr};
+  // Debug publisher — manager-owned, publishes to /mcu_robot/debug
+  rcl_publisher_t debug_pub_{};
+  std_msgs__msg__String debug_msg_{};
+
+  // Registered participants (increase capacity as subsystems are added)
+  static constexpr size_t MAX_PARTICIPANTS = 16;
+  IMicroRosParticipant* participants_[MAX_PARTICIPANTS] = {nullptr};
   size_t participants_count_ = 0;
 
   enum State {
@@ -90,6 +129,12 @@ class MicrorosManager : public Classes::BaseSubsystem {
   } state_;
 
   static MicrorosManager* s_instance_;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex mutex_;
+#else
+  std::mutex mutex_;
+#endif
+  int last_failed_participant_ = -1;
   bool create_entities();
   void destroy_entities();
 
@@ -100,5 +145,13 @@ class MicrorosManager : public Classes::BaseSubsystem {
 };
 
 }  // namespace Subsystem
+
+// Global mutex for serializing micro-ROS transport access across threads.
+// The XRCE-DDS session is NOT thread-safe: concurrent rcl_publish, ping,
+// and executor-spin calls corrupt the serial stream.  All code that touches
+// the session must hold this mutex.
+#ifdef USE_TEENSYTHREADS
+extern Threads::Mutex g_microros_mutex;
+#endif
 
 #endif

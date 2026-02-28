@@ -179,7 +179,6 @@ main() {
     print_info "Verifying main production builds compile"
 
     build_mcu_test "robot" "Robot (Teensy41)"
-    build_mcu_test "robotcomms" "RobotComms (ESP32)"
 
     # Print final summary
     print_summary

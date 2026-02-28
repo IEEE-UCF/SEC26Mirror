@@ -9,13 +9,14 @@
 #include <Arduino.h>
 #include <BaseSubsystem.h>
 #include <IBusBM.h>
-#include <elapsedMillis.h>
 #include <mcu_msgs/msg/rc.h>
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 
-#include "TimedSubsystem.h"
+#ifdef USE_TEENSYTHREADS
+#include <TeensyThreads.h>
+#endif
 
 namespace Subsystem {
 
@@ -53,11 +54,10 @@ class RCSubsystemSetup : public Classes::BaseSetup {
  * to the "mcu_robot/rc" topic. No input commands from Raspberry Pi are
  * required.
  */
-class RCSubsystem : public IMicroRosParticipant,
-                    public Subsystem::TimedSubsystem {
+class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
  public:
   explicit RCSubsystem(const RCSubsystemSetup& setup)
-      : Subsystem::TimedSubsystem(setup), setup_(setup), updateTimer_(0) {}
+      : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override;
@@ -73,23 +73,41 @@ class RCSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
+#ifdef USE_TEENSYTHREADS
+  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+                     uint32_t updateRateMs = 5) {
+    task_delay_ms_ = updateRateMs;
+    threads.addThread(taskFunction, this, stackSize);
+  }
+
+ private:
+  static void taskFunction(void* pvParams) {
+    auto* self = static_cast<RCSubsystem*>(pvParams);
+    self->begin();
+    while (true) {
+      self->update();
+      threads.delay(self->task_delay_ms_);
+    }
+  }
+  uint32_t task_delay_ms_ = 5;
+#endif
+
  private:
   void updateRCData();
   void publishRC();
   void updateRCMessage();
 
-  static constexpr uint32_t UPDATE_DELAY_MS = 2;  // 2ms delay for IBUS updates
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 50;  // Publish at 20 Hz
 
   const RCSubsystemSetup setup_;
   RCSubsystemData data_;
 
   IBusBM ibus_;
-  elapsedMillis updateTimer_;
 
   rcl_publisher_t pub_{};
   mcu_msgs__msg__RC msg_{};
   rcl_node_t* node_ = nullptr;
+  uint32_t last_publish_ms_ = 0;
 };
 
 }  // namespace Subsystem

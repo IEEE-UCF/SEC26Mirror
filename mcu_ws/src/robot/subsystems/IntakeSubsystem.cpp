@@ -94,9 +94,9 @@ bool IntakeSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void IntakeSubsystem::onDestroy() {
-  if (state_pub_.impl) {
-    (void)rcl_publisher_fini(&state_pub_, node_);
-  }
+  // destroy_entities() finalises the rcl_node before calling onDestroy, so
+  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
+  state_pub_ = rcl_get_zero_initialized_publisher();
   mcu_msgs__msg__IntakeState__fini(&state_msg_);
   node_ = nullptr;
 }
@@ -265,7 +265,14 @@ void IntakeSubsystem::publishState() {
   state_msg_.time_in_state_ms = millis() - state_entry_time_ms_;
 
   // Publish (non-blocking, best effort)
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+  }
+#else
   (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

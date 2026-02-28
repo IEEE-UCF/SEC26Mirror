@@ -66,5 +66,10 @@ ros2_ws/.vscode/*
 .pio/*
 mcu_ws/.vscode/*
 
+# deploy orchestrator IPC
+scripts/.deploy/
+
 # ai agents
 .claude/*
+!.claude/commands/
+!.claude/skills/

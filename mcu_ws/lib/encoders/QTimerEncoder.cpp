@@ -1,6 +1,6 @@
 /**
  * @file QTimerEncoder.cpp
- * @brief IMXRT1062 QTimer + XBAR register configuration for 8 FG encoders.
+ * @brief IMXRT1062 QTimer + XBAR + GPIO interrupt config for 8 FG encoders.
  * @date 2026-02-27
  *
  * Channel-to-register mapping:
@@ -8,10 +8,14 @@
  *   [1] Pin 3 -> QTimer1 Timer 1  (XBAR routed)
  *   [2] Pin 4 -> QTimer1 Timer 2  (XBAR routed)
  *   [3] Pin 5 -> QTimer1 Timer 3  (XBAR routed)
- *   [4] Pin 6 -> QTimer4 Timer 1  (direct pad connection)
+ *   [4] Pin 6 -> GPIO interrupt   (software counter — QTimer4 reserved)
  *   [5] Pin 7 -> QTimer2 Timer 0  (XBAR routed)
  *   [6] Pin 8 -> QTimer2 Timer 1  (XBAR routed)
- *   [7] Pin 9 -> QTimer4 Timer 2  (direct pad connection)
+ *   [7] Pin 9 -> GPIO interrupt   (software counter — QTimer4 reserved)
+ *
+ * QTimer4 is reserved by the Teensy core (all 4 channels configured as
+ * 150 MHz bus clock counters with output toggle). Do NOT write any TMR4
+ * registers — it breaks USB.
  */
 
 #include "QTimerEncoder.h"
@@ -20,19 +24,32 @@
 
 namespace Encoders {
 
-// Pad control: hysteresis, 100k pulldown, fast slew — suitable for
-// open-collector / push-pull FG signals.
-static constexpr uint32_t FG_PAD_CTL = 0x10B0;
+// Pad control for FG encoder inputs:
+//   HYS(16)=1  — hysteresis enabled for noise rejection
+//   PUS(15:14)=11 — 100k ohm pullup (FG outputs are typically open-drain)
+//   PUE(12)=1  — pull (not keeper)
+//   PKE(13)=1  — pull/keeper enabled
+//   SPEED(7:6)=10 — medium speed
+//   DSE(5:3)=110 — R0/6 drive strength
+//   SRE(0)=0   — slow slew rate
+// = 0b 0000_0001 1111_0000 1011_0000 = 0x1F0B0
+static constexpr uint32_t FG_PAD_CTL = 0x1F0B0;
 
 // Small input filter period for debouncing FG edges (~3 IPbus clocks).
 // At 150 MHz IPbus this is ~20 ns — far below any legitimate FG period.
 static constexpr uint16_t FG_FILT_PERIOD = 3;
 
+// Static instance pointer for GPIO ISRs
+QTimerEncoder* QTimerEncoder::s_instance_ = nullptr;
+
 bool QTimerEncoder::init() {
+  s_instance_ = this;
+
   enableClockGates();
   configureIOMUX();
   configureXBAR();
   configureQTimers();
+  configureGPIOInterrupts();
 
   // Snapshot initial counter values
   for (uint8_t i = 0; i < NUM_ENCODER_CHANNELS; i++) {
@@ -50,8 +67,8 @@ bool QTimerEncoder::init() {
 void QTimerEncoder::enableClockGates() {
   CCM_CCGR2 |= CCM_CCGR2_XBAR1(CCM_CCGR_ON);
   CCM_CCGR6 |= CCM_CCGR6_QTIMER1(CCM_CCGR_ON) |
-                CCM_CCGR6_QTIMER2(CCM_CCGR_ON) |
-                CCM_CCGR6_QTIMER4(CCM_CCGR_ON);
+                CCM_CCGR6_QTIMER2(CCM_CCGR_ON);
+  // QTimer4 clock gate intentionally NOT touched — reserved by Teensy core.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -72,9 +89,8 @@ void QTimerEncoder::configureIOMUX() {
   IOMUXC_SW_MUX_CTL_PAD_GPIO_EMC_08 = 3;  // Pin 5 -> XBAR1_INOUT17
   IOMUXC_SW_PAD_CTL_PAD_GPIO_EMC_08 = FG_PAD_CTL;
 
-  // ── Pin 6: ALT1 = direct QTIMER4_TIMER1 ─────────────────────────────
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_B0_10 = 1;
-  IOMUXC_SW_PAD_CTL_PAD_GPIO_B0_10 = FG_PAD_CTL;
+  // ── Pins 6, 9: GPIO input (configured by configureGPIOInterrupts) ───
+  // Do NOT set to ALT1 (QTimer4) — TMR4 is reserved by Teensy core.
 
   // ── Pins 7-8: ALT1 = XBAR1_INOUTxx ──────────────────────────────────
   IOMUXC_SW_MUX_CTL_PAD_GPIO_B1_01 = 1;  // Pin 7 -> XBAR1_INOUT15
@@ -83,18 +99,12 @@ void QTimerEncoder::configureIOMUX() {
   IOMUXC_SW_MUX_CTL_PAD_GPIO_B1_00 = 1;  // Pin 8 -> XBAR1_INOUT14
   IOMUXC_SW_PAD_CTL_PAD_GPIO_B1_00 = FG_PAD_CTL;
 
-  // ── Pin 9: ALT1 = direct QTIMER4_TIMER2 ─────────────────────────────
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_B0_11 = 1;
-  IOMUXC_SW_PAD_CTL_PAD_GPIO_B0_11 = FG_PAD_CTL;
-
   // ── XBAR input daisy-chain select ────────────────────────────────────
-  // EMC pads: value 0 selects the default source pad.
   IOMUXC_XBAR1_IN06_SELECT_INPUT = 0;  // GPIO_EMC_04
   IOMUXC_XBAR1_IN07_SELECT_INPUT = 0;  // GPIO_EMC_05
   IOMUXC_XBAR1_IN08_SELECT_INPUT = 0;  // GPIO_EMC_06
   IOMUXC_XBAR1_IN17_SELECT_INPUT = 0;  // GPIO_EMC_08
 
-  // B-port pads: value 1 selects GPIO_B1_xx for the XBAR input.
   IOMUXC_XBAR1_IN14_SELECT_INPUT = 1;  // GPIO_B1_00
   IOMUXC_XBAR1_IN15_SELECT_INPUT = 1;  // GPIO_B1_01
 }
@@ -123,96 +133,71 @@ void QTimerEncoder::configureQTimers() {
   // CTRL register:
   //   CM  [15:13] = 001  -> count rising edges of primary source
   //   PCS [12:9]  = N    -> primary count source = counter N input pin
-  //                         (either XBAR-routed or direct pad)
   //   All other bits = 0 -> count up, free-running, no compare stop
 
   // ── QTimer1: channels 0-3 (pins 2,3,4,5 via XBAR) ───────────────────
-  // Channel 0 (Pin 2)
-  TMR1_CTRL0 = 0;
-  TMR1_CNTR0 = 0;
-  TMR1_LOAD0 = 0;
-  TMR1_COMP10 = 0xFFFF;
-  TMR1_SCTRL0 = 0;
-  TMR1_FILT0 = FG_FILT_PERIOD;
+  TMR1_CTRL0 = 0;  TMR1_CNTR0 = 0;  TMR1_LOAD0 = 0;
+  TMR1_COMP10 = 0xFFFF;  TMR1_SCTRL0 = 0;  TMR1_FILT0 = FG_FILT_PERIOD;
   TMR1_CTRL0 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(0);
 
-  // Channel 1 (Pin 3)
-  TMR1_CTRL1 = 0;
-  TMR1_CNTR1 = 0;
-  TMR1_LOAD1 = 0;
-  TMR1_COMP11 = 0xFFFF;
-  TMR1_SCTRL1 = 0;
-  TMR1_FILT1 = FG_FILT_PERIOD;
+  TMR1_CTRL1 = 0;  TMR1_CNTR1 = 0;  TMR1_LOAD1 = 0;
+  TMR1_COMP11 = 0xFFFF;  TMR1_SCTRL1 = 0;  TMR1_FILT1 = FG_FILT_PERIOD;
   TMR1_CTRL1 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(1);
 
-  // Channel 2 (Pin 4)
-  TMR1_CTRL2 = 0;
-  TMR1_CNTR2 = 0;
-  TMR1_LOAD2 = 0;
-  TMR1_COMP12 = 0xFFFF;
-  TMR1_SCTRL2 = 0;
-  TMR1_FILT2 = FG_FILT_PERIOD;
+  TMR1_CTRL2 = 0;  TMR1_CNTR2 = 0;  TMR1_LOAD2 = 0;
+  TMR1_COMP12 = 0xFFFF;  TMR1_SCTRL2 = 0;  TMR1_FILT2 = FG_FILT_PERIOD;
   TMR1_CTRL2 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(2);
 
-  // Channel 3 (Pin 5)
-  TMR1_CTRL3 = 0;
-  TMR1_CNTR3 = 0;
-  TMR1_LOAD3 = 0;
-  TMR1_COMP13 = 0xFFFF;
-  TMR1_SCTRL3 = 0;
-  TMR1_FILT3 = FG_FILT_PERIOD;
+  TMR1_CTRL3 = 0;  TMR1_CNTR3 = 0;  TMR1_LOAD3 = 0;
+  TMR1_COMP13 = 0xFFFF;  TMR1_SCTRL3 = 0;  TMR1_FILT3 = FG_FILT_PERIOD;
   TMR1_CTRL3 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(3);
 
-  // ── QTimer4 Channel 1 (Pin 6, direct) ────────────────────────────────
-  TMR4_CTRL1 = 0;
-  TMR4_CNTR1 = 0;
-  TMR4_LOAD1 = 0;
-  TMR4_COMP11 = 0xFFFF;
-  TMR4_SCTRL1 = 0;
-  TMR4_FILT1 = FG_FILT_PERIOD;
-  TMR4_CTRL1 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(1);
-
-  // ── QTimer2 Channel 0 (Pin 7, via XBAR) ──────────────────────────────
-  TMR2_CTRL0 = 0;
-  TMR2_CNTR0 = 0;
-  TMR2_LOAD0 = 0;
-  TMR2_COMP10 = 0xFFFF;
-  TMR2_SCTRL0 = 0;
-  TMR2_FILT0 = FG_FILT_PERIOD;
+  // ── QTimer2: channels 0-1 (pins 7,8 via XBAR) ───────────────────────
+  TMR2_CTRL0 = 0;  TMR2_CNTR0 = 0;  TMR2_LOAD0 = 0;
+  TMR2_COMP10 = 0xFFFF;  TMR2_SCTRL0 = 0;  TMR2_FILT0 = FG_FILT_PERIOD;
   TMR2_CTRL0 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(0);
 
-  // ── QTimer2 Channel 1 (Pin 8, via XBAR) ──────────────────────────────
-  TMR2_CTRL1 = 0;
-  TMR2_CNTR1 = 0;
-  TMR2_LOAD1 = 0;
-  TMR2_COMP11 = 0xFFFF;
-  TMR2_SCTRL1 = 0;
-  TMR2_FILT1 = FG_FILT_PERIOD;
+  TMR2_CTRL1 = 0;  TMR2_CNTR1 = 0;  TMR2_LOAD1 = 0;
+  TMR2_COMP11 = 0xFFFF;  TMR2_SCTRL1 = 0;  TMR2_FILT1 = FG_FILT_PERIOD;
   TMR2_CTRL1 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(1);
 
-  // ── QTimer4 Channel 2 (Pin 9, direct) ────────────────────────────────
-  TMR4_CTRL2 = 0;
-  TMR4_CNTR2 = 0;
-  TMR4_LOAD2 = 0;
-  TMR4_COMP12 = 0xFFFF;
-  TMR4_SCTRL2 = 0;
-  TMR4_FILT2 = FG_FILT_PERIOD;
-  TMR4_CTRL2 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(2);
+  // ── QTimer4 — DO NOT TOUCH ───────────────────────────────────────────
+  // All 4 TMR4 channels are reserved by the Teensy core (CTRL=0x300B,
+  // ENBL=0x000F, SCTRL=0x8001). Writing any TMR4 register kills USB.
 
   // ── Set CNTR register pointers ────────────────────────────────────────
   channels_[0].cntr_reg = &IMXRT_TMR1.CH[0].CNTR;
   channels_[1].cntr_reg = &IMXRT_TMR1.CH[1].CNTR;
   channels_[2].cntr_reg = &IMXRT_TMR1.CH[2].CNTR;
   channels_[3].cntr_reg = &IMXRT_TMR1.CH[3].CNTR;
-  channels_[4].cntr_reg = &IMXRT_TMR4.CH[1].CNTR;
+  channels_[4].cntr_reg = &sw_counter_pin6_;   // GPIO ISR
   channels_[5].cntr_reg = &IMXRT_TMR2.CH[0].CNTR;
   channels_[6].cntr_reg = &IMXRT_TMR2.CH[1].CNTR;
-  channels_[7].cntr_reg = &IMXRT_TMR4.CH[2].CNTR;
+  channels_[7].cntr_reg = &sw_counter_pin9_;   // GPIO ISR
 
   // ── Enable timer channels ────────────────────────────────────────────
   TMR1_ENBL |= 0x0F;  // QTimer1 channels 0-3
   TMR2_ENBL |= 0x03;  // QTimer2 channels 0-1
-  TMR4_ENBL |= 0x06;  // QTimer4 channels 1-2
+  // TMR4_ENBL — not touched
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Pins 6, 9 — GPIO interrupt edge counters (replace QTimer4 ch1, ch2)
+// ═══════════════════════════════════════════════════════════════════════════
+
+void QTimerEncoder::pin6ISR() {
+  if (s_instance_) s_instance_->sw_counter_pin6_++;
+}
+
+void QTimerEncoder::pin9ISR() {
+  if (s_instance_) s_instance_->sw_counter_pin9_++;
+}
+
+void QTimerEncoder::configureGPIOInterrupts() {
+  pinMode(6, INPUT_PULLUP);
+  pinMode(9, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(6), pin6ISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(9), pin9ISR, RISING);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

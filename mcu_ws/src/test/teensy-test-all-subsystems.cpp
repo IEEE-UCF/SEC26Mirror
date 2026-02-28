@@ -202,9 +202,6 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(
-      PSTR("\r\nSEC26 Robot — All Subsystems Test (TeensyThreads)\r\n"));
-
   // 0. I2C bus mutexes
   I2CBus::initLocks();
 
@@ -212,38 +209,40 @@ void setup() {
   pinMode(PIN_MUX_RESET, OUTPUT);
   digitalWrite(PIN_MUX_RESET, HIGH);  // active-LOW reset — release
 
-  // 2. Init subsystems
+  // 2. Init subsystems — OLED first so we can use it for debug output.
+  //    Each init() is followed by an appendText() so the last line visible
+  //    on the display tells you exactly where setup() hung if it crashes.
   g_mr.init();
   g_oled.init();
-  g_hb.init();
-  g_mux.init();
-  g_gpio.init();
-  g_battery.init();
-  g_sensor.init();
-  g_imu.init();
-  g_pca_mgr.init();
-  g_rc.init();
-  g_dip.init();
-  g_btn.init();
-  g_led.init();
-  g_servo.init();
-  g_motor.init();
-  g_encoder_sub.init();
-  g_deploy.init();
+  g_oled.appendText("OLED ok");
+  g_oled.update();
+
+  g_hb.init();       g_oled.appendText("heartbeat ok");
+  g_mux.init();      g_oled.appendText("i2c mux ok");
+  g_gpio.init();     g_oled.appendText("gpio ok");
+  g_battery.init();  g_oled.appendText("battery ok");
+  g_sensor.init();   g_oled.appendText("sensor ok");
+  g_imu.init();      g_oled.appendText("imu ok");
+  g_pca_mgr.init();  g_oled.appendText("pca mgr ok");
+  g_rc.init();       g_oled.appendText("rc ok");
+  g_dip.init();      g_oled.appendText("dip sw ok");
+  g_btn.init();      g_oled.appendText("button ok");
+  g_led.init();      g_oled.appendText("led ok");
+  g_servo.init();    g_oled.appendText("servo ok");
+  g_motor.init();    g_oled.appendText("motor ok");
+  g_oled.update();
+  g_encoder_sub.init(); g_oled.appendText("encoder ok");
+  g_deploy.init();   g_oled.appendText("deploy ok");
   SPI.begin();
-  g_uwb.init();
+  g_uwb.init();      g_oled.appendText("uwb ok");
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+  g_oled.update();
 
   // 2a. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
   FastLED.show();
 
-  // 2b. OLED startup debug info
-  g_oled.appendText("SEC26 Test v1.0");
-  g_oled.appendText("Subsystems OK");
-  g_oled.appendText("Waiting for uROS...");
-
-  // 2c. Wire battery → OLED status line
+  // 2b. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
   // 3. Register micro-ROS participants
@@ -261,6 +260,8 @@ void setup() {
   g_mr.registerParticipant(&g_encoder_sub);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
+  g_oled.appendText("14 participants reg");
+  g_oled.update();
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
@@ -280,9 +281,62 @@ void setup() {
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
   g_deploy.beginThreaded(1024, 1, 20);         // 50 Hz deploy button
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
+
+  // All threads launched — this line confirms setup() completed fully.
+  // The OLED thread is now running so appendText is safe from any thread.
+  g_oled.appendText("setup() complete");
 }
+
+// Track micro-ROS state transitions and report on OLED
+static bool s_was_connected = false;
+static uint32_t s_last_status_ms = 0;
 
 void loop() {
   g_rc.update();
+
+  // Every 3 seconds, show diagnostic info on OLED
+  uint32_t now = millis();
+  if (now - s_last_status_ms >= 3000) {
+    s_last_status_ms = now;
+    bool connected = g_mr.isConnected();
+    char buf[22];
+
+    // micro-ROS state
+    if (connected && !s_was_connected) {
+      g_oled.appendText("uROS: CONNECTED");
+    } else if (!connected && s_was_connected) {
+      g_oled.appendText("uROS: DISCONNECTED");
+      int fail = g_mr.lastFailedParticipant();
+      if (fail >= 0) {
+        snprintf(buf, sizeof(buf), "fail part #%d", fail);
+        g_oled.appendText(buf);
+      }
+    } else if (!connected && !s_was_connected) {
+      g_oled.appendText("uROS: waiting...");
+    }
+    s_was_connected = connected;
+
+    // Battery thread liveness — check if driver reads
+    float v = g_power_driver.getVoltage();
+    snprintf(buf, sizeof(buf), "bat: %.2fV", v);
+    g_oled.appendText(buf);
+
+    // Raw encoder counters — show which channels are actually counting
+    char ebuf[22];
+    snprintf(ebuf, sizeof(ebuf), "E0-3:%u %u %u %u",
+             g_qtimer_encoder.readRaw(0), g_qtimer_encoder.readRaw(1),
+             g_qtimer_encoder.readRaw(2), g_qtimer_encoder.readRaw(3));
+    g_oled.appendText(ebuf);
+    snprintf(ebuf, sizeof(ebuf), "E4-7:%u %u %u %u",
+             g_qtimer_encoder.readRaw(4), g_qtimer_encoder.readRaw(5),
+             g_qtimer_encoder.readRaw(6), g_qtimer_encoder.readRaw(7));
+    g_oled.appendText(ebuf);
+
+    // Pin-level check: digitalRead on GPIO pins 6,9 (should toggle if FG present)
+    snprintf(ebuf, sizeof(ebuf), "DR p6=%d p9=%d",
+             digitalRead(6), digitalRead(9));
+    g_oled.appendText(ebuf);
+  }
+
   delay(5);
 }

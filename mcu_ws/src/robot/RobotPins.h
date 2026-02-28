@@ -15,16 +15,17 @@
 //  Teensy 4.1 GPIO pin assignments
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── Motor Outputs (GPIO 2-9) ─────────────────────────────────────────
-// Reserved for motor driver outputs.  Do NOT reassign these pins.
-// Pin 2: Motor output
-// Pin 3: Motor output
-// Pin 4: Motor output
-// Pin 5: Motor output
-// Pin 6: Motor output
-// Pin 7: Motor output
-// Pin 8: Motor output
-// Pin 9: Motor output
+// ── Motor FG Encoder Inputs (GPIO 2-9) ───────────────────────────────
+// FG (frequency generator) speed signals from motor encoders.
+// Configured as QTimer inputs via XBAR crossbar (see QTimerEncoder.cpp).
+// Pin 2: Motor 1 FG (EMC_04 -> XBAR In 6  -> QTimer1 Timer 0)
+// Pin 3: Motor 2 FG (EMC_05 -> XBAR In 7  -> QTimer1 Timer 1)
+// Pin 4: Motor 3 FG (EMC_06 -> XBAR In 8  -> QTimer1 Timer 2)
+// Pin 5: Motor 4 FG (EMC_08 -> XBAR In 17 -> QTimer1 Timer 3)
+// Pin 6: Motor 5 FG (B0_10  -> direct      -> QTimer4 Timer 1)
+// Pin 7: Motor 6 FG (B1_01  -> XBAR In 15 -> QTimer2 Timer 0)
+// Pin 8: Motor 7 FG (B1_00  -> XBAR In 14 -> QTimer2 Timer 1)
+// Pin 9: Motor 8 FG (B0_11  -> direct      -> QTimer4 Timer 2)
 
 // ── UWB Module (SPI0) ───────────────────────────────────────────────
 constexpr uint8_t PIN_UWB_CS = 10;    // SPI0 CS0

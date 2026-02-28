@@ -195,6 +195,16 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     return motor < setup_.numMotors_ ? speeds_[motor] : 0.0f;
   }
 
+  /**
+   * @brief Get the intended direction for a motor (ignores NFPShop reverse
+   * pulses).  Safe to call from other threads (single-byte atomic read).
+   * @param motor Motor index (0-7).
+   * @return true = forward (speed >= 0), false = reverse (speed < 0).
+   */
+  bool getIntendedDirection(uint8_t motor) const {
+    return motor < setup_.numMotors_ ? dirs_[motor] : true;
+  }
+
   void enable() {
     if (setup_.oePin_ != 255) digitalWrite(setup_.oePin_, LOW);
   }

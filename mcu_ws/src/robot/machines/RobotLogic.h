@@ -39,9 +39,11 @@
 #include "robot/subsystems/IntakeBridgeSubsystem.h"
 #include "robot/subsystems/IntakeSubsystem.h"
 #include "robot/subsystems/LEDSubsystem.h"
+#include "robot/subsystems/EncoderSubsystem.h"
 #include "robot/subsystems/MotorManagerSubsystem.h"
 #include "robot/subsystems/OLEDSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
+#include "robot/subsystems/ResetSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
@@ -147,6 +149,12 @@ static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
                                                 PIN_MOTOR_OE, NUM_MOTORS);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
+// --- Encoder subsystem (QTimer hardware FG pulse counting, pins 2-9) ---
+static Encoders::QTimerEncoder g_qtimer_encoder;
+static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
+                                                  &g_qtimer_encoder, &g_motor);
+static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
+
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
                                                   Drivers::UWBMode::TAG,
@@ -174,6 +182,10 @@ static IntakeBridgeSubsystem g_bridge(g_bridge_setup);
 static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
                                            &g_led, &g_oled);
 static DeploySubsystem g_deploy(g_deploy_setup);
+
+// --- Reset subsystem (micro-ROS service to reset all subsystems) ---
+static ResetSubsystemSetup g_reset_setup("reset_subsystem");
+static ResetSubsystem g_reset(g_reset_setup);
 
 // --- Drive subsystem ---
 // TODO: Replace placeholder pin values with actual hardware wiring config
@@ -228,6 +240,7 @@ void setup() {
   g_led.init();
   g_servo.init();
   g_motor.init();
+  g_encoder_sub.init();
   g_intake.init();
   g_bridge.init();
   g_deploy.init();
@@ -261,11 +274,22 @@ void setup() {
   g_mr.registerParticipant(&g_led);
   g_mr.registerParticipant(&g_servo);
   g_mr.registerParticipant(&g_motor);
+  g_mr.registerParticipant(&g_encoder_sub);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_intake);
   g_mr.registerParticipant(&g_bridge);
   g_mr.registerParticipant(&g_deploy);
+  g_mr.registerParticipant(&g_reset);
   // g_mr.registerParticipant(&g_drive);  // TODO: uncomment when configured
+
+  // 3a. Register subsystems as reset targets
+  g_reset.addTarget(&g_motor);
+  g_reset.addTarget(&g_servo);
+  g_reset.addTarget(&g_encoder_sub);
+  g_reset.addTarget(&g_arm);
+  g_reset.addTarget(&g_intake);
+  g_reset.addTarget(&g_bridge);
+  g_reset.addTarget(&g_led);
 
   // 4. Start threaded tasks
   //                                 stack  pri   rate(ms)
@@ -274,6 +298,7 @@ void setup() {
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
   g_servo.beginThreaded(1024, 2, 25);     // 40 Hz state pub
   g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(1024, 2, 20);  // 50 Hz encoder reading
   g_oled.beginThreaded(2048, 1, 25);      // 40 Hz display
   g_battery.beginThreaded(1024, 1, 100);  // 10 Hz
   g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF

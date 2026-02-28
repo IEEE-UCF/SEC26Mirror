@@ -209,6 +209,19 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
   const float L = hypot2(x_local, y_local);
   const float L2 = (L > 1e-6f) ? (L * L) : 1e-6f;
 
+  // heading error to lookahead: atan2(y_local, x_local)
+  // if lookahead is behind robot (|error| > 90deg), rotate in place first
+  const float heading_err = std::atan2(y_local, x_local);
+  if (std::fabs(heading_err) > 1.2f) {  // ~69 degrees
+    cmd.v = 0.0f;
+    cmd.w = clamp(cfg_.k_heading * heading_err, -cfg_.max_w, cfg_.max_w);
+    cmd.lookahead_x = lx;
+    cmd.lookahead_y = ly;
+    cmd.finished = false;
+    finished_ = false;
+    return cmd;
+  }
+
   // choose desired speed:
   // - use waypoint speed if available (we sample from the segment end waypoint)
   // - otherwise use cruise_v
@@ -217,6 +230,12 @@ TrajectoryController::Command TrajectoryController::update(const Pose2D& pose,
   if (seg_end.has_vel) v_des = seg_end.v;
 
   v_des = clamp(v_des, 0.0f, cfg_.max_v);
+
+  // scale v by heading alignment — reduce speed when not facing the target
+  const float cos_err = std::cos(heading_err);
+  if (cos_err < 0.9f) {  // > ~25deg off
+    v_des *= clamp(cos_err, 0.1f, 1.0f);
+  }
 
   // slowdown near the final goal
   if (cfg_.slowdown_dist > 0.0f) {

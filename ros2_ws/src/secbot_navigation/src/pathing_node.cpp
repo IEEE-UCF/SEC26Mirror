@@ -348,6 +348,26 @@ class PathingNode : public rclcpp::Node {
     return false;
   }
 
+  // Find nearest free cell to a given (row, col) via expanding square search
+  std::pair<int, int> find_nearest_free_cell(int row, int col) {
+    const int max_radius = 20;
+    for (int r = 1; r <= max_radius; ++r) {
+      for (int dr = -r; dr <= r; ++dr) {
+        for (int dc = -r; dc <= r; ++dc) {
+          if (std::abs(dr) != r && std::abs(dc) != r) continue;
+          int nr = row + dr;
+          int nc = col + dc;
+          if (nr >= 0 && nr < grid_map_->get_rows() && nc >= 0 &&
+              nc < grid_map_->get_cols() &&
+              grid_map_->is_free(GridMap::Cell{nr, nc})) {
+            return {nr, nc};
+          }
+        }
+      }
+    }
+    return {-1, -1};
+  }
+
   // PLAN ======================================================
   // CONFIGURE PLAN / SET GOAL -------------------
   void init_planner() {
@@ -373,6 +393,26 @@ class PathingNode : public rclcpp::Node {
                    goal_x_, goal_y_, goal_cell.first, goal_cell.second,
                    grid_map_->get_rows(), grid_map_->get_cols(), origin_.first,
                    origin_.second, resolution_);
+    }
+
+    // If goal cell is an obstacle, snap to nearest free cell
+    if (!grid_map_->is_free(
+            GridMap::Cell{goal_cell.first, goal_cell.second})) {
+      auto free = find_nearest_free_cell(goal_cell.first, goal_cell.second);
+      if (free.first >= 0) {
+        RCLCPP_WARN(this->get_logger(),
+                    "Goal in obstacle (%d,%d), snapped to free cell (%d,%d)",
+                    goal_cell.first, goal_cell.second, free.first,
+                    free.second);
+        goal_cell = free;
+        auto snapped = cell_to_world(goal_cell.first, goal_cell.second);
+        goal_x_ = snapped.first;
+        goal_y_ = snapped.second;
+      } else {
+        RCLCPP_ERROR(this->get_logger(),
+                     "Goal in obstacle, no free cell nearby!");
+        return;
+      }
     }
 
     // add goal to plan

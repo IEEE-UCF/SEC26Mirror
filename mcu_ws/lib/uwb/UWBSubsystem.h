@@ -66,6 +66,9 @@ class UWBSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
+  /** Access UWB driver data (range count, status, etc.). */
+  const Drivers::UWBDriverData& getDriverData() const { return setup_.driver->getData(); }
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 10) {

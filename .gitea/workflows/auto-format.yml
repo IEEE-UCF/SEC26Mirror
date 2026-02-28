@@ -3,10 +3,13 @@ name: Auto Format Code
 on:
   pull_request:
     types: [labeled]
+  push:
+    branches:
+      - master
 
 jobs:
   format:
-    if: contains(github.event.pull_request.labels.*.name, 'format')
+    if: contains(github.event.pull_request.labels.*.name, 'format') || github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:

@@ -42,6 +42,16 @@ class DipSwitchSubsystemSetup : public Classes::BaseSetup {
 class DipSwitchSubsystem : public IMicroRosParticipant,
                            public Classes::BaseSubsystem {
  public:
+  // Named DIP switch bit positions (bit 0 = physical switch 1)
+  static constexpr uint8_t DIP_RC_OVERRIDE     = 0;  // ON = RC drives motors
+  static constexpr uint8_t DIP_UWB_ENABLE      = 1;  // ON = DW3000 ranging active
+  static constexpr uint8_t DIP_VISION_ENABLE   = 2;  // ON = duck detection (ROS2)
+  static constexpr uint8_t DIP_SPEED_PROFILE   = 3;  // ON = half speed (ROS2)
+  static constexpr uint8_t DIP_AUTONOMY_ENABLE = 4;  // ON = mission FSM auto (ROS2)
+  static constexpr uint8_t DIP_OLED_DEBUG      = 5;  // ON = debug dashboard
+  static constexpr uint8_t DIP_FORCE_REFLASH   = 6;  // ON = force reflash
+  static constexpr uint8_t DIP_DEPLOY_TARGET   = 7;  // ON = deploy target
+
   explicit DipSwitchSubsystem(const DipSwitchSubsystemSetup& setup)
       : Classes::BaseSubsystem(setup), setup_(setup) {}
 
@@ -102,6 +112,9 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
   uint8_t getState() const {
     return setup_.driver_ ? fixGPIO(setup_.driver_->readPort(0)) : 0;
   }
+
+  /** Check if a specific DIP switch bit is ON (active-high after fixGPIO). */
+  bool isSwitchOn(uint8_t bit) const { return (getState() >> bit) & 0x01; }
 
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,

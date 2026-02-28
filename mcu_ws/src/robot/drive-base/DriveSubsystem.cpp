@@ -6,8 +6,10 @@ static char frame_name[] = "odom";
 static char child_frame[] = "base_link";
 
 void DriveSubsystem::update() {
-  if (everyMs(100)) driveBase_.update(0.0f, 0.1f);
-  if (everyMs(1000)) publishData();
+  if (everyMs(100))
+    driveBase_.update(0.0f, 0.1f);
+  if (everyMs(1000))
+    publishData();
 }
 
 void DriveSubsystem::begin() { update(); }
@@ -16,12 +18,12 @@ void DriveSubsystem::pause() {}
 
 void DriveSubsystem::reset() { pause(); }
 
-const char* DriveSubsystem::getInfo() {
+const char *DriveSubsystem::getInfo() {
   static const char info[] = "DriveSubsystem";
   return info;
 }
 
-bool DriveSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
+bool DriveSubsystem::onCreate(rcl_node_t *node, rclc_executor_t *executor) {
   node_ = node;
   executor_ = executor;
 
@@ -96,31 +98,61 @@ void DriveSubsystem::publishData() {
 }
 
 // void* context is the pointer to the current subsystem instance
-void DriveSubsystem::drive_callback(const void* msvin, void* context) {
-  DriveSubsystem* instance = (DriveSubsystem*)context;
-  const mcu_msgs__msg__DriveBase* msg = (const mcu_msgs__msg__DriveBase*)msvin;
+void DriveSubsystem::drive_callback(const void *msvin, void *context) {
+  DriveSubsystem *instance = (DriveSubsystem *)context;
+  const mcu_msgs__msg__DriveBase *msg = (const mcu_msgs__msg__DriveBase *)msvin;
 
   switch (msg->drive_mode) {
-    case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
-      Vector2D vel(msg->goal_velocity.linear.x, 0,
-                   msg->goal_velocity.angular.z);
-      instance->driveBase_.driveVelocity(vel);
+  case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
+    Vector2D vel(msg->goal_velocity.linear.x, 0, msg->goal_velocity.angular.z);
+    instance->driveBase_.driveVelocity(vel);
+    break;
+  }
+  case mcu_msgs__msg__DriveBase__DRIVE_GOAL: {
+    double qz = msg->goal_transform.transform.rotation.z;
+    double qw = msg->goal_transform.transform.rotation.w;
+    float targetYaw = atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
+    Pose2D pose(msg->goal_transform.transform.translation.x,
+                msg->goal_transform.transform.translation.y, targetYaw);
+    instance->driveBase_.driveSetPoint(pose);
+    break;
+  }
+  case mcu_msgs_msg__DriveBase__DRIVE_TRAJ: {
+    const auto &poses = msg->goal_path.poses;
+    size_t count = (poses.size > MAX_WAYPOINTS) ? MAX_WAYPOINTS : poses.size;
+    TrajectoryController::Waypoint waypoints[MAX_WAYPOINTS];
+
+    if (count == 0) {
+      instance->driveBase_.driveVelocity(Vector2D(0, 0, 0));
       break;
     }
-    case mcu_msgs__msg__DriveBase__DRIVE_GOAL: {
-      double qz = msg->goal_transform.transform.rotation.z;
-      double qw = msg->goal_transform.transform.rotation.w;
-      float targetYaw = atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
-      Pose2D pose(msg->goal_transform.transform.translation.x,
-                  msg->goal_transform.transform.translation.y, targetYaw);
-      instance->driveBase_.driveSetPoint(pose);
-      break;
+
+    for (size_t i = 0; i < count; i++) {
+      const auto &wp = poses.data[i];
+
+      waypoints[i].x = wp.pose.position.x;
+      waypoints[i].y = wp.pose.position.y;
+
+      double qz = wp.pose.orientation.z;
+      double qw = wp.pose.orientation.w;
+
+      float heading = atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
+
+      waypoints[i].heading = heading;
+      waypoints[i].has_heading = 1;
+
+      waypoints[i].v = 0.0f;
+      waypoints[i].has_vel = 0;
     }
-    default: {
-      Vector2D vel(0, 0, 0);
-      instance->driveBase_.driveVelocity(vel);
-      break;
-    }
+
+    instance->driveBase_.driveTrajectory(waypoints, count);
+    break;
+  }
+  default: {
+    Vector2D vel(0, 0, 0);
+    instance->driveBase_.driveVelocity(vel);
+    break;
+  }
   }
 }
-}  // namespace Subsystem
+} // namespace Subsystem

@@ -170,7 +170,7 @@ class PathingNode : public rclcpp::Node {
   double pending_goal_y_ = 0.0;
 
   // arived
-  double arrive_dist_ = 0.15;
+  double arrive_dist_ = 0.40;
   double arrive_yaw_deg_ = 10.0;
 
   // visited goal tracking — reject re-navigation to already-reached positions

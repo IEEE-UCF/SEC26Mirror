@@ -14,6 +14,19 @@ IPAddress agent_ip(AGENT_IP);
 size_t agent_port = AGENT_PORT;
 char ssid[] = WIFI_SSID;
 char psk[] = WIFI_PASSWORD;
+
+// Forward-declare WiFi UDP transport functions (defined in
+// micro_ros_transport.cpp as extern "C")
+extern "C" {
+bool platformio_transport_open(struct uxrCustomTransport* transport);
+bool platformio_transport_close(struct uxrCustomTransport* transport);
+size_t platformio_transport_write(struct uxrCustomTransport* transport,
+                                  const uint8_t* buf, size_t len,
+                                  uint8_t* err);
+size_t platformio_transport_read(struct uxrCustomTransport* transport,
+                                 uint8_t* buf, size_t len, int timeout,
+                                 uint8_t* err);
+}
 #endif
 
 #if defined(MICRO_ROS_TRANSPORT_ARDUINO_CUSTOM)
@@ -44,9 +57,16 @@ extern "C" void set_microros_transports() {
                                           agent_port);
 #elif defined(MICRO_ROS_TRANSPORT_ARDUINO_WIFI) || \
     defined(MICRO_ROS_TRANSPORT_ARDUINO_WIFI_NINA)
-  // Configure static IP before connecting (LOCAL_IP from platformio.ini)
-  WiFi.config(local_ip, IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
-  set_microros_wifi_transports(ssid, psk, agent_ip, agent_port);
+  // WiFi connection is now managed by ESP32WifiSubsystem (must be connected
+  // before this point). Only register the UDP transport callbacks here.
+  static struct micro_ros_agent_locator locator;
+  locator.address = agent_ip;
+  locator.port = agent_port;
+  rmw_uros_set_custom_transport(false, (void*)&locator,
+                                platformio_transport_open,
+                                platformio_transport_close,
+                                platformio_transport_write,
+                                platformio_transport_read);
 #elif defined(MICRO_ROS_TRANSPORT_ARDUINO_CUSTOM)
   rmw_uros_set_custom_transport(
       MICROROS_TRANSPORTS_FRAMING_MODE, NULL, platformio_transport_open,

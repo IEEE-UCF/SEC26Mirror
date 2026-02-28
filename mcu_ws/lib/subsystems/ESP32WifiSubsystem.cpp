@@ -61,6 +61,11 @@ void ESP32WifiSubsystem::begin() {
   // Set WiFi mode to station
   WiFi.mode(WIFI_STA);
 
+  // Apply static IP configuration if provided
+  if (setup_.use_static_ip_) {
+    WiFi.config(setup_.local_ip_, setup_.gateway_, setup_.subnet_);
+  }
+
   // Register event handler
   WiFi.onEvent(onWifiEvent);
 
@@ -100,10 +105,10 @@ void ESP32WifiSubsystem::update() {
         WiFi.disconnect(true);
         retry_count_++;
 
-        if (retry_count_ >= setup_.max_retries_) {
+        if (setup_.max_retries_ > 0 && retry_count_ >= setup_.max_retries_) {
           transitionTo(WifiState::FAILED);
         } else {
-          // Schedule next retry
+          // Schedule next retry (max_retries_==0 means infinite)
           last_attempt_time_ms_ = now;
           transitionTo(state_ == WifiState::CONNECTING
                            ? WifiState::CONNECTING
@@ -203,6 +208,11 @@ void ESP32WifiSubsystem::attemptConnection() {
   WiFi.disconnect(true);
   delay(100);
 
+  // Re-apply static IP config (WiFi.disconnect(true) can clear it)
+  if (setup_.use_static_ip_) {
+    WiFi.config(setup_.local_ip_, setup_.gateway_, setup_.subnet_);
+  }
+
   // Attempt connection
   WiFi.begin(creds.ssid, creds.password);
   state_entry_time_ms_ = millis();
@@ -225,7 +235,7 @@ void ESP32WifiSubsystem::handleDisconnected() {
     // Connection attempt failed, increment retry
     retry_count_++;
 
-    if (retry_count_ >= setup_.max_retries_) {
+    if (setup_.max_retries_ > 0 && retry_count_ >= setup_.max_retries_) {
       transitionTo(WifiState::FAILED);
     } else {
       // For multi-AP, try next AP on failure

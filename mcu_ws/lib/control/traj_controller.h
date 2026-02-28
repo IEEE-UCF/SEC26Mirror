@@ -64,7 +64,7 @@ class TrajectoryController {
     float lookahead_dist = 0.30f;
 
     // Cruise speed if waypoints dont specify v
-    float cruise_v = 0.50f;
+    float cruise_v = 0.60f;
 
     // Output clamps
     float max_v = 1.0f;

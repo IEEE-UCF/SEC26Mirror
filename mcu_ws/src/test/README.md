@@ -63,127 +63,6 @@ See the dedicated [esp32-test-microros-wifi/README.md](esp32-test-microros-wifi/
 
 ---
 
-## Teensy Tests — No micro-ROS
-
-### teensy-test-oled-raw
-
-Adafruit SSD1306 demo (128x64, software SPI). Runs through graphics primitives (lines, rectangles, circles, text, scrolling, snowflake animation). No micro-ROS, no TeensyThreads.
-
-| | |
-|---|---|
-| **Environment** | `teensy-test-oled-raw` |
-| **Hardware** | Teensy 4.1 + SSD1306 OLED (software SPI) |
-| **micro-ROS** | No |
-| **Baud rate** | 9600 |
-
-**Wiring:**
-
-| SSD1306 Pin | Teensy Pin |
-|-------------|------------|
-| D1 (MOSI) | 11 |
-| D0 (SCK) | 13 |
-| DC | 9 |
-| CS | 10 |
-| RST | 3 |
-| VCC | 3.3V |
-| GND | GND |
-
-```bash
-pio run -e teensy-test-oled-raw --target upload
-pio device monitor -e teensy-test-oled-raw -b 9600
-```
-
-**Expected behavior:** OLED cycles through Adafruit splash screen, pixel, lines, shapes, text, scrolling text, and a snowflake animation. Serial output is minimal (snowflake coordinates).
-
----
-
-### teensy-test-teensythreads
-
-Verifies TeensyThreads is working. Two threads: LED blink (500 ms) and serial TICK/TOCK (1 s).
-
-| | |
-|---|---|
-| **Environment** | `teensy-test-teensythreads` |
-| **Hardware** | Teensy 4.1 (no external peripherals) |
-| **micro-ROS** | No |
-
-```bash
-pio run -e teensy-test-teensythreads --target upload
-pio device monitor -e teensy-test-teensythreads
-```
-
-**Expected output:**
-
-```
-Booting TeensyThreads. Built by gcc ...
-setup(): threads started.
-TICK
-TOCK
-TICK
-TOCK
-```
-
-LED should blink at ~1 Hz.
-
----
-
-## Teensy Tests — micro-ROS (basic)
-
-### teensy-test-microros-subsystem
-
-Single-threaded micro-ROS test. Runs `MicrorosManager` in the main `loop()` (no TeensyThreads). Publishes an `ExampleSubsystem` status string once per second.
-
-| | |
-|---|---|
-| **Environment** | `teensy-test-microros-subsystem` |
-| **Hardware** | Teensy 4.1 connected to host via USB |
-| **micro-ROS** | Yes (serial) |
-
-```bash
-pio run -e teensy-test-microros-subsystem --target upload
-pio device monitor -e teensy-test-microros-subsystem
-```
-
-Start the agent, then verify:
-
-```bash
-ros2 topic echo /example_subsystem/status std_msgs/msg/String
-# Expected: data: 'OK' every ~1 second
-```
-
----
-
-### teensy-test-microros-teensythreads
-
-Same as above but with TeensyThreads. micro-ROS manager, blink, and status publish each run in their own thread.
-
-| | |
-|---|---|
-| **Environment** | `teensy-test-microros-teensythreads` |
-| **Hardware** | Teensy 4.1 connected to host via USB |
-| **micro-ROS** | Yes (serial) |
-
-```bash
-pio run -e teensy-test-microros-teensythreads --target upload
-pio device monitor -e teensy-test-microros-teensythreads
-```
-
-**Expected output:**
-
-```
-TeensyThreads + micro-ROS test.
-setup(): threads started.
-```
-
-LED blinks at ~1 Hz. Verify on ROS2 side:
-
-```bash
-ros2 topic echo /example_subsystem/status std_msgs/msg/String
-# Expected: data: 'OK' every ~1 second
-```
-
----
-
 ## Teensy Tests — Individual Subsystems
 
 ### teensy-test-battery-subsystem
@@ -464,71 +343,15 @@ Wires **every** robot subsystem together in a single firmware image. Useful for 
 | | |
 |---|---|
 | **Environment** | `teensy-test-all-subsystems` |
-| **Hardware** | Full robot hardware (see below) |
+| **Hardware** | Full robot hardware |
 | **micro-ROS** | Yes (serial) |
-
-**Required hardware:**
-
-| Bus | Device | Address / Pin |
-|-----|--------|---------------|
-| Wire0 | TCA9548A I2C mux | 0x70 |
-| Wire0 | TCA9555 GPIO expander | 0x20 |
-| Wire0 (mux ch0) | INA219 power monitor | 0x40 |
-| Wire0 | VL53L0X TOF sensor | default |
-| Wire1 | BNO085 IMU | 0x4A |
-| Wire2 | PCA9685 servo board | 0x40 |
-| Wire2 | PCA9685 motor board | 0x41 |
-| SPI | SSD1306 OLED | pins 11,13,9,10 |
-| GPIO | WS2812B LED strip | PIN_RGB_LEDS |
-| Serial8 | FlySky RC receiver | pin 34 |
 
 ```bash
 pio run -e teensy-test-all-subsystems --target upload
 pio device monitor -e teensy-test-all-subsystems
 ```
 
-**Expected output:**
-
-```
-SEC26 Robot — All Subsystems Test (TeensyThreads)
-setup(): all subsystem threads started.
-```
-
-LEDs flash green on startup. All topics and services become available once the micro-ROS agent connects.
-
-**Verify all topics:**
-
-```bash
-ros2 topic list
-# /mcu_robot/heartbeat
-# /mcu_robot/battery_health
-# /mcu_robot/imu/data
-# /mcu_robot/rc
-# /mcu_robot/tof_distances
-# /mcu_robot/dip_switches
-# /mcu_robot/buttons
-# /mcu_robot/servo/state
-# /mcu_robot/motor/state
-```
-
-**Verify services:**
-
-```bash
-ros2 service list
-# /mcu_robot/lcd/append
-# /mcu_robot/servo/set
-# /mcu_robot/motor/set
-```
-
-**Quick sanity check:**
-
-```bash
-ros2 topic echo /mcu_robot/heartbeat           # String heartbeat @ 5 Hz
-ros2 topic echo /mcu_robot/imu/data            # IMU quaternion + accel + gyro
-ros2 service call /mcu_robot/lcd/append mcu_msgs/srv/LCDAppend "text: 'test'"
-ros2 service call /mcu_robot/servo/set mcu_msgs/srv/SetServo "{index: 0, angle: 90.0}"
-ros2 service call /mcu_robot/motor/set mcu_msgs/srv/SetMotor "{index: 0, speed: 0.2}"
-```
+See the dedicated [teensy-test-all-subsystems/README.md](teensy-test-all-subsystems/README.md) for full hardware requirements, ROS2 topic/service reference, and comprehensive testing commands.
 
 ---
 

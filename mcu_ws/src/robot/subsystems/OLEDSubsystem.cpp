@@ -10,8 +10,8 @@ namespace Subsystem {
 OLEDSubsystem::OLEDSubsystem(const OLEDSubsystemSetup& setup)
     : Classes::BaseSubsystem(setup),
       setup_(setup),
-      display_(DISPLAY_W, DISPLAY_H, setup.mosi_pin_, setup.clk_pin_,
-               setup.dc_pin_, setup.rst_pin_, setup.cs_pin_) {}
+      display_(DISPLAY_W, DISPLAY_H, setup.spi_, setup.dc_pin_, setup.rst_pin_,
+               setup.cs_pin_, setup.bitrate_) {}
 
 // ── Lifecycle
 // ─────────────────────────────────────────────────────────────────
@@ -83,60 +83,60 @@ void OLEDSubsystem::renderLines() {
   display_.setTextSize(1);
   display_.setTextColor(SSD1306_WHITE);
 
+  int first_row = 0;  // first row available for terminal content
+  int visible = LINES_VISIBLE;
+
+  // Persistent status line at row 0 (e.g. battery info)
+  if (has_status_line_) {
+    display_.setCursor(0, 0);
+    display_.print(status_line_);
+    first_row = 1;
+    visible = LINES_VISIBLE - 1;  // 7 terminal rows at y=8,16,...,56
+  }
+
   int count = total_written_ < MAX_LINES ? total_written_ : MAX_LINES;
 
-  // Row 0 = oldest visible, row (LINES_VISIBLE-1) = newest visible.
+  // Terminal rows: oldest visible at first_row, newest at bottom.
   // from_end=0 is the most-recently appended line; larger = older.
-  for (int row = 0; row < LINES_VISIBLE; ++row) {
-    int from_end = view_offset_ + (LINES_VISIBLE - 1 - row);
+  for (int row = 0; row < visible; ++row) {
+    int from_end = view_offset_ + (visible - 1 - row);
     if (from_end >= count) continue;
 
     int idx =
         ((next_write_ - 1 - from_end) % MAX_LINES + MAX_LINES) % MAX_LINES;
-    display_.setCursor(0, row * 8);
+    int y = has_status_line_ ? (8 + row * 8) : (row * 8);
+    display_.setCursor(0, y);
     display_.print(lines_[idx]);
   }
 }
 
-void OLEDSubsystem::flushDisplay() {
-#ifdef USE_TEENSYTHREADS
-  // Software SPI is bit-banged; a context switch mid-transfer shifts the SPI
-  // clock phase by one bit, manifesting as a 1-pixel display shake.
-  // Disabling interrupts for the ~150 µs framebuffer transfer is safe.
-  noInterrupts();
-  display_.display();
-  interrupts();
-#else
-  display_.display();
-#endif
-}
+void OLEDSubsystem::flushDisplay() { display_.display(); }
 
-// ── micro-ROS: LCD append service
-// ─────────────────────────────────────────────
+// ── micro-ROS: LCD append subscription
+// ─────────────────────────────────────────
 
 bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   node_ = node;
 
-  // Wire pre-allocated buffer into the service request string field.
-  lcd_req_.text.data = lcd_text_buf_;
-  lcd_req_.text.capacity = sizeof(lcd_text_buf_);
-  lcd_req_.text.size = 0;
+  // Wire pre-allocated buffer into the subscription message string field.
+  lcd_msg_.data.data = lcd_text_buf_;
+  lcd_msg_.data.capacity = sizeof(lcd_text_buf_);
+  lcd_msg_.data.size = 0;
   lcd_text_buf_[0] = '\0';
 
-  if (rclc_service_init_default(
-          &lcd_srv_, node_,
-          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, LCDAppend),
+  if (rclc_subscription_init_best_effort(
+          &lcd_sub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
           "/mcu_robot/lcd/append") != RCL_RET_OK) {
     return false;
   }
 
-  if (rclc_executor_add_service_with_context(
-          executor, &lcd_srv_, &lcd_req_, &lcd_res_,
-          &OLEDSubsystem::appendServiceCallback, this) != RCL_RET_OK) {
+  if (rclc_executor_add_subscription_with_context(
+          executor, &lcd_sub_, &lcd_msg_, &OLEDSubsystem::appendCallback, this,
+          ON_NEW_DATA) != RCL_RET_OK) {
     return false;
   }
 
-  if (rclc_subscription_init_default(
+  if (rclc_subscription_init_best_effort(
           &scroll_sub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
           "/mcu_robot/lcd/scroll") != RCL_RET_OK) {
     return false;
@@ -154,31 +154,20 @@ bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 void OLEDSubsystem::onDestroy() {
   // destroy_entities() finalises the rcl_node before calling onDestroy, so
   // rcl_*_fini would leave impl non-NULL on error; reset local state only.
-  lcd_srv_ = rcl_get_zero_initialized_service();
+  lcd_sub_ = rcl_get_zero_initialized_subscription();
   scroll_sub_ = rcl_get_zero_initialized_subscription();
   node_ = nullptr;
 }
 
-void OLEDSubsystem::appendServiceCallback(const void* req, void* res,
-                                          void* ctx) {
+void OLEDSubsystem::appendCallback(const void* msg, void* ctx) {
   auto* self = static_cast<OLEDSubsystem*>(ctx);
-  self->handleAppend(static_cast<const mcu_msgs__srv__LCDAppend_Request*>(req),
-                     static_cast<mcu_msgs__srv__LCDAppend_Response*>(res));
-}
+  const auto* m = static_cast<const std_msgs__msg__String*>(msg);
+  if (!self->takeMutex()) return;
 
-void OLEDSubsystem::handleAppend(const mcu_msgs__srv__LCDAppend_Request* req,
-                                 mcu_msgs__srv__LCDAppend_Response* res) {
-  if (!takeMutex()) {
-    res->accepted = false;
-    return;
-  }
+  const char* text = (m->data.data && m->data.size > 0) ? m->data.data : "";
+  self->appendText(text);
 
-  const char* text =
-      (req->text.data && req->text.size > 0) ? req->text.data : "";
-  appendText(text);
-
-  giveMutex();
-  res->accepted = true;
+  self->giveMutex();
 }
 
 // ── micro-ROS: scroll topic
@@ -196,11 +185,29 @@ void OLEDSubsystem::scrollCallback(const void* msg, void* ctx) {
 // ──────────────────────────────────────────────────────────
 
 void OLEDSubsystem::appendText(const char* text) {
+  static constexpr int WRAP_INDENT = 2;
   const char* p = text;
   while (*p) {
     const char* nl = p;
     while (*nl && *nl != '\n') ++nl;
-    appendOneLine(p, static_cast<int>(nl - p));
+    int seg_len = static_cast<int>(nl - p);
+    if (seg_len <= MAX_LINE_LEN) {
+      appendOneLine(p, seg_len);
+    } else {
+      appendOneLine(p, MAX_LINE_LEN);
+      int remaining = seg_len - MAX_LINE_LEN;
+      const char* wp = p + MAX_LINE_LEN;
+      int wrap_width = MAX_LINE_LEN - WRAP_INDENT;
+      while (remaining > 0) {
+        char wrap_buf[MAX_LINE_LEN + 1];
+        memset(wrap_buf, ' ', WRAP_INDENT);
+        int chunk = remaining < wrap_width ? remaining : wrap_width;
+        memcpy(wrap_buf + WRAP_INDENT, wp, chunk);
+        appendOneLine(wrap_buf, WRAP_INDENT + chunk);
+        wp += chunk;
+        remaining -= chunk;
+      }
+    }
     p = (*nl == '\n') ? nl + 1 : nl;
   }
   dirty_ = true;
@@ -208,7 +215,8 @@ void OLEDSubsystem::appendText(const char* text) {
 
 void OLEDSubsystem::scrollBy(int8_t delta) {
   int count = total_written_ < MAX_LINES ? total_written_ : MAX_LINES;
-  int max_scroll = count > LINES_VISIBLE ? count - LINES_VISIBLE : 0;
+  int visible = has_status_line_ ? (LINES_VISIBLE - 1) : LINES_VISIBLE;
+  int max_scroll = count > visible ? count - visible : 0;
 
   // -1 = up (older), +1 = down (newer)
   view_offset_ -= delta;
@@ -216,6 +224,24 @@ void OLEDSubsystem::scrollBy(int8_t delta) {
   if (view_offset_ > max_scroll) view_offset_ = max_scroll;
 
   dirty_ = true;
+}
+
+void OLEDSubsystem::setStatusLine(const char* text) {
+  if (!takeMutex()) return;
+
+  if (text && text[0] != '\0') {
+    int n = strlen(text);
+    if (n > MAX_LINE_LEN) n = MAX_LINE_LEN;
+    memcpy(status_line_, text, n);
+    status_line_[n] = '\0';
+    has_status_line_ = true;
+  } else {
+    status_line_[0] = '\0';
+    has_status_line_ = false;
+  }
+  dirty_ = true;
+
+  giveMutex();
 }
 
 }  // namespace Subsystem

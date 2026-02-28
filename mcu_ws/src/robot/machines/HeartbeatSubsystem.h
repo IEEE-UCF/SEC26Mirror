@@ -57,12 +57,11 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   }
 
   void onDestroy() override {
-    if (pub_.impl) {
-      (void)rcl_publisher_fini(&pub_, node_);
-    }
-    if (msg_.data.data) {
-      micro_ros_string_utilities_destroy(&msg_.data);
-    }
+    // destroy_entities() finalises the rcl_node before calling onDestroy, so
+    // rcl_publisher_fini would see a dead node and fail while leaving pub_.impl
+    // non-NULL — causing the update thread to publish on a stale handle.
+    // The DDS resources are freed by rclc_support_fini; just reset local state.
+    pub_ = rcl_get_zero_initialized_publisher();
     node_ = nullptr;
   }
 
@@ -89,7 +88,14 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   void publishHeartbeat() {
     if (!pub_.impl) return;
     msg_.data = micro_ros_string_utilities_set(msg_.data, "HEARTBEAT");
+#ifdef USE_TEENSYTHREADS
+    {
+      Threads::Scope guard(g_microros_mutex);
+      (void)rcl_publish(&pub_, &msg_, NULL);
+    }
+#else
     (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
   }
 
   const HeartbeatSubsystemSetup setup_;

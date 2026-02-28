@@ -18,6 +18,7 @@ bool TOFDriver::init() {
 }
 
 void TOFDriver::update() {
+  if (!initSuccess_) return;
   I2CBus::Lock lock(setup_.wire_);
   range_.range = sensor_.readRangeContinuousMillimeters();
 }

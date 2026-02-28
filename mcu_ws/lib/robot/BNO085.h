@@ -5,7 +5,7 @@
  * @date 12/10/2025 (updated 2026-02-23)
  * @refactored 12/22/2025 - Renamed from IMU.h to BNO085.h for clarity
  *
- * Hardware: BNO085 on Wire1 (I2C address 0x4A default).
+ * Hardware: BNO085 on Wire1 (I2C address 0x4B).
  */
 
 #ifndef BNO085_H
@@ -29,11 +29,13 @@ class BNO085DriverSetup : public Classes::BaseSetup {
    * @param _pin   Reset pin, or -1 if not connected.
    * @param wire   I2C bus the BNO085 is on (default Wire1).
    */
-  BNO085DriverSetup(const char* _id, int8_t _pin = -1, TwoWire& wire = Wire1)
-      : Classes::BaseSetup(_id), reset_pin(_pin), wire_(wire) {}
+  BNO085DriverSetup(const char* _id, int8_t _pin = -1, TwoWire& wire = Wire1,
+                    uint8_t addr = 0x4B)
+      : Classes::BaseSetup(_id), reset_pin(_pin), wire_(wire), addr_(addr) {}
 
   const int8_t reset_pin;
   TwoWire& wire_;
+  uint8_t addr_;
 };
 
 struct BNO085DriverData {

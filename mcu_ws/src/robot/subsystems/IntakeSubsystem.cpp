@@ -265,7 +265,14 @@ void IntakeSubsystem::publishState() {
   state_msg_.time_in_state_ms = millis() - state_entry_time_ms_;
 
   // Publish (non-blocking, best effort)
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+  }
+#else
   (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

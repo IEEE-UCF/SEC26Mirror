@@ -140,7 +140,14 @@ void ImuSubsystem::publishData() {
   msg_.linear_acceleration.y = data.accel_y;
   msg_.linear_acceleration.z = data.accel_z;
 
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

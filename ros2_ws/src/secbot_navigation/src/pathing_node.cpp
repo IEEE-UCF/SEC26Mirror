@@ -215,7 +215,7 @@ class PathingNode : public rclcpp::Node {
             c < grid_map_->get_cols())  // if the obstacle is within bounds
         {
           grid_map_->set_obstacle({r, c});
-        }                  // sets the new obstacle
+        }  // sets the new obstacle
         y += resolution_;  // jump to the next y in real world coordinates
       }
       x += resolution_;  // jump to the next x in real world coordinates

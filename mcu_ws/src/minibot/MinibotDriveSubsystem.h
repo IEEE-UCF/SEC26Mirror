@@ -11,19 +11,20 @@
 #include <mcu_msgs/msg/mini_robot_state.h>
 #include <microros_manager_robot.h>
 
-#include "MotorDriver.h"
+#include "MinibotMotorDriver.h"
 #include "TimedSubsystem.h"
 
 namespace Subsystem {
 
 class MinibotDriveSubsystemSetup : public Classes::BaseSetup {
  public:
-  Drivers::MotorDriver* left_motor;
-  Drivers::MotorDriver* right_motor;
+  Drivers::MinibotMotorDriver* left_motor;
+  Drivers::MinibotMotorDriver* right_motor;
   float speed_scale;
 
-  MinibotDriveSubsystemSetup(const char* _id, Drivers::MotorDriver* _left,
-                             Drivers::MotorDriver* _right,
+  MinibotDriveSubsystemSetup(const char* _id,
+                             Drivers::MinibotMotorDriver* _left,
+                             Drivers::MinibotMotorDriver* _right,
                              float _speed_scale = 255.0f)
       : Classes::BaseSetup(_id),
         left_motor(_left),

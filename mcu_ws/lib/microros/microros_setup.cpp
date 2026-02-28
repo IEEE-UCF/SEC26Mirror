@@ -44,6 +44,8 @@ extern "C" void set_microros_transports() {
                                           agent_port);
 #elif defined(MICRO_ROS_TRANSPORT_ARDUINO_WIFI) || \
     defined(MICRO_ROS_TRANSPORT_ARDUINO_WIFI_NINA)
+  // Configure static IP before connecting (LOCAL_IP from platformio.ini)
+  WiFi.config(local_ip, IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
   set_microros_wifi_transports(ssid, psk, agent_ip, agent_port);
 #elif defined(MICRO_ROS_TRANSPORT_ARDUINO_CUSTOM)
   rmw_uros_set_custom_transport(

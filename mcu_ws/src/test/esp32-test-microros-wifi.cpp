@@ -17,14 +17,33 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <micro_ros_utilities/string_utilities.h>
+#include <std_msgs/msg/string.h>
 
-#include "ExampleMicrorosSubsystem.h"
 #include "microros_manager_robot.h"
 
+// Inline heartbeat publisher — replaces ExampleMicrorosSubsystem dependency.
+static rcl_publisher_t g_pub;
+static std_msgs__msg__String g_msg;
+
+class SimpleHeartbeat : public IMicroRosParticipant {
+ public:
+  bool onCreate(rcl_node_t* node, rclc_executor_t*) override {
+    return rclc_publisher_init_best_effort(
+               &g_pub, node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+               "esp32_wifi_test/status") == RCL_RET_OK;
+  }
+  void onDestroy() override { g_pub = rcl_get_zero_initialized_publisher(); }
+  void publish(const char* text) {
+    if (!g_pub.impl) return;
+    g_msg.data = micro_ros_string_utilities_set(g_msg.data, text);
+    rcl_publish(&g_pub, &g_msg, NULL);
+  }
+};
+
 Subsystem::MicrorosManagerSetup managerSetup("esp32_wifi_test");
-Subsystem::ExampleSubsystemSetup exampleSetup("esp32_wifi_example");
 Subsystem::MicrorosManager manager(managerSetup);
-Subsystem::ExampleSubsystem example(exampleSetup);
+static SimpleHeartbeat heartbeat;
 
 void setup() {
   Serial.begin(921600);
@@ -40,7 +59,7 @@ void setup() {
 
   manager.init();
   manager.begin();
-  manager.registerParticipant(&example);
+  manager.registerParticipant(&heartbeat);
 
   Serial.printf("WiFi status: %d (3=connected)\n", WiFi.status());
   Serial.printf("Local IP:  %s\n", WiFi.localIP().toString().c_str());
@@ -55,7 +74,7 @@ void loop() {
   if (now - last_ms > 1000) {
     if (manager.isConnected()) {
       Serial.println("[OK] Agent connected - publishing heartbeat");
-      example.publishStatus("OK");
+      heartbeat.publish("OK");
     } else {
       Serial.println("[..] Waiting for agent connection...");
     }

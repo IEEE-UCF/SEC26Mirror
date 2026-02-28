@@ -3,6 +3,8 @@
 #include <Adafruit_VL53L0X.h>
 #include <Arduino.h>
 
+#include "DebugLog.h"
+
 namespace Subsystem {
 
 // VL53L0X TOF sensor instance (one per bridge subsystem)
@@ -42,15 +44,19 @@ bool IntakeBridgeSubsystem::init() {
     s_tof_initialized = true;
     // Start continuous ranging for fast reads
     s_tof.startRangeContinuous();
+    DEBUG_PRINTF("[BRIDGE] TOF init OK (addr=0x%02X)\n", setup_.tof_i2c_addr_);
   } else {
     s_tof_initialized = false;
     // Non-fatal: bridge can still operate without TOF feedback
+    DEBUG_PRINTF("[BRIDGE] TOF init FAIL (addr=0x%02X) — non-fatal\n",
+                 setup_.tof_i2c_addr_);
   }
 
   // Initialize state
   state_ = IntakeBridgeState::STOWED;
   state_entry_time_ms_ = millis();
 
+  DEBUG_PRINTLN("[BRIDGE] init OK");
   return true;
 }
 
@@ -125,9 +131,11 @@ bool IntakeBridgeSubsystem::onCreate(rcl_node_t* node,
   if (rclc_executor_add_subscription(executor, &cmd_sub_, &cmd_msg_,
                                      &IntakeBridgeSubsystem::commandCallback,
                                      ON_NEW_DATA) != RCL_RET_OK) {
+    DEBUG_PRINTLN("[BRIDGE] onCreate FAIL: command subscription");
     return false;
   }
 
+  DEBUG_PRINTLN("[BRIDGE] onCreate OK");
   return true;
 }
 
@@ -263,6 +271,10 @@ void IntakeBridgeSubsystem::updateStateMachine() {
 
 void IntakeBridgeSubsystem::transitionTo(IntakeBridgeState new_state) {
   if (state_ != new_state) {
+    static const char* const names[] = {"STOWED", "EXTENDING", "EXTENDED",
+                                        "RETRACTING", "ERROR"};
+    DEBUG_PRINTF("[BRIDGE] %s -> %s\n", names[(int)state_],
+                 names[(int)new_state]);
     state_ = new_state;
     state_entry_time_ms_ = millis();
   }

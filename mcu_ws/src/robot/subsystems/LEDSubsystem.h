@@ -17,6 +17,7 @@
 
 #include <BaseSubsystem.h>
 #include <FastLED.h>
+#include "DebugLog.h"
 #include <mcu_msgs/msg/led_color.h>
 #include <microros_manager_robot.h>
 
@@ -64,6 +65,7 @@ class LEDSubsystem : public IMicroRosParticipant,
     // If the hardware pin changes, update this template argument to match.
     FastLED.addLeds<WS2812B, 35, GRB>(leds_, num_leds_);
     FastLED.clear(true);
+    DEBUG_PRINTF("[LED] init OK (%d LEDs, pin %d)\n", num_leds_, setup_.pin_);
     return true;
   }
 
@@ -106,8 +108,10 @@ class LEDSubsystem : public IMicroRosParticipant,
     if (rclc_executor_add_subscription_with_context(
             executor, &sub_, &msg_, &LEDSubsystem::ledCallback, this,
             ON_NEW_DATA) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[LED] onCreate FAIL: subscription");
       return false;
     }
+    DEBUG_PRINTLN("[LED] onCreate OK");
     return true;
   }
 
@@ -153,6 +157,7 @@ class LEDSubsystem : public IMicroRosParticipant,
   static void ledCallback(const void* msg, void* ctx) {
     auto* self = static_cast<LEDSubsystem*>(ctx);
     auto* led = static_cast<const mcu_msgs__msg__LedColor*>(msg);
+    DEBUG_PRINTF("[LED] setAll(%d, %d, %d)\n", led->r, led->g, led->b);
     self->setAll(led->r, led->g, led->b);
   }
 

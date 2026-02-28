@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "DebugLog.h"
+
 namespace Subsystem {
 
 // ── Constructor
@@ -18,6 +20,7 @@ OLEDSubsystem::OLEDSubsystem(const OLEDSubsystemSetup& setup)
 
 bool OLEDSubsystem::init() {
   if (!display_.begin(SSD1306_SWITCHCAPVCC)) {
+    DEBUG_PRINTLN("[OLED] init FAIL: display begin");
     return false;
   }
 
@@ -26,6 +29,7 @@ bool OLEDSubsystem::init() {
   display_.setTextColor(SSD1306_WHITE);
   display_.cp437(true);
   display_.display();
+  DEBUG_PRINTLN("[OLED] init OK (128x64 SPI1)");
   return true;
 }
 
@@ -145,9 +149,11 @@ bool OLEDSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   if (rclc_executor_add_subscription_with_context(
           executor, &scroll_sub_, &scroll_msg_, &OLEDSubsystem::scrollCallback,
           this, ON_NEW_DATA) != RCL_RET_OK) {
+    DEBUG_PRINTLN("[OLED] onCreate FAIL: scroll subscription");
     return false;
   }
 
+  DEBUG_PRINTLN("[OLED] onCreate OK (lcd/append + lcd/scroll)");
   return true;
 }
 

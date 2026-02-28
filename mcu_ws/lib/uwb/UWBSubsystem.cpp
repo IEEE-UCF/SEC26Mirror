@@ -7,6 +7,8 @@
 
 #include "UWBSubsystem.h"
 
+#include "DebugLog.h"
+
 namespace Subsystem {
 
 bool UWBSubsystem::init() {
@@ -16,8 +18,7 @@ bool UWBSubsystem::init() {
 
   // Initialize the UWB driver
   if (!setup_.driver->init()) {
-    Serial.println("[UWB] driver init FAILED");
-    Serial.flush();
+    DEBUG_PRINTLN("[UWB] driver init FAILED");
     return false;
   }
 
@@ -27,9 +28,8 @@ bool UWBSubsystem::init() {
   is_tag_mode_ = (driver_data.mode == Drivers::UWBMode::TAG);
   has_peer_ranging_ = !is_tag_mode_ && setup_.driver->hasPeers();
 
-  Serial.printf("[UWB] init ok: tag=%d has_peer_ranging=%d id=%d\n",
-                is_tag_mode_, has_peer_ranging_, driver_data.device_id);
-  Serial.flush();
+  DEBUG_PRINTF("[UWB] init ok: tag=%d has_peer_ranging=%d id=%d\n",
+               is_tag_mode_, has_peer_ranging_, driver_data.device_id);
   return true;
 }
 
@@ -86,14 +86,12 @@ bool UWBSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   (void)executor;
   node_ = node;
 
-  Serial.printf("[UWB] onCreate: tag=%d peer_ranging=%d\n", is_tag_mode_,
-                has_peer_ranging_);
-  Serial.flush();
+  DEBUG_PRINTF("[UWB] onCreate: tag=%d peer_ranging=%d\n", is_tag_mode_,
+               has_peer_ranging_);
 
   // Pure anchors (no peers) don't publish anything
   if (!is_tag_mode_ && !has_peer_ranging_) {
-    Serial.println("[UWB] pure anchor — no publishers needed");
-    Serial.flush();
+    DEBUG_PRINTLN("[UWB] pure anchor — no publishers needed");
     return true;
   }
 
@@ -138,13 +136,11 @@ bool UWBSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
               &peer_pubs_[i], node,
               ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, UWBRange),
               peer_topic_names_[i]) != RCL_RET_OK) {
-        Serial.printf("[UWB] peer pub %d (%s) FAILED\n", i,
-                      peer_topic_names_[i]);
-        Serial.flush();
+        DEBUG_PRINTF("[UWB] peer pub %d (%s) FAILED\n", i,
+                     peer_topic_names_[i]);
         return false;
       }
-      Serial.printf("[UWB] peer pub %d: %s ok\n", i, peer_topic_names_[i]);
-      Serial.flush();
+      DEBUG_PRINTF("[UWB] peer pub %d: %s ok\n", i, peer_topic_names_[i]);
     }
   }
 
@@ -230,8 +226,7 @@ void UWBSubsystem::updateRangingMessage() {
 void UWBSubsystem::publishPeerRanges() {
   static uint16_t dbg_count = 0;
   if (dbg_count++ % 10 == 0) {
-    Serial.printf("[UWB] publishPeerRanges: num_pubs=%d\n", num_peer_pubs_);
-    Serial.flush();
+    DEBUG_PRINTF("[UWB] publishPeerRanges: num_pubs=%d\n", num_peer_pubs_);
   }
   if (num_peer_pubs_ == 0) {
     return;

@@ -1,5 +1,7 @@
 #include "DriveSubsystem.h"
 
+static constexpr size_t MAX_WAYPOINTS = 32;
+
 namespace Subsystem {
 
 static char frame_name[] = "odom";
@@ -117,13 +119,14 @@ void DriveSubsystem::drive_callback(const void *msvin, void *context) {
     instance->driveBase_.driveSetPoint(pose);
     break;
   }
-  case mcu_msgs_msg__DriveBase__DRIVE_TRAJ: {
+  case mcu_msgs__msg__DriveBase__DRIVE_TRAJ: {
     const auto &poses = msg->goal_path.poses;
     size_t count = (poses.size > MAX_WAYPOINTS) ? MAX_WAYPOINTS : poses.size;
     TrajectoryController::Waypoint waypoints[MAX_WAYPOINTS];
 
     if (count == 0) {
-      instance->driveBase_.driveVelocity(Vector2D(0, 0, 0));
+      Vector2D zero(0, 0, 0);
+      instance->driveBase_.driveVelocity(zero);
       break;
     }
 
@@ -149,8 +152,8 @@ void DriveSubsystem::drive_callback(const void *msvin, void *context) {
     break;
   }
   default: {
-    Vector2D vel(0, 0, 0);
-    instance->driveBase_.driveVelocity(vel);
+    Vector2D zero(0, 0, 0);
+    instance->driveBase_.driveVelocity(zero);
     break;
   }
   }

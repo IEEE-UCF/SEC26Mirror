@@ -110,7 +110,7 @@ class PathingNode : public rclcpp::Node {
   bool printed_waiting_for_traj_ = false;
 
   bool has_goal_ = false;
-  double min_goal_dist_ = 0.75;
+  double min_goal_dist_ = 0.20;
 
   bool planned_once_ = false;
   bool have_last_time_ = false;
@@ -635,8 +635,8 @@ class PathingNode : public rclcpp::Node {
     }
 
     // replan throttle ++++++++++++++++++++++++++++++++++++
-    const auto now = this->now();
     if (pending_replan_) {
+      const auto now = this->now();
       // IF ENOUGH TIME HAS PASSED FROM PREVIOUS GOAL UPDATE
       if ((now - last_replan_time_).seconds() >=
           (1.0 / std::max(0.1, replan_hz_))) {
@@ -652,14 +652,6 @@ class PathingNode : public rclcpp::Node {
         last_replan_time_ = now;
         pending_replan_ = false;
       }
-    }
-
-    // periodic replan: recompute path every 3s so robot corrects if off-course
-    if (has_goal_ && !goal_reached_ && !pending_replan_ &&
-        (now - last_replan_time_).seconds() >= 3.0) {
-      init_planner();
-      compute_plan();
-      last_replan_time_ = now;
     }
 
     if (!current_trajectory_) {

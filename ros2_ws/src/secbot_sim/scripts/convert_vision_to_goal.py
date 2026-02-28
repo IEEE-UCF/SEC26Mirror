@@ -158,6 +158,15 @@ class ConvertVisionToGoal(Node):
             if self.is_near_visited(next_goal[0], next_goal[1]):
                 continue  # skip, already visited
 
+            # if robot is already on top of this goal, mark visited and skip
+            if self.robot_x is not None:
+                d = math.hypot(next_goal[0] - self.robot_x, next_goal[1] - self.robot_y)
+                if d < 0.30:
+                    self.visited_positions.append(next_goal)
+                    self.get_logger().info(
+                        f"SKIP — already at goal ({next_goal[0]:.2f}, {next_goal[1]:.2f}), d={d:.2f}m")
+                    continue
+
             self.active_goal = next_goal
             self.publish_goal_msg(next_goal[0], next_goal[1])
             self.get_logger().info(

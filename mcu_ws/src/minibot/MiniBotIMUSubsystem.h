@@ -7,10 +7,10 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
 #include <TimedSubsystem.h>
 #include <micro_ros_utilities/type_utilities.h>
 #include <microros_manager_robot.h>
+#include <sensor_msgs/msg/imu.h>
 
 #include "MPU6050.h"
 
@@ -23,15 +23,18 @@ class MiniBotIMUSubsystemSetup : public Classes::BaseSetup {
   MiniBotIMUSubsystemSetup() = delete;
   MiniBotIMUSubsystemSetup(const char* _id,
                            const Drivers::MPU6050DriverSetup& _mpuSetup)
-      : Classes::BaseSetup(_id), mpuSetup_(_mpuSetup) {};
-}
+      : Classes::BaseSetup(_id), mpuSetup_(_mpuSetup) {}
+};
 
 class MiniBotIMUSubsystem : public IMicroRosParticipant,
                             public Subsystem::TimedSubsystem {
  public:
   explicit MiniBotIMUSubsystem(const MiniBotIMUSubsystemSetup& setup)
-      : Subsystem::TimeSubsystem(setup), setup_(setup), mpu_(mpuSetup_) {};
+      : Subsystem::TimedSubsystem(setup),
+        setup_(setup),
+        mpu_(setup_.mpuSetup_) {}
 
+  bool init() override;
   void begin() override;
   void update() override;
   void pause() override;
@@ -41,12 +44,11 @@ class MiniBotIMUSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
-  void publishData() override;
-
  private:
+  void publishData();
   void calibrate();
 
-  const int CALIBRATE_SAMPLES = 100;
+  static constexpr int CALIBRATE_SAMPLES = 100;
   bool calibrated_ = false;
 
   float a_x_off_ = 0.0f;
@@ -62,9 +64,9 @@ class MiniBotIMUSubsystem : public IMicroRosParticipant,
   Drivers::MPU6050DriverData data_;
 
   rcl_node_t* node_ = nullptr;
-  rclc_executor_t* executor_ = nullptr;
-  rcl_publisher_t mpu_pub_;
+  rcl_publisher_t mpu_pub_{};
 
-  sensor_msgs__msg__Imu mpu_msg_;
-}
+  sensor_msgs__msg__Imu mpu_msg_{};
+};
+
 }  // namespace Subsystem

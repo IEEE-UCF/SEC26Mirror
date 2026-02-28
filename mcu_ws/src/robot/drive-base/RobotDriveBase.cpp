@@ -138,9 +138,9 @@ Vector2D RobotDriveBase::getCurrentVelocity(float dt) {
   // encoder ticks for velocity
   if (dleftTicks != 0 && dRightTicks != 0) {
     float dleftDist = static_cast<float>(dleftTicks) *
-                      setup_.localizationSetup.inches_per_tick;
+                      setup_.localizationSetup.dist_per_tick;
     float drightDist = static_cast<float>(dRightTicks) *
-                       setup_.localizationSetup.inches_per_tick;
+                       setup_.localizationSetup.dist_per_tick;
 
     float leftVel = dleftDist / dt;
     float rightVel = drightDist / dt;
@@ -211,11 +211,11 @@ void RobotDriveBase::velocityControl(float dt) {
   // Calculate actual wheel velocities from encoder ticks
   float actualLeftVel =
       (static_cast<float>(leftTicks_.position - prevLeftTicks_) *
-       setup_.localizationSetup.inches_per_tick) /
+       setup_.localizationSetup.dist_per_tick) /
       dt;
   float actualRightVel =
       (static_cast<float>(rightTicks_.position - prevRightTicks_) *
-       setup_.localizationSetup.inches_per_tick) /
+       setup_.localizationSetup.dist_per_tick) /
       dt;
 
   // PID control on wheel velocities
@@ -310,11 +310,11 @@ void RobotDriveBase::trajectoryControl(float dt) {
   // Calculate actual wheel velocities from encoder ticks
   float actualLeftVel =
       (static_cast<float>(leftTicks_.position - prevLeftTicks_) *
-       setup_.localizationSetup.inches_per_tick) /
+       setup_.localizationSetup.dist_per_tick) /
       dt;
   float actualRightVel =
       (static_cast<float>(rightTicks_.position - prevRightTicks_) *
-       setup_.localizationSetup.inches_per_tick) /
+       setup_.localizationSetup.dist_per_tick) /
       dt;
 
   // PID control on wheel velocities

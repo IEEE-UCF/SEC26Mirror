@@ -93,7 +93,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   // Derived constants (same math as TankDriveLocalizationSetup constructor)
   float wheel_circumference = static_cast<float>(M_PI) * wheel_diameter_;
   long ticks_per_rev = static_cast<long>(encoder_ticks_per_rev_) * gear_ratio_;
-  inches_per_tick_ = wheel_circumference / static_cast<float>(ticks_per_rev);
+  dist_per_tick_ = wheel_circumference / static_cast<float>(ticks_per_rev);
 
   // Configure PID controllers (same config for both wheels)
   PIDController::Config pid_cfg;
@@ -475,8 +475,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
   long d_left = left_ticks - prev_left_ticks_;
   long d_right = right_ticks - prev_right_ticks_;
 
-  float left_dist = static_cast<float>(d_left) * inches_per_tick_;
-  float right_dist = static_cast<float>(d_right) * inches_per_tick_;
+  float left_dist = static_cast<float>(d_left) * dist_per_tick_;
+  float right_dist = static_cast<float>(d_right) * dist_per_tick_;
   float left_vel = left_dist / dt;
   float right_vel = right_dist / dt;
 
@@ -557,12 +557,12 @@ void McuSubsystemSimulator::velocityControl(float dt) {
   float actual_left_vel =
       (static_cast<float>(static_cast<long>(left_encoder_accum_) -
                           prev_left_ticks_) *
-       inches_per_tick_) /
+       dist_per_tick_) /
       dt;
   float actual_right_vel =
       (static_cast<float>(static_cast<long>(right_encoder_accum_) -
                           prev_right_ticks_) *
-       inches_per_tick_) /
+       dist_per_tick_) /
       dt;
 
   // PID control on wheel velocities
@@ -680,9 +680,9 @@ void McuSubsystemSimulator::simulatePhysics(float dt) {
 
   // Accumulate encoder ticks (fractional, cast to long on read)
   left_encoder_accum_ +=
-      static_cast<double>(left_wheel_vel) * dt / inches_per_tick_;
+      static_cast<double>(left_wheel_vel) * dt / dist_per_tick_;
   right_encoder_accum_ +=
-      static_cast<double>(right_wheel_vel) * dt / inches_per_tick_;
+      static_cast<double>(right_wheel_vel) * dt / dist_per_tick_;
 }
 
 // Drive publish, mirrors DriveSubsystem::publishData

@@ -22,6 +22,7 @@
  *   /mcu_robot/buttons            std_msgs/UInt8          10 Hz
  *   /mcu_robot/servo/state        std_msgs/Float32Multi..  5 Hz
  *   /mcu_robot/motor/state        std_msgs/Float32Multi..  5 Hz
+ *   /mcu_robot/encoders           std_msgs/Float32Multi.. 50 Hz
  *   /mcu_robot/uwb/ranging        mcu_msgs/UWBRanging     10 Hz
  *   /mcu_robot/crank/state        std_msgs/UInt8           5 Hz
  *   /mcu_robot/deploy/trigger     std_msgs/String          on event
@@ -29,6 +30,7 @@
  * micro-ROS services:
  *   /mcu_robot/servo/set          mcu_msgs/srv/SetServo
  *   /mcu_robot/motor/set          mcu_msgs/srv/SetMotor
+ *   /mcu_robot/reset              mcu_msgs/srv/Reset
  *
  * micro-ROS subscriptions:
  *   /mcu_robot/lcd/append         std_msgs/String
@@ -68,12 +70,14 @@
 #include "robot/subsystems/DipSwitchSubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
 #include "robot/subsystems/LEDSubsystem.h"
+#include "robot/subsystems/EncoderSubsystem.h"
 #include "robot/subsystems/MotorManagerSubsystem.h"
 #include "robot/subsystems/OLEDSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
 #include "robot/subsystems/CrankSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
+#include "robot/subsystems/ResetSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
 using namespace Subsystem;
@@ -182,10 +186,20 @@ static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
                                                 PIN_MOTOR_OE, NUM_MOTORS);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
+// --- Encoder subsystem (QTimer hardware FG pulse counting, pins 2-9) ---
+static Encoders::QTimerEncoder g_qtimer_encoder;
+static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
+                                                  &g_qtimer_encoder, &g_motor);
+static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
+
 // --- Deploy subsystem (button-triggered deployment) ---
 static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
                                            &g_led, &g_oled);
 static DeploySubsystem g_deploy(g_deploy_setup);
+
+// --- Reset subsystem (micro-ROS service to reset all subsystems) ---
+static ResetSubsystemSetup g_reset_setup("reset_subsystem");
+static ResetSubsystem g_reset(g_reset_setup);
 
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
@@ -240,6 +254,7 @@ void setup() {
   g_servo.init();    DEBUG_PRINTLN("[INIT] Servo OK");
   g_crank.init();
   g_motor.init();    DEBUG_PRINTLN("[INIT] Motor Manager OK");
+  g_encoder_sub.init();
   g_deploy.init();   DEBUG_PRINTLN("[INIT] Deploy OK");
   SPI.begin();
   g_uwb.init();      DEBUG_PRINTLN("[INIT] UWB OK");
@@ -271,8 +286,16 @@ void setup() {
   g_mr.registerParticipant(&g_servo);
   g_mr.registerParticipant(&g_crank);
   g_mr.registerParticipant(&g_motor);
+  g_mr.registerParticipant(&g_encoder_sub);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
+  g_mr.registerParticipant(&g_reset);
+
+  // 3a. Register subsystems as reset targets
+  g_reset.addTarget(&g_motor);
+  g_reset.addTarget(&g_servo);
+  g_reset.addTarget(&g_encoder_sub);
+  g_reset.addTarget(&g_led);
   DEBUG_PRINTF("[INIT] Registered 13 participants\n");
 
   // 4. Start threaded tasks
@@ -283,6 +306,7 @@ void setup() {
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
   g_servo.beginThreaded(1024, 2, 25);  // 20 Hz state pub
   g_motor.beginThreaded(1024, 2, 1);  // 1000 Hz — NFPShop reverse-pulse timing
+  g_encoder_sub.beginThreaded(1024, 2, 20);  // 50 Hz encoder reading
   g_oled.beginThreaded(2048, 1, 25);           // 20 Hz display
   g_battery.beginThreaded(1024, 1, 100);       // 10 Hz
   g_sensor.beginThreaded(1024, 1, 100);        // 10 Hz TOF

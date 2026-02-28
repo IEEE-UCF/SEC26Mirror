@@ -67,6 +67,7 @@ LEDs flash green on startup. All topics and services become available once the m
 | `/mcu_robot/buttons` | `std_msgs/msg/UInt8` | 10 Hz | 8-bit push button bitmask |
 | `/mcu_robot/servo/state` | `std_msgs/msg/Float32MultiArray` | 5 Hz | Current servo angles (deg) |
 | `/mcu_robot/motor/state` | `std_msgs/msg/Float32MultiArray` | 5 Hz | Current motor speeds (-1..1) |
+| `/mcu_robot/encoders` | `std_msgs/msg/Float32MultiArray` | 50 Hz | Signed tick rates (ticks/sec) for 8 motors |
 | `mcu_uwb/ranging` | `mcu_msgs/msg/UWBRanging` | 10 Hz | UWB distance measurements to beacons |
 | `/mcu_robot/crank/state` | `std_msgs/msg/UInt8` | 5 Hz | Crank state (0=IDLE, 1=CRANKING, 2=RESETTING) |
 | `/mcu_robot/deploy/trigger` | `std_msgs/msg/String` | on event | Deploy trigger command |
@@ -77,6 +78,7 @@ LEDs flash green on startup. All topics and services become available once the m
 |---------|------|-------------|
 | `/mcu_robot/servo/set` | `mcu_msgs/srv/SetServo` | Set servo angle (0-180 deg) |
 | `/mcu_robot/motor/set` | `mcu_msgs/srv/SetMotor` | Set motor speed (-1.0 to 1.0) |
+| `/mcu_robot/reset` | `mcu_msgs/srv/Reset` | Reset all subsystems (stops motors, disables servos, zeroes encoders, clears LEDs) |
 
 ### Subscriptions
 
@@ -103,10 +105,10 @@ source install/setup.bash
 ### Verify Everything Is Up
 
 ```bash
-# List all topics (expect 12 topics under /mcu_robot/ + 1 under mcu_uwb/)
+# List all topics (expect 11 topics under /mcu_robot/ + 1 under mcu_uwb/)
 ros2 topic list | grep -E "mcu_robot|mcu_uwb"
 
-# List all services (expect 2 services)
+# List all services (expect 3 services)
 ros2 service list | grep mcu_robot
 ```
 
@@ -251,6 +253,23 @@ for i in 0 1 2 3 4 5 6 7; do
 done
 ```
 
+### Reset
+
+```bash
+# Reset all subsystems (stops motors, disables servos, zeroes encoders, clears LEDs)
+ros2 service call /mcu_robot/reset mcu_msgs/srv/Reset "{}"
+```
+
+### Encoders
+
+```bash
+# Monitor encoder tick rates (8 floats, signed ticks/sec for motors on pins 2-9)
+ros2 topic echo /mcu_robot/encoders
+
+# Check publish rate (~50 Hz)
+ros2 topic hz /mcu_robot/encoders
+```
+
 ### UWB Ranging
 
 Requires UWB beacons (ID=10, 11, 12) to be powered on and within range.
@@ -333,13 +352,19 @@ ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor "{r: 0, g: 64
 sleep 1
 ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor "{r: 0, g: 0, b: 0}"
 
-# 9. RC (move sticks, Ctrl+C to stop)
+# 9. Encoder tick rates
+ros2 topic echo /mcu_robot/encoders --once
+
+# 10. Reset all subsystems (stops motors, servos, encoders, LEDs)
+ros2 service call /mcu_robot/reset mcu_msgs/srv/Reset "{}"
+
+# 11. RC (move sticks, Ctrl+C to stop)
 ros2 topic echo /mcu_robot/rc --once
 
-# 10. UWB ranging (requires beacons powered on)
+# 12. UWB ranging (requires beacons powered on)
 ros2 topic echo mcu_uwb/ranging --once
 
-# 11. Buttons and DIP switches
+# 13. Buttons and DIP switches
 ros2 topic echo /mcu_robot/buttons --once
 ros2 topic echo /mcu_robot/dip_switches --once
 
@@ -357,7 +382,8 @@ ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 2}"
 | 3 | IMU (BNO085) | 20ms (50 Hz) | 2048 |
 | 3 | RC Receiver (IBUS) | 5ms | 1024 |
 | 2 | Servo state publisher | 50ms (20 Hz) | 1024 |
-| 2 | Motor state publisher | 50ms (20 Hz) | 1024 |
+| 2 | Motor state publisher | 1ms (1000 Hz) | 1024 |
+| 2 | Encoder tick rates | 20ms (50 Hz) | 1024 |
 | 2 | UWB tag (DW3000) | 50ms (20 Hz) | 2048 |
 | 1 | OLED display | 50ms (20 Hz) | 2048 |
 | 1 | Battery monitor | 100ms (10 Hz) | 1024 |

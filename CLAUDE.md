@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Shortcut Path
+
+**`C:/Users/medla/SEC2026/SEC26`** is a symlink to the full OneDrive path. Use this shorter path when possible for convenience.
+
 ## Project Overview
 
 SEC26 is the IEEE UCF SoutheastCon 2026 Hardware Competition robot repository. It contains firmware for multiple microcontrollers (field elements, robot, beacons, drone) and ROS2 software for robot autonomy, navigation, and vision.

@@ -4,7 +4,8 @@
  * @date 2026-02-24
  *
  * Publishes an 8-bit bitmask where each bit represents one DIP switch
- * (bit 0 = switch 0, etc.).  Active HIGH = switch ON.
+ * (bit 0 = switch 0, etc.).  Hardware is active-low and bit-reversed;
+ * this subsystem corrects both so consumers see active-HIGH, bit 0 = switch 0.
  *
  * -- ROS2 interface (defaults) ---------------------------------------------
  *   /mcu_robot/dip_switches   topic   std_msgs/msg/UInt8   (1 Hz)
@@ -64,7 +65,7 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-      msg_.data = setup_.driver_->readPort(0);
+      msg_.data = fixGPIO(setup_.driver_->readPort(0));
 #ifdef USE_TEENSYTHREADS
       {
         Threads::Scope guard(g_microros_mutex);
@@ -99,7 +100,7 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
   }
 
   uint8_t getState() const {
-    return setup_.driver_ ? setup_.driver_->readPort(0) : 0;
+    return setup_.driver_ ? fixGPIO(setup_.driver_->readPort(0)) : 0;
   }
 
 #ifdef USE_TEENSYTHREADS
@@ -122,6 +123,15 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  // Hardware is active-low and bit-reversed (switch 0 appears at bit 7).
+  // Reverse bits and invert so bit 0 = switch 0, 1 = ON.
+  static uint8_t fixGPIO(uint8_t b) {
+    b = ((b & 0xF0) >> 4) | ((b & 0x0F) << 4);
+    b = ((b & 0xCC) >> 2) | ((b & 0x33) << 2);
+    b = ((b & 0xAA) >> 1) | ((b & 0x55) << 1);
+    return ~b;
+  }
+
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
   const DipSwitchSubsystemSetup setup_;
   rcl_publisher_t pub_{};

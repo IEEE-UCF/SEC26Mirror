@@ -5,6 +5,8 @@
  * @date 2026-02-24
  *
  * Publishes an 8-bit bitmask (bit N = button N).
+ * Hardware is active-low and bit-reversed; this subsystem corrects both
+ * so consumers see active-HIGH (1 = pressed), bit 0 = button 0.
  * Callbacks are invoked on the rising edge of each button (press).
  *
  * -- ROS2 interface (defaults) ---------------------------------------------
@@ -65,7 +67,7 @@ class ButtonSubsystem : public IMicroRosParticipant,
     if (!setup_.driver_) return;
     setup_.driver_->update();
 
-    uint8_t current = setup_.driver_->readPort(1);
+    uint8_t current = fixGPIO(setup_.driver_->readPort(1));
 
     // Detect rising edges (not-pressed -> pressed)
     uint8_t pressed = current & ~prev_state_;
@@ -145,6 +147,15 @@ class ButtonSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  // Hardware is active-low and bit-reversed (button 0 appears at bit 7).
+  // Reverse bits and invert so bit 0 = button 0, 1 = pressed.
+  static uint8_t fixGPIO(uint8_t b) {
+    b = ((b & 0xF0) >> 4) | ((b & 0x0F) << 4);
+    b = ((b & 0xCC) >> 2) | ((b & 0x33) << 2);
+    b = ((b & 0xAA) >> 1) | ((b & 0x55) << 1);
+    return ~b;
+  }
+
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;
   const ButtonSubsystemSetup setup_;
   rcl_publisher_t pub_{};

@@ -180,7 +180,7 @@ class ConvertVisionToGoal(Node):
         """Publish a PoseStamped goal."""
         out = PoseStamped()
         out.header.stamp = self.get_clock().now().to_msg()
-        out.header.frame_id = "map"
+        out.header.frame_id = "odom"
         out.pose.position.x = float(gx)
         out.pose.position.y = float(gy)
         out.pose.position.z = 0.0

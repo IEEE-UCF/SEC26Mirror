@@ -284,7 +284,30 @@ void setup() {
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 
+static uint32_t s_last_debug_ms = 0;
+static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;
+
 void loop() {
   g_rc.update();
+
+  uint32_t now = millis();
+  if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
+    s_last_debug_ms = now;
+
+    auto imu_data = g_imu_driver.getData();
+
+    DEBUG_PRINTF("[%lu] === Periodic Status ===\n", now);
+    DEBUG_PRINTF("  uROS state : %s\n", g_mr.isConnected() ? "CONNECTED" : "WAITING");
+    DEBUG_PRINTF("  Battery    : %.2fV  %.0fmA  %.0fmW\n",
+                 g_power_driver.getVoltage(), g_power_driver.getCurrentmA(),
+                 g_power_driver.getPowermW());
+    DEBUG_PRINTF("  IMU quat   : w=%.2f x=%.2f y=%.2f z=%.2f  yaw=%.1f\n",
+                 imu_data.qw, imu_data.qx, imu_data.qy, imu_data.qz,
+                 imu_data.yaw);
+    DEBUG_PRINTF("  DIP        : 0x%02X\n", g_dip.getState());
+    DEBUG_PRINTF("  Buttons    : 0x%02X\n", g_btn.getState());
+    DEBUG_PRINTF("  Uptime     : %lus\n", now / 1000);
+  }
+
   delay(5);
 }

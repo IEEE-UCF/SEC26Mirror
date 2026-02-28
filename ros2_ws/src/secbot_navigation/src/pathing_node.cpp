@@ -294,6 +294,7 @@ class PathingNode : public rclcpp::Node {
   void goal_reached() {
     if (!goal_reached_) {
       goal_reached_ = true;
+      have_goal_filt_ = false;  // reset filter so next goal triggers replan
       visited_goals_.emplace_back(goal_x_, goal_y_);
       RCLCPP_INFO(this->get_logger(),
                   "Marked visited goal at (%.2f, %.2f), total visited: %zu",

@@ -34,6 +34,7 @@ class ConvertVisionToGoal(Node):
         self.declare_parameter("min_confidence", 60.0)
         self.declare_parameter("use_largest_area", True)
         self.declare_parameter("visited_radius", 0.4)
+        self.declare_parameter("queue_merge_radius", 0.5)
 
         # camera info =================================
         self.camera_height = float(self.get_parameter("camera_height").value)
@@ -42,6 +43,7 @@ class ConvertVisionToGoal(Node):
         self.min_confidence = float(self.get_parameter("min_confidence").value)
         self.use_largest_area = bool(self.get_parameter("use_largest_area").value)
         self.visited_radius = float(self.get_parameter("visited_radius").value)
+        self.queue_merge_radius = float(self.get_parameter("queue_merge_radius").value)
         self.tilt_rad = math.radians(self.camera_tilt_deg)
 
         # used to convert math to gazebo points ============================================
@@ -62,9 +64,10 @@ class ConvertVisionToGoal(Node):
         self.robot_y = None
         self.robot_yaw = None
 
-        self.last_published_goal = None
-        self.visited_positions = []  # list of (x, y) where goals were reached
-        
+        # Goal queue: remembers ALL detected goal positions ====
+        self.goal_queue = []          # list of (x, y) — goals waiting to be visited
+        self.active_goal = None       # (x, y) — the goal we're currently navigating to
+        self.visited_positions = []   # list of (x, y) — completed goals
 
 
         # QOS (SUBSCRIBE TO RELIABLE MESSAGES) =======================================
@@ -80,6 +83,9 @@ class ConvertVisionToGoal(Node):
         # publisher ===============================
         self.goal_publish = self.create_publisher(PoseStamped, self.goal_topic, 10)
 
+        # Republish active goal at 2Hz so pathing_node always has it
+        self.create_timer(0.5, self.republish_active_goal)
+
         self.get_logger().info(f"Listening detections: {self.detection_topic}")
         self.get_logger().info(f"Listening camera_info: {self.camera_info_topic}")
         self.get_logger().info(f"Listening odom: {self.odom_topic}")
@@ -91,7 +97,7 @@ class ConvertVisionToGoal(Node):
     def on_camera_info(self, msg: CameraInfo):
         if self.fx is not None:
             return
-        
+
         self.fx = msg.k[0]
         self.fy = msg.k[4]
         self.cx = msg.k[2]
@@ -108,18 +114,74 @@ class ConvertVisionToGoal(Node):
         self.robot_yaw = convert_yaw(msg.pose.pose.orientation)
 
 
-    # when pathing_node says we reached a goal, record GOAL (yellow box) pose as visited ====
+    # when pathing_node says we reached a goal, mark visited and advance queue ====
     def on_goal_reached(self, msg: Bool):
-        if msg.data and self.last_published_goal is not None:
-            self.visited_positions.append(self.last_published_goal)
-            self.get_logger().info(f"GOAL REACHED — marked visited at ({self.last_published_goal[0]:.2f}, {self.last_published_goal[1]:.2f}), total visited: {len(self.visited_positions)}")
-            self.last_published_goal = None # Reset it
+        if not msg.data or self.active_goal is None:
+            return
+
+        self.visited_positions.append(self.active_goal)
+        self.get_logger().info(
+            f"GOAL REACHED — marked visited at ({self.active_goal[0]:.2f}, {self.active_goal[1]:.2f}), "
+            f"total visited: {len(self.visited_positions)}, queue remaining: {len(self.goal_queue)}")
+        self.active_goal = None
+
+        # advance to next queued goal
+        self.advance_queue()
 
     def is_near_visited(self, gx, gy):
         for vx, vy in self.visited_positions:
             if math.hypot(gx - vx, gy - vy) < self.visited_radius:
                 return True
         return False
+
+    def is_near_queued_or_active(self, gx, gy):
+        """Check if a goal is already in the queue or is the active goal."""
+        for qx, qy in self.goal_queue:
+            if math.hypot(gx - qx, gy - qy) < self.queue_merge_radius:
+                return True
+        if self.active_goal is not None:
+            ax, ay = self.active_goal
+            if math.hypot(gx - ax, gy - ay) < self.queue_merge_radius:
+                return True
+        return False
+
+    def advance_queue(self):
+        """Pop the closest queued goal (that isn't visited) and make it active."""
+        while self.goal_queue:
+            # pick closest goal to robot
+            if self.robot_x is not None:
+                self.goal_queue.sort(
+                    key=lambda g: math.hypot(g[0] - self.robot_x, g[1] - self.robot_y))
+
+            next_goal = self.goal_queue.pop(0)
+
+            if self.is_near_visited(next_goal[0], next_goal[1]):
+                continue  # skip, already visited
+
+            self.active_goal = next_goal
+            self.publish_goal_msg(next_goal[0], next_goal[1])
+            self.get_logger().info(
+                f"QUEUE ADVANCE — now targeting ({next_goal[0]:.2f}, {next_goal[1]:.2f}), "
+                f"remaining in queue: {len(self.goal_queue)}")
+            return
+
+        self.get_logger().info("Goal queue empty — waiting for new detections")
+
+    def publish_goal_msg(self, gx, gy):
+        """Publish a PoseStamped goal."""
+        out = PoseStamped()
+        out.header.stamp = self.get_clock().now().to_msg()
+        out.header.frame_id = "map"
+        out.pose.position.x = float(gx)
+        out.pose.position.y = float(gy)
+        out.pose.position.z = 0.0
+        out.pose.orientation.w = 1.0
+        self.goal_publish.publish(out)
+
+    def republish_active_goal(self):
+        """Timer callback: keep republishing active goal so pathing_node tracks it."""
+        if self.active_goal is not None:
+            self.publish_goal_msg(self.active_goal[0], self.active_goal[1])
 
     def compute_goal(self, detection):
         """Compute world-frame goal (x, y) for a detection. Returns (goal_x, goal_y, dist_forward, bearing) or None."""
@@ -196,7 +258,7 @@ class ConvertVisionToGoal(Node):
         else:
             candidates.sort(key=lambda d: float(d.confidence), reverse=True)
 
-        # try each candidate, skip ones whose goal lands near a visited position
+        # compute goals for ALL detections and queue new ones ====
         for detection in candidates:
             result = self.compute_goal(detection)
             if result is None:
@@ -204,28 +266,24 @@ class ConvertVisionToGoal(Node):
 
             goal_x, goal_y, dist_forward, bearing = result
 
+            # skip if already visited, already queued, or is the active goal
             if self.is_near_visited(goal_x, goal_y):
-                self.get_logger().info(f"Skipping detection id={detection.id} — goal ({goal_x:.2f}, {goal_y:.2f}) near visited position")
+                continue
+            if self.is_near_queued_or_active(goal_x, goal_y):
                 continue
 
-            # publish goal
-            out = PoseStamped()
-            out.header = msg.header
-            out.header.frame_id = "map"
-            out.pose.position.x = float(goal_x)
-            out.pose.position.y = float(goal_y)
-            out.pose.position.z = 0.0
-            out.pose.orientation.w = 1.0
-
-            self.last_published_goal = (goal_x, goal_y)
-            self.goal_publish.publish(out)
-
+            # new goal — add to queue
+            self.goal_queue.append((goal_x, goal_y))
             u = float(detection.x + detection.w * 0.5)
             v = float(detection.y + detection.h)
-            self.get_logger().info(f"detection id = {detection.id} confidence={detection.confidence:.1f}% u={u:.1f} v={v:.1f} bearing={math.degrees(bearing):.1f}deg d={dist_forward:.2f}m -> goal=(x={goal_x:.2f}, y{goal_y:.2f})")
-            return  # published first valid non-visited candidate
+            self.get_logger().info(
+                f"QUEUED detection id={detection.id} conf={detection.confidence:.1f}% "
+                f"bearing={math.degrees(bearing):.1f}deg d={dist_forward:.2f}m "
+                f"-> goal=({goal_x:.2f}, {goal_y:.2f})  queue size: {len(self.goal_queue)}")
 
-        self.get_logger().info("All visible detections are near visited positions — no goal published")
+        # if no active goal, pick the closest from queue
+        if self.active_goal is None and self.goal_queue:
+            self.advance_queue()
 
 
 

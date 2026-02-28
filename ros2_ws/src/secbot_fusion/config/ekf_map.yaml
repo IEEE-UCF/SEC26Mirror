@@ -1,7 +1,7 @@
 ekf_map_node:
   ros__parameters:
     frequency: 30.0
-    two_d_mode: false
+    two_d_mode: true
     publish_tf: true
 
     map_frame: map

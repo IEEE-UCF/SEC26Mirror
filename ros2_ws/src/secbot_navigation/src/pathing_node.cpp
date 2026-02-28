@@ -585,7 +585,11 @@ class PathingNode : public rclcpp::Node {
 
     if (!planned_once_) {
       init_planner();
-      compute_plan();
+      // Only compute a path if we actually have a goal (avoid degenerate
+      // start==goal trajectory that causes the robot to spin on startup)
+      if (has_goal_) {
+        compute_plan();
+      }
       planned_once_ = true;
     }
 

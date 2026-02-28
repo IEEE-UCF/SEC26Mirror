@@ -18,7 +18,7 @@ class ConvertVisionToGoal(Node):
         # subs and pubs DECLARE ==========================
         self.declare_parameter("detections_topic", "/duck_detections")
         self.declare_parameter("camera_info_topic", "/camera_info")
-        self.declare_parameter("odom_topic", "/odometry/filtered")
+        self.declare_parameter("odom_topic", "/odometry/global")
         self.declare_parameter("goal_topic", "/goal_pose")
 
         # subs and pubs ==============================
@@ -211,7 +211,7 @@ class ConvertVisionToGoal(Node):
             # publish goal
             out = PoseStamped()
             out.header = msg.header
-            out.header.frame_id = "odom"
+            out.header.frame_id = "map"
             out.pose.position.x = float(goal_x)
             out.pose.position.y = float(goal_y)
             out.pose.position.z = 0.0

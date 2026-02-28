@@ -721,13 +721,27 @@ void McuSubsystemSimulator::drivePublishCallback() {
   msg.transform.transform.rotation.z = std::sin(yaw / 2.0);
   msg.transform.transform.rotation.w = std::cos(yaw / 2.0);
 
-  // Twist (velocity) — convert in/s to m/s for ROS convention
-  msg.twist.linear.x = current_velocity_.getX() * IN_TO_M;
-  msg.twist.linear.y = current_velocity_.getY() * IN_TO_M;
-  msg.twist.linear.z = 0.0;
-  msg.twist.angular.x = 0.0;
-  msg.twist.angular.y = 0.0;
-  msg.twist.angular.z = current_velocity_.getTheta();
+  // Twist (velocity)
+  // In trajectory mode the internal encoder simulation is bypassed — the
+  // trajectory controller sends cmd_vel directly to Gazebo.  Use the
+  // commanded velocity so the fusion pipeline (and therefore the EKF) sees
+  // the actual movement instead of the idle internal simulation.
+  if (current_mode_ == DriveMode::TRAJECTORY_DRIVE) {
+    msg.twist.linear.x = gz_cmd_v_;          // already m/s
+    msg.twist.linear.y = 0.0;
+    msg.twist.linear.z = 0.0;
+    msg.twist.angular.x = 0.0;
+    msg.twist.angular.y = 0.0;
+    msg.twist.angular.z = gz_cmd_w_;          // already rad/s
+  } else {
+    // Other modes use the internal encoder-derived velocity (in/s → m/s)
+    msg.twist.linear.x = current_velocity_.getX() * IN_TO_M;
+    msg.twist.linear.y = current_velocity_.getY() * IN_TO_M;
+    msg.twist.linear.z = 0.0;
+    msg.twist.angular.x = 0.0;
+    msg.twist.angular.y = 0.0;
+    msg.twist.angular.z = current_velocity_.getTheta();
+  }
 
   msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_VECTOR;
 
@@ -736,12 +750,10 @@ void McuSubsystemSimulator::drivePublishCallback() {
   RCLCPP_DEBUG(
       this->get_logger(),
       "Drive status: x=%.4f m, y=%.4f m, theta=%.2f, vx=%.4f m/s, omega=%.2f",
-      pub_x, pub_y, yaw, current_velocity_.getX() * IN_TO_M,
-      current_velocity_.getTheta());
+      pub_x, pub_y, yaw, msg.twist.linear.x, msg.twist.angular.z);
 
-  // NOTE: odom→base_link TF is published by the Gazebo bridge (/tf).
-  // Do NOT broadcast it here — duplicate TF publishers cause the robot
-  // to teleport to (0,0) when this node hasn't received gz_odom yet.
+  // NOTE: odom→base_link TF is published solely by the EKF node.
+  // Do NOT broadcast it here — duplicate TF publishers cause conflicts.
 }
 
 // IMU publish

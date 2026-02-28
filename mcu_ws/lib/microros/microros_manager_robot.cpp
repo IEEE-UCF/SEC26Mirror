@@ -31,7 +31,7 @@ bool MicrorosManager::create_entities() {
   // Publishers do not consume handles — only subscriptions, services, and
   // timers do.  16 handles supports the current set of subsystems with room
   // for growth.
-  if (rclc_executor_init(&executor_, &support_.context, 16, &allocator_) !=
+  if (rclc_executor_init(&executor_, &support_.context, 24, &allocator_) !=
       RCL_RET_OK) {
     DEBUG_PRINTLN("[uROS] FAIL: rclc_executor_init");
     return false;

@@ -3,8 +3,10 @@ UWB Simulation Launch File
 
 Tier 3: Includes MCU sim (Tier 1) and adds the full sensor-fusion + autonomy stack:
   - UWB simulation + bridge + positioning node
-  - Sensor fusion (fusion_node + ekf_node) -> /odometry/filtered
-  - Vision + pathing (on raw /odom for now, switch to /odometry/filtered once EKF is confirmed)
+  - Dual EKF sensor fusion:
+      EKF #1 (odom frame): encoder + IMU -> /odometry/filtered, odom->base_link TF
+      EKF #2 (map frame):  encoder + IMU + UWB -> /odometry/global, map->odom TF
+  - Vision + pathing (on /odometry/filtered)
   - RViz2
 """
 
@@ -25,7 +27,8 @@ def generate_launch_description():
 
     rviz_config       = os.path.join(pkg_my_robot,      'rviz',   'secbot_sim.rviz')
     mcu_sim_launch    = os.path.join(pkg_secbot_sim,    'launch', 'mcu_sim_secbot.launch.py')
-    ekf_config_path   = os.path.join(pkg_secbot_fusion, 'config', 'ekf.yaml')
+    ekf_config_path       = os.path.join(pkg_secbot_fusion, 'config', 'ekf.yaml')
+    ekf_map_config_path   = os.path.join(pkg_secbot_fusion, 'config', 'ekf_map.yaml')
     vision_config     = os.path.join(pkg_secbot_vision, 'config', 'vision.yaml')
     nav_config_path   = os.path.join(pkg_secbot_nav,    'config', 'nav_sim.yaml')
     arena_config_path = os.path.join(pkg_secbot_nav,    'config', 'arena_layout.yaml')
@@ -88,7 +91,7 @@ def generate_launch_description():
             parameters=[{'use_sim_time': True}],
         ),
 
-        # 7. EKF: /odom/unfiltered + /mcu_robot/imu/data + /uwb/pose/robot -> /odometry/filtered
+        # 7. EKF (odom frame): encoder + IMU -> /odometry/filtered, publishes odom->base_link TF
         Node(
             package='robot_localization',
             executable='ekf_node',
@@ -97,9 +100,21 @@ def generate_launch_description():
             parameters=[ekf_config_path, {'use_sim_time': True, 'publish_tf': True}],
         ),
 
-        # --- Autonomy (using raw /odom for now; switch to /odometry/filtered once EKF is confirmed) ---
+        # 8. EKF (map frame): encoder + IMU + UWB -> /odometry/global, publishes map->odom TF
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_map_node',
+            output='screen',
+            parameters=[ekf_map_config_path, {'use_sim_time': True, 'publish_tf': True}],
+            remappings=[
+                ('odometry/filtered', 'odometry/global'),
+            ],
+        ),
 
-        # 8. Vision
+        # --- Autonomy ---
+
+        # 9. Vision
         Node(
             package='secbot_vision',
             executable='detector_node',
@@ -109,7 +124,7 @@ def generate_launch_description():
                                         'image_topic': '/camera1/image'}],
         ),
 
-        # 9. Vision -> Goal converter
+        # 10. Vision -> Goal converter
         Node(
             package='secbot_sim',
             executable='convert_vision_to_goal.py',
@@ -131,7 +146,7 @@ def generate_launch_description():
             }],
         ),
 
-        # 10. Pathing node
+        # 11. Pathing node
         Node(
             package='secbot_navigation',
             executable='pathing_node',

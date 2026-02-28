@@ -49,8 +49,10 @@ class PathingNode : public rclcpp::Node {
     this->declare_parameter<std::string>("config_file", "");
     this->declare_parameter<std::string>("arena_file", "");
     this->declare_parameter<std::string>("planning_frame", "odom");
+    this->declare_parameter<std::string>("odom_topic", "/odometry/filtered");
     this->declare_parameter<std::string>("control_output", "cmd_vel");
     control_output_ = this->get_parameter("control_output").as_string();
+    odom_topic_ = this->get_parameter("odom_topic").as_string();
 
     // Load configs
     load_config();
@@ -65,7 +67,7 @@ class PathingNode : public rclcpp::Node {
     traj_to_mcu_pub_ = this->create_publisher<nav_msgs::msg::Path>(
         "drive_base/trajectory", traj_qos);
     subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-        "/odometry/filtered", 10,
+        odom_topic_, 10,
         std::bind(&PathingNode::odom_callback, this, _1));  // input robot pose
     timer_ = this->create_wall_timer(
         100ms, std::bind(&PathingNode::control_loop,
@@ -182,6 +184,7 @@ class PathingNode : public rclcpp::Node {
   bool enable_turn_slowdown_ = true;
 
   std::string planning_frame_ = "odom";
+  std::string odom_topic_ = "/odometry/filtered";
   std::string base_frame_ = "base_link";
   bool require_tf_for_control_ = false;
   double tf_timeout_sec_ = 0.1;
@@ -584,7 +587,7 @@ class PathingNode : public rclcpp::Node {
   void print_tf_pose() {
     try {
       // Try common frame pairs. One of these will match your sim.
-      const std::string parent = "odom";
+      const std::string parent = planning_frame_;
       const std::string child = "base_link";
 
       auto tf = tf_buffer_->lookupTransform(parent, child, tf2::TimePointZero);

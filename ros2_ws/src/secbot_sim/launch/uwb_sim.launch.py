@@ -153,10 +153,12 @@ def generate_launch_description():
             name='pathing_node',
             output='screen',
             parameters=[{
-                'use_sim':      True,
-                'use_sim_time': True,
-                'config_file':  nav_config_path,
-                'arena_file':   arena_config_path,
+                'use_sim':         True,
+                'use_sim_time':    True,
+                'config_file':     nav_config_path,
+                'arena_file':      arena_config_path,
+                'odom_topic':      '/odometry/global',
+                'planning_frame':  'map',
             }],
         ),
     ])

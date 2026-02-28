@@ -117,7 +117,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
   std_msgs__msg__String debug_msg_{};
 
   // Registered participants (increase capacity as subsystems are added)
-  static constexpr size_t MAX_PARTICIPANTS = 16;
+  static constexpr size_t MAX_PARTICIPANTS = 24;
   IMicroRosParticipant* participants_[MAX_PARTICIPANTS] = {nullptr};
   size_t participants_count_ = 0;
 

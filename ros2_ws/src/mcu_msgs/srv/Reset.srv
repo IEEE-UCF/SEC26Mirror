@@ -1,0 +1,4 @@
+# Reset all robot subsystems to their default state.
+# Motors stop, servos disable, encoders zero, LEDs clear.
+---
+bool success

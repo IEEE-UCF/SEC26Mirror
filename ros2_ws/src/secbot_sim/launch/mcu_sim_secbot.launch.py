@@ -59,7 +59,7 @@ def generate_launch_description():
 
     # ARGS ==========================================
     num_blocks_arg = DeclareLaunchArgument(
-        'num_blocks', default_value='1',
+        'num_blocks', default_value='3',
         description='Number of yellow boxes to spawn (max 6)')
     block_scale_arg = DeclareLaunchArgument(
         'block_scale', default_value='1.0',

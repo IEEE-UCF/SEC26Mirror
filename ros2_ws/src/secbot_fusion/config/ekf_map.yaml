@@ -46,4 +46,4 @@ ekf_map_node:
 
     pose0_differential: false
     # reject UWB outliers beyond 2m from current estimate
-    pose0_rejection_threshold: 2.0
+    pose0_rejection_threshold: 99.0

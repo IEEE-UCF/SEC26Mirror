@@ -2,17 +2,26 @@
 
 #include <micro_ros_utilities/type_utilities.h>
 
+#include "DebugLog.h"
+
 namespace Subsystem {
 
 // Frame ID for TF and robot_localization compatibility
 static char frame_id[] = "imu_link";
 
 bool ImuSubsystem::init() {
-  if (!setup_.driver_) return false;
-  if (!setup_.driver_->init()) return false;
+  if (!setup_.driver_) {
+    DEBUG_PRINTLN("[IMU] init FAIL: no driver");
+    return false;
+  }
+  if (!setup_.driver_->init()) {
+    DEBUG_PRINTLN("[IMU] init FAIL: driver init");
+    return false;
+  }
 
   // Calibrates the gyroscope by averaging samples at rest
   // This removes static bias from gyro readings!!!
+  DEBUG_PRINTF("[IMU] Calibrating gyro (%d samples)...\n", kCalibrationSamples);
   float sum_x = 0.0f, sum_y = 0.0f, sum_z = 0.0f;
 
   for (int i = 0; i < kCalibrationSamples; i++) {
@@ -29,6 +38,8 @@ bool ImuSubsystem::init() {
   gyro_offset_z_ = sum_z / kCalibrationSamples;
   calibrated_ = true;
 
+  DEBUG_PRINTF("[IMU] Calibration done: offset=(%.4f, %.4f, %.4f)\n",
+               gyro_offset_x_, gyro_offset_y_, gyro_offset_z_);
   return true;
 }
 
@@ -65,9 +76,11 @@ bool ImuSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   if (rclc_publisher_init_best_effort(
           &pub_, node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu),
           "/mcu_robot/imu/data") != RCL_RET_OK) {
+    DEBUG_PRINTLN("[IMU] onCreate FAIL: publisher init");
     return false;
   }
 
+  DEBUG_PRINTLN("[IMU] onCreate OK");
   return true;
 }
 

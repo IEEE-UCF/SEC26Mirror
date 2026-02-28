@@ -11,6 +11,7 @@
 
 #include <BaseSubsystem.h>
 #include <mcu_msgs/msg/arm_susbsytem.h>
+#include "DebugLog.h"
 #include <mcu_msgs/srv/arm_control.h>
 #include <microros_manager_robot.h>
 
@@ -50,9 +51,13 @@ class ArmSubsystem : public IMicroRosParticipant,
   // Lifecycle hooks
   bool init() override {
     state_ = mcu_msgs__msg__ArmSusbsytem__INIT;
+    DEBUG_PRINTLN("[ARM] init OK (pseudo-code subsystem)");
     return true;
   }
-  void begin() override { state_ = mcu_msgs__msg__ArmSusbsytem__ARMED; }
+  void begin() override {
+    state_ = mcu_msgs__msg__ArmSusbsytem__ARMED;
+    DEBUG_PRINTLN("[ARM] begin -> ARMED");
+  }
   void update() override {
     // Pseudo-code: read encoder and publish current arm status periodically
     // float pos = (setup_.encoder_) ? setup_.encoder_->getPosition().position :
@@ -76,6 +81,7 @@ class ArmSubsystem : public IMicroRosParticipant,
   // micro-ROS wiring
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     node_ = node;
+    DEBUG_PRINTLN("[ARM] onCreate OK (stub)");
     // Pseudo-code: create publisher for `mcu_msgs/ArmSusbsytem`
     // rclc_publisher_init_default(&pub_state_, node_,
     //     ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, ArmSusbsytem),

@@ -8,6 +8,7 @@
 
 #include <BaseSubsystem.h>
 #include <micro_ros_utilities/string_utilities.h>
+#include "DebugLog.h"
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
@@ -50,9 +51,11 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
     if (rclc_publisher_init_best_effort(
             &pub_, node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
             "/mcu_robot/heartbeat") != RCL_RET_OK) {
+      DEBUG_PRINTLN("[HB] onCreate FAIL: publisher init");
       return false;
     }
     msg_.data = micro_ros_string_utilities_set(msg_.data, "HEARTBEAT");
+    DEBUG_PRINTLN("[HB] onCreate OK");
     return true;
   }
 

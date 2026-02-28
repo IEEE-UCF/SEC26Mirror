@@ -69,6 +69,10 @@ LEDs flash green on startup. All topics and services become available once the m
 | `/mcu_robot/motor/state` | `std_msgs/msg/Float32MultiArray` | 5 Hz | Current motor speeds (-1..1) |
 | `/mcu_robot/encoders` | `std_msgs/msg/Float32MultiArray` | 50 Hz | Signed tick rates (ticks/sec) for 8 motors |
 | `mcu_uwb/ranging` | `mcu_msgs/msg/UWBRanging` | 10 Hz | UWB distance measurements to beacons |
+| `/mcu_robot/crank/state` | `std_msgs/msg/UInt8` | 5 Hz | Crank state (0=IDLE, 1=CRANKING, 2=RESETTING) |
+| `/mcu_robot/keypad/state` | `std_msgs/msg/UInt8` | 5 Hz | Keypad state (0=IDLE, 1=SWITCHING, 2=PRESSING, 3=RETREATING) |
+| `/mcu_robot/deploy/trigger` | `std_msgs/msg/String` | on event | Deploy trigger command |
+| `drive_base/status` | `mcu_msgs/msg/DriveBase` | 20 Hz | Drive pose, velocity, mode |
 
 ### Services
 
@@ -85,6 +89,11 @@ LEDs flash green on startup. All topics and services become available once the m
 | `/mcu_robot/lcd/append` | `std_msgs/msg/String` | Append text to OLED (newlines split into lines) |
 | `/mcu_robot/lcd/scroll` | `std_msgs/msg/Int8` | Scroll OLED display (-1=up, 1=down) |
 | `/mcu_robot/led/set_all` | `mcu_msgs/msg/LedColor` | Set all WS2812B LEDs to RGB color |
+| `/mcu_robot/crank/command` | `std_msgs/msg/UInt8` | Crank command (1=SPIN, 2=RESET) |
+| `/mcu_robot/keypad/command` | `std_msgs/msg/UInt8` | Keypad command (1-4=switch key, 5=press) |
+| `/mcu_robot/deploy/status` | `std_msgs/msg/String` | Deploy status feedback |
+| `drive_base/command` | `mcu_msgs/msg/DriveBase` | Drive velocity/goal/trajectory command |
+| `drive_base/reset_pose` | `geometry_msgs/msg/Pose` | Override internal pose estimate |
 
 ## Testing Commands
 
@@ -101,8 +110,8 @@ source install/setup.bash
 ### Verify Everything Is Up
 
 ```bash
-# List all topics (expect 11 topics under /mcu_robot/ + 1 under mcu_uwb/)
-ros2 topic list | grep -E "mcu_robot|mcu_uwb"
+# List all topics (expect 13 topics under /mcu_robot/ + 1 under mcu_uwb/ + 1 under drive_base/)
+ros2 topic list | grep -E "mcu_robot|mcu_uwb|drive_base"
 
 # List all services (expect 3 services)
 ros2 service list | grep mcu_robot
@@ -297,6 +306,62 @@ ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor "{r: 32, g: 3
 ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor "{r: 0, g: 0, b: 0}"
 ```
 
+### Crank
+
+The crank servo is on PCA9685 #0, channel 0. It does **not** move at startup — an explicit command is required.
+
+```bash
+# Monitor crank state (0=IDLE, 1=CRANKING, 2=RESETTING)
+ros2 topic echo /mcu_robot/crank/state
+
+# Spin crank (servo moves 0° → 180°, holds CRANKING for ~1.5s, returns to IDLE)
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 1}"
+
+# Reset crank (servo moves 180° → 0°, holds RESETTING for ~1.5s, returns to IDLE)
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 2}"
+```
+
+### Keypad
+
+The keypad servo is on PCA9685 #0, channel 1 (270-degree servo). It does **not** move at startup — an explicit command is required. The keypad press action drives the robot forward to stall against the keypad, then reverses.
+
+```bash
+# Monitor keypad state (0=IDLE, 1=SWITCHING, 2=PRESSING, 3=RETREATING)
+ros2 topic echo /mcu_robot/keypad/state
+
+# Switch to key 1 (servo → 0°)
+ros2 topic pub --once /mcu_robot/keypad/command std_msgs/msg/UInt8 "{data: 1}"
+
+# Switch to key 2 (servo → 60°, i.e., 90° physical on 270° servo)
+ros2 topic pub --once /mcu_robot/keypad/command std_msgs/msg/UInt8 "{data: 2}"
+
+# Switch to key 3 (servo → 120°, i.e., 180° physical)
+ros2 topic pub --once /mcu_robot/keypad/command std_msgs/msg/UInt8 "{data: 3}"
+
+# Switch to key 4 (servo → 180°, i.e., 270° physical)
+ros2 topic pub --once /mcu_robot/keypad/command std_msgs/msg/UInt8 "{data: 4}"
+
+# Press current key (drives forward ~1.5s, retreats ~1s — ROBOT WILL MOVE!)
+ros2 topic pub --once /mcu_robot/keypad/command std_msgs/msg/UInt8 "{data: 5}"
+```
+
+### Drive
+
+The drive subsystem provides closed-loop velocity and pose control for the tank-drive base.
+
+```bash
+# Monitor drive status (pose, velocity, mode)
+ros2 topic echo drive_base/status
+
+# Command velocity: drive forward at 0.1 m/s
+ros2 topic pub --once drive_base/command mcu_msgs/msg/DriveBase "{drive_mode: 1, goal_velocity: {linear: {x: 0.1}, angular: {z: 0.0}}}"
+
+# Stop drive (command timeout will also stop after 500ms)
+ros2 topic pub --once drive_base/command mcu_msgs/msg/DriveBase "{drive_mode: 1, goal_velocity: {linear: {x: 0.0}, angular: {z: 0.0}}}"
+```
+
+---
+
 ## Quick Sanity Check (copy-paste block)
 
 Run these in sequence to verify all subsystems:
@@ -346,6 +411,17 @@ ros2 topic echo mcu_uwb/ranging --once
 # 13. Buttons and DIP switches
 ros2 topic echo /mcu_robot/buttons --once
 ros2 topic echo /mcu_robot/dip_switches --once
+
+# 12. Crank spin test (moves servo 0 to 180 deg)
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 1}"
+sleep 2
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 2}"
+
+# 13. Keypad key switch test (switches to key 2)
+ros2 topic pub --once /mcu_robot/keypad/command std_msgs/msg/UInt8 "{data: 2}"
+
+# 14. Drive status
+ros2 topic echo drive_base/status --once
 ```
 
 ## Thread Configuration
@@ -366,6 +442,10 @@ ros2 topic echo /mcu_robot/dip_switches --once
 | 1 | Buttons | 20ms (50 Hz) | 1024 |
 | 1 | LEDs | 50ms (20 Hz) | 1024 |
 | 1 | Heartbeat | 200ms (5 Hz) | 1024 |
+| 1 | Deploy | 20ms (50 Hz) | 1024 |
+| 1 | Crank | 50ms (20 Hz) | 1024 |
+| 1 | Keypad | 50ms (20 Hz) | 1024 |
+| 3 | Drive | 20ms (50 Hz) | 4096 |
 | — | PCA9685 PWM flush | 20ms | 1024 |
 
 ## Troubleshooting

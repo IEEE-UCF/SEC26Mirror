@@ -24,6 +24,7 @@
 
 #include <BaseSubsystem.h>
 #include <PCA9685Driver.h>
+#include "DebugLog.h"
 #include <mcu_msgs/srv/set_motor.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
@@ -96,6 +97,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     }
     // Flush immediately so motors don't twitch on startup
     if (setup_.driver_) setup_.driver_->applyBuffered();
+    DEBUG_PRINTF("[MOTOR] init OK (%d motors, OE=%d)\n", setup_.numMotors_,
+                 setup_.oePin_);
     return true;
   }
 
@@ -164,9 +167,11 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     if (rclc_executor_add_service_with_context(
             executor, &srv_, &srv_req_, &srv_res_,
             &MotorManagerSubsystem::srvCallback, this) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[MOTOR] onCreate FAIL: service executor");
       return false;
     }
 
+    DEBUG_PRINTLN("[MOTOR] onCreate OK");
     return true;
   }
 
@@ -273,8 +278,10 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     if (r->index < self->setup_.numMotors_) {
       self->setSpeed(r->index, r->speed);
       rsp->success = true;
+      DEBUG_PRINTF("[MOTOR] set m%d = %.2f\n", r->index, r->speed);
     } else {
       rsp->success = false;
+      DEBUG_PRINTF("[MOTOR] set FAIL: m%d out of range\n", r->index);
     }
   }
 

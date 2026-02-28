@@ -21,6 +21,7 @@
 #include <math_utils.h>
 
 #include "../RobotConfig.h"
+#include "DebugLog.h"
 #include "../RobotConstants.h"
 #include "../RobotPins.h"
 #include "BNO085.h"
@@ -48,6 +49,8 @@
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/ResetSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
+#include "robot/subsystems/CrankSubsystem.h"
+#include "robot/subsystems/KeypadSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
@@ -146,6 +149,11 @@ static LEDSubsystem g_led(g_led_setup);
 static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
                                          PIN_SERVO_OE, NUM_SERVOS);
 static ServoSubsystem g_servo(g_servo_setup);
+
+// --- Crank subsystem (servo on PCA9685 #0, channel 0) ---
+static CrankSubsystemSetup g_crank_setup("crank_subsystem", &g_servo,
+                                          CRANK_SERVO_IDX);
+static CrankSubsystem g_crank(g_crank_setup);
 
 // --- Motor manager subsystem (PCA9685 #1) ---
 static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
@@ -271,6 +279,11 @@ static void configureDriveSetup() {
 
 static DriveSubsystem g_drive(g_drive_setup);
 
+// --- Keypad subsystem (servo on PCA9685 #0, channel 1 + drive press) ---
+static KeypadSubsystemSetup g_keypad_setup("keypad_subsystem", &g_servo,
+                                            KEYPAD_SERVO_IDX, &g_drive);
+static KeypadSubsystem g_keypad(g_keypad_setup);
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -285,48 +298,56 @@ static void pca_task(void*) {
 
 void setup() {
   Serial.begin(0);
+  DEBUG_BEGIN();
   if (CrashReport) {
     Serial.print(CrashReport);
+    DEBUG_PRINT(CrashReport);
     Serial.println();
     Serial.flush();
+    DEBUG_FLUSH();
   }
 
   Serial.println(PSTR("\r\nSEC26 Robot — TeensyThreads\r\n"));
+  DEBUG_PRINTLN("\r\n=== SEC26 Robot — Debug Console (SerialUSB1) ===\r\n");
 
   // 0. I2C bus mutexes
   I2CBus::initLocks();
+  DEBUG_PRINTLN("[INIT] I2C bus locks initialized");
 
   // 1. Mux reset (if wired)
   pinMode(PIN_MUX_RESET, OUTPUT);
   digitalWrite(PIN_MUX_RESET, HIGH);
 
   // 2. Init subsystems
-  g_mr.init();
-  g_oled.init();
-  g_hb.init();
-  g_mux.init();
-  g_gpio.init();
-  g_battery.init();
-  g_sensor.init();
-  g_imu.init();
-  g_pca_mgr.init();
-  g_arm_encoder.init();
-  g_arm.init();
-  g_rc.init();
-  g_dip.init();
-  g_btn.init();
-  g_led.init();
-  g_servo.init();
-  g_motor.init();
-  g_encoder_sub.init();
-  g_intake.init();
-  g_bridge.init();
-  g_deploy.init();
+  DEBUG_PRINTLN("[INIT] --- Subsystem initialization ---");
+  g_mr.init();           DEBUG_PRINTLN("[INIT] MicrorosManager OK");
+  g_oled.init();         DEBUG_PRINTLN("[INIT] OLED OK");
+  g_hb.init();           DEBUG_PRINTLN("[INIT] Heartbeat OK");
+  g_mux.init();          DEBUG_PRINTLN("[INIT] I2C Mux OK");
+  g_gpio.init();         DEBUG_PRINTLN("[INIT] GPIO Expander OK");
+  g_battery.init();      DEBUG_PRINTLN("[INIT] Battery OK");
+  g_sensor.init();       DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
+  g_imu.init();          DEBUG_PRINTLN("[INIT] IMU OK");
+  g_pca_mgr.init();      DEBUG_PRINTLN("[INIT] PCA9685 Manager OK");
+  g_arm_encoder.init();  DEBUG_PRINTLN("[INIT] Arm Encoder OK");
+  g_arm.init();          DEBUG_PRINTLN("[INIT] Arm OK");
+  g_rc.init();           DEBUG_PRINTLN("[INIT] RC Receiver OK");
+  g_dip.init();          DEBUG_PRINTLN("[INIT] DIP Switch OK");
+  g_btn.init();          DEBUG_PRINTLN("[INIT] Buttons OK");
+  g_led.init();          DEBUG_PRINTLN("[INIT] LEDs OK");
+  g_servo.init();        DEBUG_PRINTLN("[INIT] Servo OK");
+  g_crank.init();        DEBUG_PRINTLN("[INIT] Crank OK");
+  g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
+  g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
+  g_intake.init();       DEBUG_PRINTLN("[INIT] Intake OK");
+  g_bridge.init();       DEBUG_PRINTLN("[INIT] Intake Bridge OK");
+  g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
   SPI.begin();
-  g_uwb.init();
+  g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
   configureDriveSetup();
-  g_drive.init();
+  g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
+  g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
 
   // 2a. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
@@ -341,6 +362,7 @@ void setup() {
   g_battery.setOLED(&g_oled);
 
   // 3. Register micro-ROS participants
+  DEBUG_PRINTLN("[INIT] --- Registering micro-ROS participants ---");
   g_mr.registerParticipant(&g_oled);
   g_mr.registerParticipant(&g_hb);
   g_mr.registerParticipant(&g_battery);
@@ -352,6 +374,7 @@ void setup() {
   g_mr.registerParticipant(&g_btn);
   g_mr.registerParticipant(&g_led);
   g_mr.registerParticipant(&g_servo);
+  g_mr.registerParticipant(&g_crank);
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_encoder_sub);
   g_mr.registerParticipant(&g_uwb);
@@ -360,6 +383,7 @@ void setup() {
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
   g_mr.registerParticipant(&g_drive);
+  g_mr.registerParticipant(&g_keypad);
 
   // 3a. Register subsystems as reset targets
   g_reset.addTarget(&g_motor);
@@ -370,8 +394,12 @@ void setup() {
   g_reset.addTarget(&g_bridge);
   g_reset.addTarget(&g_led);
   g_reset.addTarget(&g_drive);
+  g_reset.addTarget(&g_crank);
+  g_reset.addTarget(&g_keypad);
+  DEBUG_PRINTF("[INIT] Registered %d participants\n", 21);
 
   // 4. Start threaded tasks
+  DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
   g_mr.beginThreaded(8192, 4);       // ROS agent
   g_imu.beginThreaded(2048, 3, 10);  // 100 Hz
@@ -390,8 +418,11 @@ void setup() {
   g_arm.beginThreaded(1024, 2, 20);       // 50 Hz arm
   g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   g_deploy.beginThreaded(1024, 1, 20);    // 50 Hz deploy button
+  g_crank.beginThreaded(1024, 1, 50);     // 20 Hz crank
+  g_keypad.beginThreaded(1024, 1, 50);   // 20 Hz keypad
   g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
+  DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 
 // RC polled from main loop — IBusBM NOTIMER doesn't work from TeensyThreads

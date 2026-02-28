@@ -17,6 +17,7 @@
 
 #include <BaseSubsystem.h>
 #include <TCA9555Driver.h>
+#include "DebugLog.h"
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/u_int8.h>
 
@@ -51,8 +52,12 @@ class ButtonSubsystem : public IMicroRosParticipant,
       : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override {
-    if (!setup_.driver_) return false;
+    if (!setup_.driver_) {
+      DEBUG_PRINTLN("[BTN] init FAIL: no driver");
+      return false;
+    }
     setup_.driver_->configurePort(1, 0xFF);
+    DEBUG_PRINTLN("[BTN] init OK (port 1, 8 buttons)");
     return true;
   }
 
@@ -68,6 +73,7 @@ class ButtonSubsystem : public IMicroRosParticipant,
     uint8_t pressed = current & ~prev_state_;
     for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
       if ((pressed >> i) & 0x01) {
+        DEBUG_PRINTF("[BTN] press: button %d\n", i);
         if (callbacks_[i]) callbacks_[i]();
       }
     }
@@ -99,9 +105,11 @@ class ButtonSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     (void)executor;
     node_ = node;
-    return rclc_publisher_init_best_effort(
-               &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
-               setup_.topic_) == RCL_RET_OK;
+    bool ok = rclc_publisher_init_best_effort(
+                  &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
+                  setup_.topic_) == RCL_RET_OK;
+    DEBUG_PRINTF("[BTN] onCreate %s\n", ok ? "OK" : "FAIL");
+    return ok;
   }
 
   void onDestroy() override {

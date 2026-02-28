@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "DebugLog.h"
+
 namespace Subsystem {
 
 // Lifecycle Hooks
@@ -26,12 +28,16 @@ bool IntakeSubsystem::init() {
   state_ = IntakeState::IDLE;
   state_entry_time_ms_ = millis();
 
+  DEBUG_PRINTF("[INTAKE] init OK (pwm=%d dir=%d ir=%d)\n",
+               setup_.motor_pwm_pin_, setup_.motor_dir_pin_,
+               setup_.ir_sensor_pin_);
   return true;
 }
 
 void IntakeSubsystem::begin() {
   // Subsystem is now active and ready to accept commands!!!!
   transitionTo(IntakeState::IDLE);
+  DEBUG_PRINTLN("[INTAKE] begin -> IDLE");
 }
 
 void IntakeSubsystem::update() {
@@ -87,9 +93,11 @@ bool IntakeSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
           &state_pub_, node,
           ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, IntakeState),
           "/mcu_robot/intake/state") != RCL_RET_OK) {
+    DEBUG_PRINTLN("[INTAKE] onCreate FAIL: publisher init");
     return false;
   }
 
+  DEBUG_PRINTLN("[INTAKE] onCreate OK");
   return true;
 }
 
@@ -207,6 +215,10 @@ void IntakeSubsystem::updateStateMachine() {
 
 void IntakeSubsystem::transitionTo(IntakeState new_state) {
   if (state_ != new_state) {
+    static const char* const names[] = {"IDLE",   "SPINNING", "CAPTURED",
+                                        "JAMMED", "EJECTING", "FAULT"};
+    DEBUG_PRINTF("[INTAKE] %s -> %s\n", names[(int)state_],
+                 names[(int)new_state]);
     state_ = new_state;
     state_entry_time_ms_ = millis();
   }

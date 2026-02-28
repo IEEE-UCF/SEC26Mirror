@@ -24,6 +24,7 @@
 
 #include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
+#include "DebugLog.h"
 #include <std_msgs/msg/string.h>
 
 #include "robot/subsystems/ButtonSubsystem.h"
@@ -99,6 +100,7 @@ class DeploySubsystem : public IMicroRosParticipant,
           state_ = State::HOLD_DETECT;
           showDeployConfig();
           oledPrint("Hold 1s to deploy...");
+          DEBUG_PRINTLN("[DEPLOY] IDLE -> HOLD_DETECT");
         }
         break;
 
@@ -106,10 +108,12 @@ class DeploySubsystem : public IMicroRosParticipant,
         if (!btn_pressed) {
           state_ = State::IDLE;
           oledPrint("Deploy: released");
+          DEBUG_PRINTLN("[DEPLOY] HOLD_DETECT -> IDLE (released)");
         } else if (now - hold_start_ms_ >= HOLD_MS) {
           publishTrigger(false);
           state_ = State::DEPLOYING;
           deploying_ = true;
+          DEBUG_PRINTLN("[DEPLOY] HOLD_DETECT -> DEPLOYING (triggered)");
           current_phase_ = Phase::NONE;
           setAllLeds(0, 0, 32);  // All blue = starting
           oledPrint("Deploy: TRIGGERED");
@@ -132,6 +136,7 @@ class DeploySubsystem : public IMicroRosParticipant,
           deploying_ = false;
           state_ = State::IDLE;
           oledPrint("Deploy: CANCELLED");
+          DEBUG_PRINTLN("[DEPLOY] CANCEL_HOLD -> IDLE (cancelled)");
         }
         break;
     }
@@ -171,9 +176,11 @@ class DeploySubsystem : public IMicroRosParticipant,
     if (rclc_executor_add_subscription_with_context(
             executor, &sub_, &status_msg_, &DeploySubsystem::statusCallback,
             this, ON_NEW_DATA) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DEPLOY] onCreate FAIL: status subscription");
       return false;
     }
 
+    DEBUG_PRINTLN("[DEPLOY] onCreate OK");
     return true;
   }
 

@@ -107,8 +107,8 @@ constexpr uint8_t MUX_CH_BATTERY = 0;  // INA219 power sensor
 // ═══════════════════════════════════════════════════════════════════════════
 
 // PCA9685 #0 (I2C_ADDR_SERVO) — Servos
-//   Channel 0: Servo 1
-//   Channel 1: Servo 2
+//   Channel 0: Crank servo
+//   Channel 1: Keypad servo
 //   Channel 2: Servo 3
 //   Channel 3: Servo 4
 //   Channel 4: Servo 5
@@ -129,6 +129,9 @@ constexpr uint8_t MUX_CH_BATTERY = 0;  // INA219 power sensor
 // ═══════════════════════════════════════════════════════════════════════════
 //  Peripheral configuration constants
 // ═══════════════════════════════════════════════════════════════════════════
+
+constexpr uint8_t CRANK_SERVO_IDX = 0;   // PCA9685 #0, channel 0
+constexpr uint8_t KEYPAD_SERVO_IDX = 1;  // PCA9685 #0, channel 1
 
 constexpr uint8_t NUM_SERVOS = 8;
 constexpr uint8_t NUM_MOTORS = 8;

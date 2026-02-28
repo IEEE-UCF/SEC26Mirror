@@ -24,6 +24,10 @@
  *   /mcu_robot/motor/state        std_msgs/Float32Multi..  5 Hz
  *   /mcu_robot/encoders           std_msgs/Float32Multi.. 50 Hz
  *   /mcu_robot/uwb/ranging        mcu_msgs/UWBRanging     10 Hz
+ *   /mcu_robot/crank/state        std_msgs/UInt8           5 Hz
+ *   /mcu_robot/keypad/state       std_msgs/UInt8           5 Hz
+ *   /mcu_robot/deploy/trigger     std_msgs/String          on event
+ *   drive_base/status             mcu_msgs/DriveBase      20 Hz
  *
  * micro-ROS services:
  *   /mcu_robot/servo/set          mcu_msgs/srv/SetServo
@@ -34,6 +38,11 @@
  *   /mcu_robot/lcd/append         std_msgs/String
  *   /mcu_robot/lcd/scroll         std_msgs/Int8
  *   /mcu_robot/led/set_all        mcu_msgs/LedColor
+ *   /mcu_robot/crank/command      std_msgs/UInt8
+ *   /mcu_robot/keypad/command     std_msgs/UInt8
+ *   /mcu_robot/deploy/status      std_msgs/String
+ *   drive_base/command            mcu_msgs/DriveBase
+ *   drive_base/reset_pose         geometry_msgs/Pose
  */
 
 #include <Arduino.h>
@@ -41,7 +50,11 @@
 #include <TeensyThreads.h>
 #include <microros_manager_robot.h>
 
+// Debug logging (routed to SerialUSB1 when SERIAL_DEBUG is defined)
+#include "DebugLog.h"
+
 // Pin & address constants
+#include "robot/RobotConfig.h"
 #include "robot/RobotConstants.h"
 #include "robot/RobotPins.h"
 
@@ -68,9 +81,12 @@
 #include "robot/subsystems/OLEDSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
+#include "robot/subsystems/CrankSubsystem.h"
+#include "robot/subsystems/KeypadSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
 #include "robot/subsystems/ResetSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
+#include "robot/drive-base/DriveSubsystem.h"
 
 using namespace Subsystem;
 
@@ -159,6 +175,11 @@ static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
                                          PIN_SERVO_OE, NUM_SERVOS);
 static ServoSubsystem g_servo(g_servo_setup);
 
+// --- Crank subsystem (servo on PCA9685 #0, channel 0) ---
+static CrankSubsystemSetup g_crank_setup("crank_subsystem", &g_servo,
+                                          CRANK_SERVO_IDX);
+static CrankSubsystem g_crank(g_crank_setup);
+
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
                                                   Drivers::UWBMode::TAG,
@@ -188,6 +209,25 @@ static DeploySubsystem g_deploy(g_deploy_setup);
 static ResetSubsystemSetup g_reset_setup("reset_subsystem");
 static ResetSubsystem g_reset(g_reset_setup);
 
+// --- Drive subsystem (tank drive, uses motor + encoder + IMU) ---
+static Drive::TankDriveLocalizationSetup g_loc_setup(
+    "drive_localization",
+    RobotConfig::TRACK_WIDTH_M,
+    RobotConfig::WHEEL_DIAMETER_M,
+    RobotConfig::RAW_TICKS_PER_REVOLUTION,
+    RobotConfig::GEAR_RATIO,
+    RobotConfig::START_X, RobotConfig::START_Y, RobotConfig::START_THETA);
+
+static DriveSubsystemSetup g_drive_setup(
+    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup);
+
+static DriveSubsystem g_drive(g_drive_setup);
+
+// --- Keypad subsystem (servo on PCA9685 #0, channel 1 + drive press) ---
+static KeypadSubsystemSetup g_keypad_setup("keypad_subsystem", &g_servo,
+                                            KEYPAD_SERVO_IDX, &g_drive);
+static KeypadSubsystem g_keypad(g_keypad_setup);
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -202,43 +242,52 @@ static void pca_task(void*) {
 
 void setup() {
   Serial.begin(0);
+  DEBUG_BEGIN();
   if (CrashReport) {
     Serial.print(CrashReport);
+    DEBUG_PRINT(CrashReport);
     Serial.println();
     Serial.flush();
+    DEBUG_FLUSH();
   }
 
   Serial.println(
       PSTR("\r\nSEC26 Robot — All Subsystems Test (TeensyThreads)\r\n"));
+  DEBUG_PRINTLN("\r\n=== SEC26 All-Subsystems Test — Debug Console (SerialUSB1) ===\r\n");
 
   // 0. I2C bus mutexes
   I2CBus::initLocks();
+  DEBUG_PRINTLN("[INIT] I2C bus locks initialized");
 
   // 1. Mux reset (if wired)
   pinMode(PIN_MUX_RESET, OUTPUT);
   digitalWrite(PIN_MUX_RESET, HIGH);  // active-LOW reset — release
 
   // 2. Init subsystems
-  g_mr.init();
-  g_oled.init();
-  g_hb.init();
-  g_mux.init();
-  g_gpio.init();
-  g_battery.init();
-  g_sensor.init();
-  g_imu.init();
-  g_pca_mgr.init();
-  g_rc.init();
-  g_dip.init();
-  g_btn.init();
-  g_led.init();
-  g_servo.init();
-  g_motor.init();
-  g_encoder_sub.init();
-  g_deploy.init();
+  DEBUG_PRINTLN("[INIT] --- Subsystem initialization ---");
+  g_mr.init();       DEBUG_PRINTLN("[INIT] MicrorosManager OK");
+  g_oled.init();     DEBUG_PRINTLN("[INIT] OLED OK");
+  g_hb.init();       DEBUG_PRINTLN("[INIT] Heartbeat OK");
+  g_mux.init();      DEBUG_PRINTLN("[INIT] I2C Mux OK");
+  g_gpio.init();     DEBUG_PRINTLN("[INIT] GPIO Expander OK");
+  g_battery.init();  DEBUG_PRINTLN("[INIT] Battery OK");
+  g_sensor.init();   DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
+  g_imu.init();      DEBUG_PRINTLN("[INIT] IMU OK");
+  g_pca_mgr.init();  DEBUG_PRINTLN("[INIT] PCA9685 Manager OK");
+  g_rc.init();       DEBUG_PRINTLN("[INIT] RC Receiver OK");
+  g_dip.init();      DEBUG_PRINTLN("[INIT] DIP Switch OK");
+  g_btn.init();      DEBUG_PRINTLN("[INIT] Buttons OK");
+  g_led.init();      DEBUG_PRINTLN("[INIT] LEDs OK");
+  g_servo.init();    DEBUG_PRINTLN("[INIT] Servo OK");
+  g_crank.init();        DEBUG_PRINTLN("[INIT] Crank OK");
+  g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
+  g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
+  g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
   SPI.begin();
-  g_uwb.init();
+  g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
   g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+  g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
+  g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
 
   // 2a. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
@@ -253,6 +302,7 @@ void setup() {
   g_battery.setOLED(&g_oled);
 
   // 3. Register micro-ROS participants
+  DEBUG_PRINTLN("[INIT] --- Registering micro-ROS participants ---");
   g_mr.registerParticipant(&g_oled);
   g_mr.registerParticipant(&g_hb);
   g_mr.registerParticipant(&g_battery);
@@ -263,19 +313,27 @@ void setup() {
   g_mr.registerParticipant(&g_btn);
   g_mr.registerParticipant(&g_led);
   g_mr.registerParticipant(&g_servo);
+  g_mr.registerParticipant(&g_crank);
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_encoder_sub);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
+  g_mr.registerParticipant(&g_drive);
+  g_mr.registerParticipant(&g_keypad);
 
   // 3a. Register subsystems as reset targets
   g_reset.addTarget(&g_motor);
   g_reset.addTarget(&g_servo);
   g_reset.addTarget(&g_encoder_sub);
   g_reset.addTarget(&g_led);
+  g_reset.addTarget(&g_drive);
+  g_reset.addTarget(&g_crank);
+  g_reset.addTarget(&g_keypad);
+  DEBUG_PRINTF("[INIT] Registered %d participants\n", 18);
 
   // 4. Start threaded tasks
+  DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
   g_mr.beginThreaded(8192, 4);       // ROS agent
   g_imu.beginThreaded(2048, 3, 10);  // 50 Hz
@@ -292,10 +350,37 @@ void setup() {
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
   g_deploy.beginThreaded(1024, 1, 20);         // 50 Hz deploy button
+  g_crank.beginThreaded(1024, 1, 50);          // 20 Hz crank
+  g_keypad.beginThreaded(1024, 1, 50);         // 20 Hz keypad
+  g_drive.beginThreaded(4096, 3, 20);          // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
+  DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
+
+static uint32_t s_last_debug_ms = 0;
+static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;
 
 void loop() {
   g_rc.update();
+
+  uint32_t now = millis();
+  if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
+    s_last_debug_ms = now;
+
+    auto imu_data = g_imu_driver.getData();
+
+    DEBUG_PRINTF("[%lu] === Periodic Status ===\n", now);
+    DEBUG_PRINTF("  uROS state : %s\n", g_mr.isConnected() ? "CONNECTED" : "WAITING");
+    DEBUG_PRINTF("  Battery    : %.2fV  %.0fmA  %.0fmW\n",
+                 g_power_driver.getVoltage(), g_power_driver.getCurrentmA(),
+                 g_power_driver.getPowermW());
+    DEBUG_PRINTF("  IMU quat   : w=%.2f x=%.2f y=%.2f z=%.2f  yaw=%.1f\n",
+                 imu_data.qw, imu_data.qx, imu_data.qy, imu_data.qz,
+                 imu_data.yaw);
+    DEBUG_PRINTF("  DIP        : 0x%02X\n", g_dip.getState());
+    DEBUG_PRINTF("  Buttons    : 0x%02X\n", g_btn.getState());
+    DEBUG_PRINTF("  Uptime     : %lus\n", now / 1000);
+  }
+
   delay(5);
 }

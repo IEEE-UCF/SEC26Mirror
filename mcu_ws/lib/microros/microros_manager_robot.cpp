@@ -1,6 +1,7 @@
 #include "microros_manager_robot.h"
 
 #include <Arduino.h>
+#include "DebugLog.h"
 #include <micro_ros_utilities/string_utilities.h>
 #include <micro_ros_utilities/type_utilities.h>
 #include <uxr/client/util/time.h>
@@ -14,29 +15,36 @@ namespace Subsystem {
 MicrorosManager* MicrorosManager::s_instance_ = nullptr;
 
 bool MicrorosManager::create_entities() {
+  DEBUG_PRINTLN("[uROS] Creating entities...");
   allocator_ = rcl_get_default_allocator();
   if (rclc_support_init(&support_, 0, NULL, &allocator_) != RCL_RET_OK) {
+    DEBUG_PRINTLN("[uROS] FAIL: rclc_support_init");
     return false;
   }
   if (rclc_node_init_default(&node_, "robot_manager", "", &support_) !=
       RCL_RET_OK) {
+    DEBUG_PRINTLN("[uROS] FAIL: rclc_node_init_default");
     return false;
   }
   executor_ = rclc_executor_get_zero_initialized_executor();
   // Reserve enough executor handles for all subscription/service callbacks.
   // Publishers do not consume handles — only subscriptions, services, and
-  // timers do.  10 handles supports the current set of subsystems with room
+  // timers do.  16 handles supports the current set of subsystems with room
   // for growth.
-  if (rclc_executor_init(&executor_, &support_.context, 10, &allocator_) !=
+  if (rclc_executor_init(&executor_, &support_.context, 16, &allocator_) !=
       RCL_RET_OK) {
+    DEBUG_PRINTLN("[uROS] FAIL: rclc_executor_init");
     return false;
   }
+  DEBUG_PRINTLN("[uROS] Node + executor created");
   // Let registered participants create their pubs/subs
   for (size_t i = 0; i < participants_count_; ++i) {
     if (participants_[i] && !participants_[i]->onCreate(&node_, &executor_)) {
       last_failed_participant_ = (int)i;
+      DEBUG_PRINTF("[uROS] FAIL: participant[%d] onCreate failed\n", (int)i);
       return false;
     }
+    DEBUG_PRINTF("[uROS] participant[%d] onCreate OK\n", (int)i);
   }
   last_failed_participant_ = -1;
 
@@ -45,13 +53,17 @@ bool MicrorosManager::create_entities() {
           &debug_pub_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
           "/mcu_robot/debug") != RCL_RET_OK) {
+    DEBUG_PRINTLN("[uROS] FAIL: debug publisher init");
     return false;
   }
 
+  DEBUG_PRINTF("[uROS] All %d participants created successfully\n",
+               (int)participants_count_);
   return true;
 }
 
 void MicrorosManager::destroy_entities() {
+  DEBUG_PRINTLN("[uROS] Destroying entities...");
   rmw_context_t* rmw_context = rcl_context_get_rmw_context(&support_.context);
   (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
   // Do NOT call rcl_node_fini — it queues a DELETE_PARTICIPANT XRCE message
@@ -82,7 +94,9 @@ bool MicrorosManager::init() {
 
 void MicrorosManager::begin() {
   s_instance_ = this;
+  DEBUG_PRINTLN("[uROS] Setting up serial transport...");
   set_microros_transports();
+  DEBUG_PRINTLN("[uROS] Transport ready — waiting for agent");
 }
 
 void MicrorosManager::update() {
@@ -92,6 +106,7 @@ void MicrorosManager::update() {
   std::lock_guard<std::mutex> guard(mutex_);
 #endif
 
+  State prev_state = state_;
   switch (state_) {
     case WAITING_AGENT:
       EXECUTE_EVERY_N_MS(500,
@@ -120,6 +135,13 @@ void MicrorosManager::update() {
       break;
     default:
       break;
+  }
+  if (state_ != prev_state) {
+    static const char* const state_names[] = {
+        "WAITING_AGENT", "AGENT_AVAILABLE", "AGENT_CONNECTED",
+        "AGENT_DISCONNECTED"};
+    DEBUG_PRINTF("[uROS] %s -> %s\n", state_names[prev_state],
+                 state_names[state_]);
   }
 }
 

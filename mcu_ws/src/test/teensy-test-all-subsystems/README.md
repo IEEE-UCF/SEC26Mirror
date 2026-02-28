@@ -68,6 +68,8 @@ LEDs flash green on startup. All topics and services become available once the m
 | `/mcu_robot/servo/state` | `std_msgs/msg/Float32MultiArray` | 5 Hz | Current servo angles (deg) |
 | `/mcu_robot/motor/state` | `std_msgs/msg/Float32MultiArray` | 5 Hz | Current motor speeds (-1..1) |
 | `mcu_uwb/ranging` | `mcu_msgs/msg/UWBRanging` | 10 Hz | UWB distance measurements to beacons |
+| `/mcu_robot/crank/state` | `std_msgs/msg/UInt8` | 5 Hz | Crank state (0=IDLE, 1=CRANKING, 2=RESETTING) |
+| `/mcu_robot/deploy/trigger` | `std_msgs/msg/String` | on event | Deploy trigger command |
 
 ### Services
 
@@ -83,6 +85,8 @@ LEDs flash green on startup. All topics and services become available once the m
 | `/mcu_robot/lcd/append` | `std_msgs/msg/String` | Append text to OLED (newlines split into lines) |
 | `/mcu_robot/lcd/scroll` | `std_msgs/msg/Int8` | Scroll OLED display (-1=up, 1=down) |
 | `/mcu_robot/led/set_all` | `mcu_msgs/msg/LedColor` | Set all WS2812B LEDs to RGB color |
+| `/mcu_robot/crank/command` | `std_msgs/msg/UInt8` | Crank command (1=SPIN, 2=RESET) |
+| `/mcu_robot/deploy/status` | `std_msgs/msg/String` | Deploy status feedback |
 
 ## Testing Commands
 
@@ -99,7 +103,7 @@ source install/setup.bash
 ### Verify Everything Is Up
 
 ```bash
-# List all topics (expect 10 topics under /mcu_robot/ + 1 under mcu_uwb/)
+# List all topics (expect 12 topics under /mcu_robot/ + 1 under mcu_uwb/)
 ros2 topic list | grep -E "mcu_robot|mcu_uwb"
 
 # List all services (expect 2 services)
@@ -278,6 +282,23 @@ ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor "{r: 32, g: 3
 ros2 topic pub --once /mcu_robot/led/set_all mcu_msgs/msg/LedColor "{r: 0, g: 0, b: 0}"
 ```
 
+### Crank
+
+The crank servo is on PCA9685 #0, channel 0. It does **not** move at startup — an explicit command is required.
+
+```bash
+# Monitor crank state (0=IDLE, 1=CRANKING, 2=RESETTING)
+ros2 topic echo /mcu_robot/crank/state
+
+# Spin crank (servo moves 0° → 180°, holds CRANKING for ~1.5s, returns to IDLE)
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 1}"
+
+# Reset crank (servo moves 180° → 0°, holds RESETTING for ~1.5s, returns to IDLE)
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 2}"
+```
+
+---
+
 ## Quick Sanity Check (copy-paste block)
 
 Run these in sequence to verify all subsystems:
@@ -321,6 +342,11 @@ ros2 topic echo mcu_uwb/ranging --once
 # 11. Buttons and DIP switches
 ros2 topic echo /mcu_robot/buttons --once
 ros2 topic echo /mcu_robot/dip_switches --once
+
+# 12. Crank spin test (moves servo 0 to 180 deg)
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 1}"
+sleep 2
+ros2 topic pub --once /mcu_robot/crank/command std_msgs/msg/UInt8 "{data: 2}"
 ```
 
 ## Thread Configuration
@@ -340,6 +366,8 @@ ros2 topic echo /mcu_robot/dip_switches --once
 | 1 | Buttons | 20ms (50 Hz) | 1024 |
 | 1 | LEDs | 50ms (20 Hz) | 1024 |
 | 1 | Heartbeat | 200ms (5 Hz) | 1024 |
+| 1 | Deploy | 20ms (50 Hz) | 1024 |
+| 1 | Crank | 50ms (20 Hz) | 1024 |
 | — | PCA9685 PWM flush | 20ms | 1024 |
 
 ## Troubleshooting

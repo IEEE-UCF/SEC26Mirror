@@ -44,6 +44,7 @@
 #include "robot/subsystems/OLEDSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
+#include "robot/subsystems/CrankSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
@@ -143,6 +144,11 @@ static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
                                          PIN_SERVO_OE, NUM_SERVOS);
 static ServoSubsystem g_servo(g_servo_setup);
 
+// --- Crank subsystem (servo on PCA9685 #0, channel 0) ---
+static CrankSubsystemSetup g_crank_setup("crank_subsystem", &g_servo,
+                                          CRANK_SERVO_IDX);
+static CrankSubsystem g_crank(g_crank_setup);
+
 // --- Motor manager subsystem (PCA9685 #1) ---
 static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
                                                 PIN_MOTOR_OE, NUM_MOTORS);
@@ -234,6 +240,7 @@ void setup() {
   g_btn.init();          DEBUG_PRINTLN("[INIT] Buttons OK");
   g_led.init();          DEBUG_PRINTLN("[INIT] LEDs OK");
   g_servo.init();        DEBUG_PRINTLN("[INIT] Servo OK");
+  g_crank.init();
   g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
   g_intake.init();       DEBUG_PRINTLN("[INIT] Intake OK");
   g_bridge.init();       DEBUG_PRINTLN("[INIT] Intake Bridge OK");
@@ -268,6 +275,7 @@ void setup() {
   g_mr.registerParticipant(&g_btn);
   g_mr.registerParticipant(&g_led);
   g_mr.registerParticipant(&g_servo);
+  g_mr.registerParticipant(&g_crank);
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_intake);
@@ -295,6 +303,7 @@ void setup() {
   g_arm.beginThreaded(1024, 2, 20);       // 50 Hz arm
   g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   g_deploy.beginThreaded(1024, 1, 20);    // 50 Hz deploy button
+  g_crank.beginThreaded(1024, 1, 50);     // 20 Hz crank
   // g_drive.beginThreaded(2048, 3, 20);      // TODO: uncomment when configured
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");

@@ -29,9 +29,9 @@ bool MicrorosManager::create_entities() {
   executor_ = rclc_executor_get_zero_initialized_executor();
   // Reserve enough executor handles for all subscription/service callbacks.
   // Publishers do not consume handles — only subscriptions, services, and
-  // timers do.  10 handles supports the current set of subsystems with room
+  // timers do.  14 handles supports the current set of subsystems with room
   // for growth.
-  if (rclc_executor_init(&executor_, &support_.context, 10, &allocator_) !=
+  if (rclc_executor_init(&executor_, &support_.context, 14, &allocator_) !=
       RCL_RET_OK) {
     DEBUG_PRINTLN("[uROS] FAIL: rclc_executor_init");
     return false;

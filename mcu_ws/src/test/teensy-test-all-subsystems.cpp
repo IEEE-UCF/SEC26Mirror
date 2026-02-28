@@ -23,6 +23,8 @@
  *   /mcu_robot/servo/state        std_msgs/Float32Multi..  5 Hz
  *   /mcu_robot/motor/state        std_msgs/Float32Multi..  5 Hz
  *   /mcu_robot/uwb/ranging        mcu_msgs/UWBRanging     10 Hz
+ *   /mcu_robot/crank/state        std_msgs/UInt8           5 Hz
+ *   /mcu_robot/deploy/trigger     std_msgs/String          on event
  *
  * micro-ROS services:
  *   /mcu_robot/servo/set          mcu_msgs/srv/SetServo
@@ -32,6 +34,8 @@
  *   /mcu_robot/lcd/append         std_msgs/String
  *   /mcu_robot/lcd/scroll         std_msgs/Int8
  *   /mcu_robot/led/set_all        mcu_msgs/LedColor
+ *   /mcu_robot/crank/command      std_msgs/UInt8
+ *   /mcu_robot/deploy/status      std_msgs/String
  */
 
 #include <Arduino.h>
@@ -68,6 +72,7 @@
 #include "robot/subsystems/OLEDSubsystem.h"
 #include "robot/subsystems/RCSubsystem.h"
 #include "robot/subsystems/SensorSubsystem.h"
+#include "robot/subsystems/CrankSubsystem.h"
 #include "robot/subsystems/ServoSubsystem.h"
 #include "robot/subsystems/UWBSubsystem.h"
 
@@ -158,6 +163,11 @@ static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
                                          PIN_SERVO_OE, NUM_SERVOS);
 static ServoSubsystem g_servo(g_servo_setup);
 
+// --- Crank subsystem (servo on PCA9685 #0, channel 0) ---
+static CrankSubsystemSetup g_crank_setup("crank_subsystem", &g_servo,
+                                          CRANK_SERVO_IDX);
+static CrankSubsystem g_crank(g_crank_setup);
+
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
                                                   Drivers::UWBMode::TAG,
@@ -228,6 +238,7 @@ void setup() {
   g_btn.init();      DEBUG_PRINTLN("[INIT] Buttons OK");
   g_led.init();      DEBUG_PRINTLN("[INIT] LEDs OK");
   g_servo.init();    DEBUG_PRINTLN("[INIT] Servo OK");
+  g_crank.init();
   g_motor.init();    DEBUG_PRINTLN("[INIT] Motor Manager OK");
   g_deploy.init();   DEBUG_PRINTLN("[INIT] Deploy OK");
   SPI.begin();
@@ -258,6 +269,7 @@ void setup() {
   g_mr.registerParticipant(&g_btn);
   g_mr.registerParticipant(&g_led);
   g_mr.registerParticipant(&g_servo);
+  g_mr.registerParticipant(&g_crank);
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
@@ -280,6 +292,7 @@ void setup() {
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
   g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
   g_deploy.beginThreaded(1024, 1, 20);         // 50 Hz deploy button
+  g_crank.beginThreaded(1024, 1, 50);          // 20 Hz crank
   threads.addThread(pca_task, nullptr, 1024);  // PWM flush
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }

@@ -39,29 +39,29 @@ void UWBSimulation::topic_callback(const gz::msgs::Odometry &_msg) {
 void UWBSimulation::load_config() {
   RCLCPP_INFO(this->get_logger(), "Bypassing XML. Loading anchors directly.");
 
-  // Anchor 10
+  // Anchor 10: bottom-left corner
   geometry_msgs::msg::Point p10;
-  p10.set__x(0.0);
-  p10.set__y(0.0);
+  p10.set__x(-7.5);
+  p10.set__y(-3.5);
   p10.set__z(0.15);
   anchorPoseMap[10] = p10;
-  RCLCPP_INFO(this->get_logger(), "load anchor id: 10 position: 0.0 0.0 0.15");
+  RCLCPP_INFO(this->get_logger(), "load anchor id: 10 position: -7.5 -3.5 0.15");
 
-  // Anchor 11
+  // Anchor 11: top-left corner
   geometry_msgs::msg::Point p11;
-  p11.set__x(3.0);
-  p11.set__y(3.0);
+  p11.set__x(-7.5);
+  p11.set__y(3.5);
   p11.set__z(0.15);
   anchorPoseMap[11] = p11;
-  RCLCPP_INFO(this->get_logger(), "load anchor id: 11 position: 3.0 3.0 0.15");
+  RCLCPP_INFO(this->get_logger(), "load anchor id: 11 position: -7.5 3.5 0.15");
 
-  // Anchor 13
+  // Anchor 13: right side center
   geometry_msgs::msg::Point p13;
-  p13.set__x(3.0);
+  p13.set__x(7.5);
   p13.set__y(0.0);
   p13.set__z(0.15);
   anchorPoseMap[13] = p13;
-  RCLCPP_INFO(this->get_logger(), "load anchor id: 13 position: 3.0 0.0 0.15");
+  RCLCPP_INFO(this->get_logger(), "load anchor id: 13 position: 7.5 0.0 0.15");
 }
 
 /*

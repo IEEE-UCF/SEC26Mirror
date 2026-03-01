@@ -40,7 +40,6 @@
 #include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/DipSwitchSubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
-#include "robot/subsystems/IntakeBridgeSubsystem.h"
 #include "robot/subsystems/IntakeSubsystem.h"
 #include "robot/subsystems/LEDSubsystem.h"
 #include "robot/subsystems/EncoderSubsystem.h"
@@ -178,19 +177,14 @@ static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
 static UWBSubsystem g_uwb(g_uwb_setup);
 
-// --- Intake subsystem ---
-static IntakeSubsystemSetup g_intake_setup("intake_subsystem", /*pwm*/ 3,
-                                           /*dir*/ 4, /*ir*/ 5);
+// --- Intake subsystem (combined linear rail + spinning motor) ---
+// TODO: confirm motor indices, encoder channel, and limit switch button
+// indices with electrical team
+static IntakeSubsystemSetup g_intake_setup(
+    "intake_subsystem", &g_motor, &g_encoder_sub, &g_btn,
+    /*rail_motor_idx*/ 2, /*intake_motor_idx*/ 3, /*rail_encoder_idx*/ 2,
+    /*retract_limit_btn*/ 2, /*extend_limit_btn*/ 3);
 static IntakeSubsystem g_intake(g_intake_setup);
-
-// --- Intake bridge subsystem (gear-and-rack for pressure plate) ---
-// TODO: confirm rack motor, home switch, and TOF pin numbers with electrical
-static IntakeBridgeSubsystemSetup g_bridge_setup(
-    "intake_bridge_subsystem", /*rack_pwm*/ 6, /*rack_dir*/ 7,
-    /*home_switch*/ 9, /*tof_xshut*/ 8, /*tof_addr*/ 0x30,
-    /*extend_timeout_ms*/ 3000, /*retract_timeout_ms*/ 3000,
-    /*duck_detect_threshold_mm*/ 50, /*motor_speed*/ 200);
-static IntakeBridgeSubsystem g_bridge(g_bridge_setup);
 
 // --- Deploy subsystem (button-triggered deployment) ---
 static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
@@ -344,7 +338,6 @@ void setup() {
   g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
   g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
   g_intake.init();       DEBUG_PRINTLN("[INIT] Intake OK");
-  g_bridge.init();       DEBUG_PRINTLN("[INIT] Intake Bridge OK");
   g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
 
   // Conditional UWB init — DIP 2 ON = UWB enabled
@@ -395,7 +388,6 @@ void setup() {
   g_mr.registerParticipant(&g_encoder_sub);
   if (uwb_enabled) g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_intake);
-  g_mr.registerParticipant(&g_bridge);
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
   g_mr.registerParticipant(&g_drive);
@@ -407,12 +399,11 @@ void setup() {
   g_reset.addTarget(&g_encoder_sub);
   g_reset.addTarget(&g_arm);
   g_reset.addTarget(&g_intake);
-  g_reset.addTarget(&g_bridge);
   g_reset.addTarget(&g_led);
   g_reset.addTarget(&g_drive);
   g_reset.addTarget(&g_crank);
   g_reset.addTarget(&g_keypad);
-  DEBUG_PRINTF("[INIT] Registered %d participants\n", 21);
+  DEBUG_PRINTF("[INIT] Registered %d participants\n", 20);
 
   // 4. Start threaded tasks
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");

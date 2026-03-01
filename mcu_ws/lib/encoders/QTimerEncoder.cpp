@@ -64,8 +64,8 @@ void QTimerEncoder::configureIOMUX() {
   // ── Pins 7-8: ALT1 = XBAR1_INOUTxx ──────────────────────────────────
   CORE_PIN7_CONFIG = 1;  // Pin 7 -> XBAR1_INOUT15
   CORE_PIN7_PADCONFIG = FG_PAD_CTL;
-  CORE_PIN8_CONFIG = 1;  // Pin 8 -> XBAR1_INOUT14
-  CORE_PIN8_PADCONFIG = FG_PAD_CTL;
+  // CORE_PIN8_CONFIG = 1;  // Pin 8 -> XBAR1_INOUT14 — DISABLED
+  // CORE_PIN8_PADCONFIG = FG_PAD_CTL;
   // ── Pin 9: ALT1 = direct QTIMER4_TIMER2 ─────────────────────────────
   CORE_PIN9_CONFIG = 1;
   CORE_PIN9_PADCONFIG = FG_PAD_CTL;
@@ -76,7 +76,7 @@ void QTimerEncoder::configureIOMUX() {
   IOMUXC_XBAR1_IN08_SELECT_INPUT = 0;  // GPIO_EMC_06
   IOMUXC_XBAR1_IN17_SELECT_INPUT = 0;  // GPIO_EMC_08
                                        // B-port pads: value 1 selects GPIO_B1_xx for the XBAR input.
-  IOMUXC_XBAR1_IN14_SELECT_INPUT = 1;  // GPIO_B1_00
+  // IOMUXC_XBAR1_IN14_SELECT_INPUT = 1;  // GPIO_B1_00 — DISABLED (Pin 8)
   IOMUXC_XBAR1_IN15_SELECT_INPUT = 1;  // GPIO_B1_01
 }
 // ═══════════════════════════════════════════════════════════════════════════
@@ -88,13 +88,13 @@ void QTimerEncoder::configureXBAR() {
   xbar_connect(XBARA1_IN_IOMUX_XBAR_INOUT08, XBARA1_OUT_QTIMER3_TIMER2);
   xbar_connect(XBARA1_IN_IOMUX_XBAR_INOUT17, XBARA1_OUT_QTIMER3_TIMER3);
   xbar_connect(XBARA1_IN_IOMUX_XBAR_INOUT15, XBARA1_OUT_QTIMER4_TIMER0);
-  xbar_connect(XBARA1_IN_IOMUX_XBAR_INOUT14, XBARA1_OUT_QTIMER4_TIMER3);
+  // xbar_connect(XBARA1_IN_IOMUX_XBAR_INOUT14, XBARA1_OUT_QTIMER4_TIMER3);  // Pin 8 — DISABLED
   IOMUXC_GPR_GPR6 &= ~(IOMUXC_GPR_GPR6_IOMUXC_XBAR_DIR_SEL_6 | IOMUXC_GPR_GPR6_IOMUXC_XBAR_DIR_SEL_7 |
                      IOMUXC_GPR_GPR6_IOMUXC_XBAR_DIR_SEL_8 | IOMUXC_GPR_GPR6_IOMUXC_XBAR_DIR_SEL_17 |
-                     IOMUXC_GPR_GPR6_IOMUXC_XBAR_DIR_SEL_15 | IOMUXC_GPR_GPR6_IOMUXC_XBAR_DIR_SEL_14);
+                     IOMUXC_GPR_GPR6_IOMUXC_XBAR_DIR_SEL_15);
   IOMUXC_GPR_GPR6 |= IOMUXC_GPR_GPR6_QTIMER3_TRM0_INPUT_SEL | IOMUXC_GPR_GPR6_QTIMER3_TRM1_INPUT_SEL | 
                      IOMUXC_GPR_GPR6_QTIMER3_TRM2_INPUT_SEL | IOMUXC_GPR_GPR6_QTIMER3_TRM3_INPUT_SEL |
-                     IOMUXC_GPR_GPR6_QTIMER4_TRM0_INPUT_SEL | IOMUXC_GPR_GPR6_QTIMER4_TRM3_INPUT_SEL;
+                     IOMUXC_GPR_GPR6_QTIMER4_TRM0_INPUT_SEL;
 }
 // ═══════════════════════════════════════════════════════════════════════════
 //  QTimer — configure each channel to count rising edges on external input
@@ -136,11 +136,11 @@ void QTimerEncoder::configureQTimers() {
   TMR4_SCTRL1 = TMR_SCTRL_IPS;
   TMR4_FILT1 = TMR_FILT_FILT_PER(FG_FILT_PERIOD);
   TMR4_CTRL1 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(0);
-  // ── QTimer4 Channel 2 (Pin 8, via XBAR) ──────────────────────────────
-  TMR4_CNTR2 = 0;
-  TMR4_SCTRL2 = TMR_SCTRL_IPS;
-  TMR4_FILT2 = TMR_FILT_FILT_PER(FG_FILT_PERIOD);
-  TMR4_CTRL2 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(3);
+  // ── QTimer4 Channel 2 (Pin 8, via XBAR) — DISABLED ──────────────────
+  // TMR4_CNTR2 = 0;
+  // TMR4_SCTRL2 = TMR_SCTRL_IPS;
+  // TMR4_FILT2 = TMR_FILT_FILT_PER(FG_FILT_PERIOD);
+  // TMR4_CTRL2 = TMR_CTRL_CM(1) | TMR_CTRL_PCS(3);
   // ── QTimer4 Channel 3 (Pin 9, direct) ────────────────────────────────
   TMR4_CNTR3 = 0;
   TMR4_SCTRL3 = TMR_SCTRL_IPS;
@@ -165,7 +165,7 @@ void QTimerEncoder::configureQTimers() {
   channels_[7].dir_reg = &TMR4_CTRL3;
   // ── Enable timer channels ────────────────────────────────────────────
   TMR3_ENBL |= 0b1111;  // QTimer3 channels 0-3
-  TMR4_ENBL |= 0b1111;  // QTimer4 channels 0-3
+  TMR4_ENBL |= 0b1011;  // QTimer4 channels 0,1,3 (skip ch2 = pin 8)
 }
 // ═══════════════════════════════════════════════════════════════════════════
 //  Public API

@@ -142,6 +142,10 @@ void MicrorosManager::update() {
         "AGENT_DISCONNECTED"};
     DEBUG_PRINTF("[uROS] %s -> %s\n", state_names[prev_state],
                  state_names[state_]);
+    if (state_cb_) {
+      if (state_ == AGENT_CONNECTED) state_cb_(true);
+      else if (state_ == AGENT_DISCONNECTED) state_cb_(false);
+    }
   }
 }
 

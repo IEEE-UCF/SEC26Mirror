@@ -383,6 +383,11 @@ void setup() {
   g_oled.appendText("Subsystems OK");
   g_oled.appendText("Waiting for uROS...");
 
+  // 2b2. Update OLED when micro-ROS connects/disconnects
+  g_mr.setStateCallback([](bool connected) {
+    g_oled.appendText(connected ? "uROS CONNECTED" : "uROS DISCONNECTED");
+  });
+
   // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 

@@ -56,13 +56,16 @@ log = logging.getLogger("deploy")
 
 def write_status(phase: str, message: str = "", progress: str = ""):
     """Write current status to the IPC file for secbot_deploy to read."""
-    DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
-    with open(STATUS_FILE, "w") as f:
-        f.write(f"phase={phase}\n")
-        if message:
-            f.write(f"message={message}\n")
-        if progress:
-            f.write(f"progress={progress}\n")
+    try:
+        DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
+        with open(STATUS_FILE, "w") as f:
+            f.write(f"phase={phase}\n")
+            if message:
+                f.write(f"message={message}\n")
+            if progress:
+                f.write(f"progress={progress}\n")
+    except OSError as e:
+        log.warning("[STATUS] Failed to write status file: %s", e)
 
 
 def run(cmd: str, cwd: str | None = None, check: bool = True,
@@ -167,7 +170,7 @@ def resolve_online(config: dict) -> bool:
     return online
 
 
-def is_esp32_reachable(ip: str, port: int = 3232, timeout: float = 2.0) -> bool:
+def is_esp32_reachable(ip: str, timeout: float = 2.0) -> bool:
     """Check if an ESP32 is reachable via ICMP ping."""
     try:
         result = subprocess.run(
@@ -208,7 +211,10 @@ def get_last_deployed_sha() -> str | None:
 
 def save_deployed_sha(sha: str):
     """Save the current HEAD as the last deployed SHA."""
-    SHA_FILE.write_text(sha + "\n")
+    try:
+        SHA_FILE.write_text(sha + "\n")
+    except OSError as e:
+        log.warning("[SHA] Failed to save deployed SHA: %s", e)
 
 
 def parse_trigger(content: str) -> dict:
@@ -262,10 +268,14 @@ def load_firmware_hashes() -> dict:
 
 def save_firmware_hash(env_name: str, fw_hash: str):
     """Save a firmware hash after successful flash."""
-    hashes = load_firmware_hashes()
-    hashes[env_name] = fw_hash
-    DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
-    FIRMWARE_HASHES_FILE.write_text(json.dumps(hashes, indent=2) + "\n")
+    try:
+        hashes = load_firmware_hashes()
+        hashes[env_name] = fw_hash
+        DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
+        FIRMWARE_HASHES_FILE.write_text(json.dumps(hashes, indent=2) + "\n")
+    except OSError as e:
+        log.warning("[HASH] Failed to save firmware hash for %s: %s",
+                    env_name, e)
 
 
 def firmware_changed(env_name: str, firmware_path: str) -> bool:
@@ -295,10 +305,11 @@ def firmware_changed(env_name: str, firmware_path: str) -> bool:
 # ─── Pipeline steps ───────────────────────────────────────────────────────────
 
 
-def step_git_pull(config: dict) -> tuple[bool, str | None]:
+def step_git_pull(config: dict) -> tuple[bool, str | None, bool]:
     """Step 1: Git pull latest code.
 
-    Returns (success, original_branch) so the caller can restore afterward.
+    Returns (success, original_branch, stash_created) so the caller can
+    restore afterward and only pop if a stash was actually created.
     """
     write_status("git_pull", "Checking for updates...")
 
@@ -309,14 +320,14 @@ def step_git_pull(config: dict) -> tuple[bool, str | None]:
     if not online:
         log.info("[GIT] Offline — skipping git pull, using local code")
         write_status("git_pull", "Offline — using local code")
-        return True, original_branch
+        return True, original_branch, False
 
     try:
         run("git config --global --add safe.directory /home/ieee/SEC26",
             cwd=str(REPO_DIR), check=False)
 
         # Fetch first to check if there are remote changes before stashing
-        run("git fetch --all", cwd=str(REPO_DIR))
+        run("git fetch --all", cwd=str(REPO_DIR), timeout=60)
 
         # Compare local HEAD with remote branch tip
         local_sha = get_current_sha()
@@ -333,7 +344,7 @@ def step_git_pull(config: dict) -> tuple[bool, str | None]:
         if already_on_branch and remote_sha and local_sha == remote_sha:
             log.info("[GIT] Already on %s at %s — no remote changes, skipping pull",
                      branch, local_sha[:8])
-            return True, original_branch
+            return True, original_branch, False
 
         if remote_sha:
             log.info("[GIT] Updating: %s -> %s",
@@ -341,37 +352,86 @@ def step_git_pull(config: dict) -> tuple[bool, str | None]:
                      remote_sha[:8])
         write_status("git_pull", "Pulling latest code...")
 
+        # Clean up any leftover merge conflict state before stashing
+        merge_msg = REPO_DIR / ".git" / "MERGE_MSG"
+        if merge_msg.exists():
+            log.warning("[GIT] Detected leftover merge state — cleaning up")
+            run("git checkout -- .", cwd=str(REPO_DIR), check=False)
+
+        # Count stash entries before/after to know if stash actually created
+        stash_before = subprocess.run(
+            ["git", "stash", "list"],
+            capture_output=True, text=True, cwd=str(REPO_DIR),
+        )
+        count_before = len(stash_before.stdout.strip().splitlines()) if stash_before.stdout.strip() else 0
+
         log.info("[GIT] Stashing local changes...")
         run("git stash --include-untracked",
             cwd=str(REPO_DIR), check=False)
+
+        stash_after = subprocess.run(
+            ["git", "stash", "list"],
+            capture_output=True, text=True, cwd=str(REPO_DIR),
+        )
+        count_after = len(stash_after.stdout.strip().splitlines()) if stash_after.stdout.strip() else 0
+        stash_created = count_after > count_before
+
+        if stash_created:
+            log.info("[GIT] Stash created (entries: %d -> %d)",
+                     count_before, count_after)
+        else:
+            log.info("[GIT] No local changes to stash")
 
         log.info("[GIT] Checking out %s...", branch)
         run(f"git checkout {branch}", cwd=str(REPO_DIR))
 
         run(f"git reset --hard origin/{branch}", cwd=str(REPO_DIR))
         run("git submodule update --init --recursive", cwd=str(REPO_DIR))
-        return True, original_branch
-    except subprocess.CalledProcessError as e:
-        log.error("[GIT] Failed: %s", e.stderr[:200] if e.stderr else str(e))
+        return True, original_branch, stash_created
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        stderr = getattr(e, "stderr", None)
+        log.error("[GIT] Failed: %s", stderr[:200] if stderr else str(e))
         write_status("git_pull", "Git pull failed — using local code")
-        return True, original_branch
+        return True, original_branch, False
 
 
-def step_git_restore(original_branch: str | None):
-    """Restore the original branch and pop stash after deploy completes."""
+def step_git_restore(original_branch: str | None, stash_created: bool):
+    """Restore the original branch and pop stash after deploy completes.
+
+    Only attempts stash pop if stash_created is True. If pop fails (merge
+    conflict), cleans the working directory and drops the stash to prevent
+    accumulation.
+    """
     if not original_branch:
         return
+
     current = get_current_branch()
-    if current == original_branch:
-        run("git stash pop", cwd=str(REPO_DIR), check=False)
+    if current != original_branch:
+        try:
+            log.info("[GIT] Restoring branch %s...", original_branch)
+            run(f"git checkout {original_branch}", cwd=str(REPO_DIR))
+        except subprocess.CalledProcessError as e:
+            log.error("[GIT] Failed to restore branch %s: %s",
+                      original_branch,
+                      e.stderr[:200] if e.stderr else str(e))
+            return  # Don't pop stash onto wrong branch
+
+    if not stash_created:
+        log.info("[GIT] No stash to restore")
         return
-    try:
-        log.info("[GIT] Restoring branch %s...", original_branch)
-        run(f"git checkout {original_branch}", cwd=str(REPO_DIR))
-        run("git stash pop", cwd=str(REPO_DIR), check=False)
-    except subprocess.CalledProcessError as e:
-        log.error("[GIT] Failed to restore branch: %s",
-                  e.stderr[:200] if e.stderr else str(e))
+
+    log.info("[GIT] Popping stash...")
+    result = subprocess.run(
+        ["git", "stash", "pop"],
+        capture_output=True, text=True, cwd=str(REPO_DIR),
+    )
+    if result.returncode != 0:
+        log.warning("[GIT] Stash pop failed (merge conflict?) — "
+                    "cleaning working directory and dropping stash")
+        log.warning("[GIT] stderr: %s", result.stderr.strip()[:200])
+        run("git checkout -- .", cwd=str(REPO_DIR), check=False)
+        run("git stash drop", cwd=str(REPO_DIR), check=False)
+        log.warning("[GIT] Local changes lost due to stash conflict")
 
 
 def _classify_changed_files(files: list[str]) -> tuple[bool, bool, bool]:
@@ -525,7 +585,7 @@ def build_firmware_in_docker(env_name: str) -> str | None:
     try:
         run(f"docker exec {CONTAINER_NAME} bash -c "
             f"'cd {MCU_WS} && pio run -e {env_name}'",
-            timeout=900)
+            timeout=900, stream=True)
         elapsed = time.time() - t0
         log.info("  [BUILD] %s built in %s", env_name, fmt_duration(elapsed))
 
@@ -671,6 +731,12 @@ def step_esp32_ota(config: dict, force: bool = False) -> bool:
     # Send summary to OLED
     write_status("esp32_ota", " ".join(summary_lines))
 
+    # Fail if every attempted (non-SKIPPED) device failed
+    attempted = [(n, s) for n, s in results if s != "SKIPPED"]
+    if attempted and all(s == "FAILED" for _, s in attempted):
+        log.error("  [OTA] All ESP32 OTA attempts FAILED — aborting pipeline")
+        write_status("failed", "All ESP32 OTA failed")
+        return False
     return True
 
 
@@ -822,13 +888,14 @@ def run_pipeline(config: dict):
     log.info("=" * 60)
 
     original_branch = None
+    stash_created = False
     steps_run = []
 
     try:
         # Step 1: Git pull
         log.info("")
         log.info("─── Step 1: Git Pull ────────────────────────────────────")
-        success, original_branch = step_git_pull(config)
+        success, original_branch, stash_created = step_git_pull(config)
         if not success:
             return
         if check_cancelled():
@@ -968,7 +1035,7 @@ def run_pipeline(config: dict):
         write_status("done", summary_msg)
 
     finally:
-        step_git_restore(original_branch)
+        step_git_restore(original_branch, stash_created)
 
 
 def main():
@@ -980,10 +1047,27 @@ def main():
     )
 
     DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Clear stale status from previous session so OLED doesn't show old state
+    STATUS_FILE.unlink(missing_ok=True)
+
     log.info("Deploy orchestrator started — watching %s", TRIGGER_FILE)
     log.info("  Firmware hashes: %s", FIRMWARE_HASHES_FILE)
     log.info("  Last deployed SHA: %s",
              get_last_deployed_sha() or "(none)")
+
+    # Warn about stash accumulation
+    try:
+        stash_result = subprocess.run(
+            ["git", "stash", "list"],
+            capture_output=True, text=True, cwd=str(REPO_DIR),
+        )
+        stash_count = len(stash_result.stdout.strip().splitlines()) if stash_result.stdout.strip() else 0
+        if stash_count > 2:
+            log.warning("[GIT] %d git stash entries accumulated! "
+                        "Run 'git stash clear' in %s", stash_count, REPO_DIR)
+    except Exception:
+        pass
 
     while True:
         if TRIGGER_FILE.exists():
@@ -1004,6 +1088,10 @@ def main():
             except Exception as e:
                 log.exception("[ERROR] Pipeline exception: %s", e)
                 write_status("failed", f"Pipeline error: {str(e)[:100]}")
+
+            # Remove status file after pipeline so stale status
+            # doesn't persist across reboots
+            STATUS_FILE.unlink(missing_ok=True)
 
         time.sleep(2)
 

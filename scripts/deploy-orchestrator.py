@@ -586,7 +586,6 @@ def step_esp32_ota(config: dict, force: bool = False) -> bool:
     log.info("─── ESP32 OTA Flash ─────────────────────────────────────")
 
     total = len(ESP32_DEVICES)
-    flash_script = SCRIPTS_DIR / "flash_esp32_ota.sh"
     results = []  # (name, status)
 
     for idx, (name, ip, env) in enumerate(ESP32_DEVICES, 1):
@@ -627,14 +626,16 @@ def step_esp32_ota(config: dict, force: bool = False) -> bool:
                          f"{idx}/{total}")
             continue
 
-        # Flash
+        # Flash via PlatformIO OTA from Docker
         fw_hash = file_md5(firmware)
-        log.info("  [OTA] %s: Flashing %s (md5:%s)...",
-                 name, firmware, fw_hash[:12] if fw_hash else "?")
+        log.info("  [OTA] %s: Flashing env=%s to %s (md5:%s)...",
+                 name, env, ip, fw_hash[:12] if fw_hash else "?")
         t0 = time.time()
         try:
-            run(f"bash {flash_script} {ip} {firmware}", timeout=120,
-                stream=True)
+            run(f"docker exec {CONTAINER_NAME} bash -c "
+                f"'cd {MCU_WS} && pio run -e {env} --target upload"
+                f" --upload-port {ip} --upload-protocol espota'",
+                timeout=120, stream=True)
             elapsed = time.time() - t0
             log.info("  [OTA] %s: SUCCESS in %s", name, fmt_duration(elapsed))
             if fw_hash:
@@ -850,6 +851,23 @@ def run_pipeline(config: dict):
             mcu_changed, ros_changed, microros_rebuild = True, True, False
         else:
             mcu_changed, ros_changed, microros_rebuild = detect_changes()
+
+        # Check if libmicroros actually exists in the container — if not,
+        # force a micro-ROS rebuild regardless of change detection
+        if mcu_changed and not microros_rebuild:
+            try:
+                result = run(
+                    f"docker exec {CONTAINER_NAME} bash -c "
+                    f"'test -d {MCU_WS}/libs_external/libmicroros'",
+                    check=False, timeout=10)
+                if result.returncode != 0:
+                    log.warning("[DETECT] libmicroros missing in container "
+                                "— forcing micro-ROS rebuild")
+                    microros_rebuild = True
+            except Exception:
+                log.warning("[DETECT] Could not check libmicroros — "
+                            "forcing micro-ROS rebuild")
+                microros_rebuild = True
 
         if not mcu_changed and not ros_changed:
             log.info("")

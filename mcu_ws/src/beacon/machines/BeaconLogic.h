@@ -21,6 +21,9 @@
 
 using namespace Subsystem;
 
+// Set true during OTA update to skip blocking micro-ROS pings
+static volatile bool g_ota_in_progress = false;
+
 // Pin definitions for ESP32 DW3000 connection
 // Adjust these based on your hardware wiring
 #define UWB_CS_PIN 5    // SPI Chip Select
@@ -97,6 +100,18 @@ void setup() {
     char hostname[32];
     snprintf(hostname, sizeof(hostname), "sec26-beacon-%d", BEACON_ID);
     ArduinoOTA.setHostname(hostname);
+    ArduinoOTA.onStart([]() {
+      g_ota_in_progress = true;
+      Serial.println("[OTA] Update starting — pausing micro-ROS");
+    });
+    ArduinoOTA.onEnd([]() {
+      g_ota_in_progress = false;
+      Serial.println("[OTA] Update complete");
+    });
+    ArduinoOTA.onError([](ota_error_t error) {
+      g_ota_in_progress = false;
+      Serial.printf("[OTA] Error %u\n", error);
+    });
     ArduinoOTA.begin();
     Serial.printf("[OTA] Ready as %s\n", hostname);
     Serial.flush();
@@ -162,9 +177,14 @@ void setup() {
 void loop() {
   g_wifi.update();  // WiFi reconnection monitoring
   ArduinoOTA.handle();
-  g_mr.update();
-  g_hb.update();
-  g_uwb.update();
+
+  // Skip blocking subsystems during OTA — rmw_uros_ping_agent() blocks
+  // up to 300ms which starves the OTA transfer and causes timeouts
+  if (!g_ota_in_progress) {
+    g_mr.update();
+    g_hb.update();
+    g_uwb.update();
+  }
 
   delay(1);  // Feed watchdog and yield to WiFi stack
 }

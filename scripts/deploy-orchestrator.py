@@ -66,18 +66,55 @@ def write_status(phase: str, message: str = "", progress: str = ""):
 
 
 def run(cmd: str, cwd: str | None = None, check: bool = True,
-        timeout: int = 600) -> subprocess.CompletedProcess:
-    """Run a shell command with logging."""
+        timeout: int = 600,
+        stream: bool = False) -> subprocess.CompletedProcess:
+    """Run a shell command with logging.
+
+    When stream=True, stdout/stderr are printed live to the log (useful for
+    long-running commands like OTA flashing). Otherwise output is captured and
+    logged after completion.
+    """
     log.info("  $ %s", cmd)
+
+    if stream:
+        proc = subprocess.Popen(
+            cmd, shell=True, cwd=cwd,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1,
+        )
+        stdout_lines = []
+        try:
+            deadline = time.time() + timeout
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                stdout_lines.append(line)
+                log.info("    %s", line)
+                if time.time() > deadline:
+                    proc.kill()
+                    proc.wait()
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+            proc.wait()
+            if proc.returncode > 0 and check:
+                raise subprocess.CalledProcessError(
+                    proc.returncode, cmd,
+                    output="\n".join(stdout_lines))
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            raise
+        return subprocess.CompletedProcess(
+            cmd, proc.returncode,
+            stdout="\n".join(stdout_lines), stderr="")
+
     result = subprocess.run(
         cmd, shell=True, cwd=cwd, capture_output=True, text=True,
         check=check, timeout=timeout,
     )
     if result.stdout.strip():
-        for line in result.stdout.strip().splitlines()[:20]:
+        for line in result.stdout.strip().splitlines():
             log.debug("    %s", line)
     if result.stderr.strip():
-        for line in result.stderr.strip().splitlines()[:10]:
+        for line in result.stderr.strip().splitlines():
             log.debug("    (stderr) %s", line)
     return result
 
@@ -494,6 +531,9 @@ def build_firmware_in_docker(env_name: str) -> str | None:
 
         # Copy firmware out of the container volume to host
         return copy_firmware_from_container(env_name)
+    except subprocess.TimeoutExpired:
+        log.error("  [BUILD] %s build timed out after 15m", env_name)
+        return None
     except subprocess.CalledProcessError as e:
         log.error("  [BUILD] Failed to build %s: %s",
                   env_name, e.stderr[:200] if e.stderr else str(e))
@@ -568,21 +608,23 @@ def step_esp32_ota(config: dict, force: bool = False) -> bool:
 
         if not firmware or not os.path.exists(firmware):
             log.warning("  [OTA] %s: No firmware binary found — SKIPPED", name)
-            results.append((name, "SKIP"))
-            write_status("esp32_ota", f"{name}: SKIP (no fw)", f"{idx}/{total}")
+            results.append((name, "SKIPPED"))
+            write_status("esp32_ota", f"{name}: SKIPPED (no fw)", f"{idx}/{total}")
             continue
 
         # Check firmware hash before flashing (skip check if force)
         if not force and not firmware_changed(env, firmware):
-            results.append((name, "SKIP"))
-            write_status("esp32_ota", f"{name}: SKIP (unchanged)", f"{idx}/{total}")
+            results.append((name, "SKIPPED"))
+            write_status("esp32_ota", f"{name}: SKIPPED (unchanged)",
+                         f"{idx}/{total}")
             continue
 
         # Check device reachability
         if not is_esp32_reachable(ip):
             log.warning("  [OTA] %s (%s): Device unreachable — SKIPPED", name, ip)
-            results.append((name, "SKIP"))
-            write_status("esp32_ota", f"{name}: SKIP (offline)", f"{idx}/{total}")
+            results.append((name, "SKIPPED"))
+            write_status("esp32_ota", f"{name}: SKIPPED (offline)",
+                         f"{idx}/{total}")
             continue
 
         # Flash
@@ -591,7 +633,8 @@ def step_esp32_ota(config: dict, force: bool = False) -> bool:
                  name, firmware, fw_hash[:12] if fw_hash else "?")
         t0 = time.time()
         try:
-            run(f"bash {flash_script} {ip} {firmware}", timeout=120)
+            run(f"bash {flash_script} {ip} {firmware}", timeout=120,
+                stream=True)
             elapsed = time.time() - t0
             log.info("  [OTA] %s: SUCCESS in %s", name, fmt_duration(elapsed))
             if fw_hash:
@@ -601,13 +644,19 @@ def step_esp32_ota(config: dict, force: bool = False) -> bool:
                 loose = REPO_DIR / f"{env}{ext}"
                 if loose.exists():
                     os.unlink(str(loose))
-            results.append((name, "OK"))
-            write_status("esp32_ota", f"{name}: OK", f"{idx}/{total}")
+            results.append((name, "SUCCESS"))
+            write_status("esp32_ota", f"{name}: SUCCESS", f"{idx}/{total}")
+        except subprocess.TimeoutExpired:
+            elapsed = time.time() - t0
+            log.error("  [OTA] %s: FAILED (timeout after %s)",
+                      name, fmt_duration(elapsed))
+            results.append((name, "FAILED"))
+            write_status("esp32_ota", f"{name}: FAILED", f"{idx}/{total}")
         except subprocess.CalledProcessError:
             elapsed = time.time() - t0
             log.error("  [OTA] %s: FAILED after %s", name, fmt_duration(elapsed))
-            results.append((name, "FAIL"))
-            write_status("esp32_ota", f"{name}: FAIL", f"{idx}/{total}")
+            results.append((name, "FAILED"))
+            write_status("esp32_ota", f"{name}: FAILED", f"{idx}/{total}")
 
     # Summary
     log.info("")
@@ -641,13 +690,13 @@ def step_teensy_flash(config: dict, force: bool = False) -> bool:
     if not firmware or not os.path.exists(firmware):
         log.error("  [TEENSY] No firmware binary found for '%s' — cannot flash",
                   target)
-        write_status("failed", f"No firmware found for {target}")
+        write_status("mcu_flash", "Teensy: FAILED (no firmware)")
         return False
 
     # Check firmware hash (skip check if force)
     if not force and not firmware_changed(target, firmware):
         log.info("  [TEENSY] Firmware identical to last flash — SKIPPED")
-        write_status("mcu_flash", "Teensy skipped (unchanged)")
+        write_status("mcu_flash", "Teensy: SKIPPED (unchanged)")
         return True
 
     if force:
@@ -663,7 +712,7 @@ def step_teensy_flash(config: dict, force: bool = False) -> bool:
         try:
             run(f"docker exec {CONTAINER_NAME} bash -c "
                 f"'cd {MCU_WS} && pio run -e {target} --target upload'",
-                timeout=120)
+                timeout=120, stream=True)
             elapsed = time.time() - t0
             log.info("  [TEENSY] SUCCESS on attempt %d (%s)", attempt,
                      fmt_duration(elapsed))
@@ -677,7 +726,7 @@ def step_teensy_flash(config: dict, force: bool = False) -> bool:
                 if loose.exists():
                     os.unlink(str(loose))
             return True
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             elapsed = time.time() - t0
             log.warning("  [TEENSY] Attempt %d/3 FAILED (%s)",
                         attempt, fmt_duration(elapsed))
@@ -685,7 +734,7 @@ def step_teensy_flash(config: dict, force: bool = False) -> bool:
                 time.sleep(3)
 
     log.error("  [TEENSY] FAILED after 3 attempts")
-    write_status("failed", "Teensy: FAILED (3 attempts)")
+    write_status("mcu_flash", "Teensy: FAILED")
     return False
 
 
@@ -715,11 +764,12 @@ def step_docker_restart(config: dict) -> bool:
         log.info("  [DOCKER] SUCCESS (%s)", fmt_duration(elapsed))
         write_status("docker", f"Docker: SUCCESS ({fmt_duration(elapsed)})")
         return True
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         elapsed = time.time() - t0
+        stderr = getattr(e, "stderr", None)
         log.error("  [DOCKER] FAILED after %s: %s",
                   fmt_duration(elapsed),
-                  e.stderr[:200] if e.stderr else str(e))
+                  stderr[:200] if stderr else str(e))
         write_status("failed", "Docker restart failed")
         return False
 
@@ -741,11 +791,12 @@ def step_colcon_build() -> bool:
         write_status("colcon_build",
                      f"Colcon: SUCCESS ({fmt_duration(elapsed)})")
         return True
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         elapsed = time.time() - t0
+        stderr = getattr(e, "stderr", None)
         log.error("  [COLCON] FAILED after %s: %s",
                   fmt_duration(elapsed),
-                  e.stderr[:200] if e.stderr else str(e))
+                  stderr[:200] if stderr else str(e))
         write_status("failed", "Colcon build failed")
         return False
 

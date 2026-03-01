@@ -22,6 +22,9 @@
 
 using namespace Subsystem;
 
+// Set true during OTA update to skip blocking micro-ROS pings
+static volatile bool g_ota_in_progress = false;
+
 // ── Pin Definitions (ESP32-S3 XIAO Plus — update when hardware is wired) ──
 
 // I2C for MPU6050
@@ -107,6 +110,18 @@ void setup() {
 
   // ArduinoOTA for wireless firmware updates
   ArduinoOTA.setHostname("sec26-minibot");
+  ArduinoOTA.onStart([]() {
+    g_ota_in_progress = true;
+    Serial.println("[OTA] Update starting — pausing micro-ROS");
+  });
+  ArduinoOTA.onEnd([]() {
+    g_ota_in_progress = false;
+    Serial.println("[OTA] Update complete");
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    g_ota_in_progress = false;
+    Serial.printf("[OTA] Error %u\n", error);
+  });
   ArduinoOTA.begin();
   Serial.println("[OTA] Ready");
 
@@ -148,10 +163,13 @@ void setup() {
 void loop() {
   g_wifi.update();
   ArduinoOTA.handle();
-  g_mr.update();
-  g_uwb.update();
-  g_drive.update();
-  g_imu.update();
+
+  if (!g_ota_in_progress) {
+    g_mr.update();
+    g_uwb.update();
+    g_drive.update();
+    g_imu.update();
+  }
 
   delay(1);
 }

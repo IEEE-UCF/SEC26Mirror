@@ -155,13 +155,16 @@ static CrankSubsystemSetup g_crank_setup("crank_subsystem", &g_servo,
                                           CRANK_SERVO_IDX);
 static CrankSubsystem g_crank(g_crank_setup);
 
+// --- QTimer encoder hardware driver (pins 2-9, must precede motor manager) ---
+static Encoders::QTimerEncoder g_qtimer_encoder;
+
 // --- Motor manager subsystem (PCA9685 #1) ---
 static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
-                                                PIN_MOTOR_OE, NUM_MOTORS);
+                                                PIN_MOTOR_OE, NUM_MOTORS,
+                                                &g_qtimer_encoder);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
-// --- Encoder subsystem (QTimer hardware FG pulse counting, pins 2-9) ---
-static Encoders::QTimerEncoder g_qtimer_encoder;
+// --- Encoder subsystem (QTimer FG pulse rate publisher) ---
 static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
                                                   &g_qtimer_encoder, &g_motor);
 static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
@@ -208,7 +211,8 @@ static Drive::TankDriveLocalizationSetup g_loc_setup(
     RobotConfig::START_X, RobotConfig::START_Y, RobotConfig::START_THETA);
 
 static DriveSubsystemSetup g_drive_setup(
-    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup);
+    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup,
+    &g_qtimer_encoder);
 
 // Configure drive subsystem control parameters from RobotConfig
 static void configureDriveSetup() {

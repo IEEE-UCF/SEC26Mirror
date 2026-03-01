@@ -62,6 +62,7 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   MotorManagerSubsystem* motorManager = nullptr;
   EncoderSubsystem* encoderSub = nullptr;
   ImuSubsystem* imuSub = nullptr;
+  Encoders::QTimerEncoder* encoder = nullptr;  // direct QTimer access for captureAll
 
   // Channel mapping
   uint8_t leftMotorIdx = 1;
@@ -108,13 +109,15 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   DriveSubsystemSetup(
       const char* _id,
       MotorManagerSubsystem* _motor,
-      EncoderSubsystem* _encoder,
+      EncoderSubsystem* _encoderSub,
       ImuSubsystem* _imu,
-      const Drive::TankDriveLocalizationSetup& _locSetup)
+      const Drive::TankDriveLocalizationSetup& _locSetup,
+      Encoders::QTimerEncoder* _encoder = nullptr)
       : Classes::BaseSetup(_id),
         motorManager(_motor),
-        encoderSub(_encoder),
+        encoderSub(_encoderSub),
         imuSub(_imu),
+        encoder(_encoder),
         locSetup(_locSetup) {}
 };
 
@@ -160,6 +163,10 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   void update() override {
     if (!setup_.motorManager || !setup_.encoderSub || !setup_.imuSub) return;
+
+    // Capture all encoder deltas and sync hardware direction registers.
+    // Must happen before reading ticks so accumulated values are fresh.
+    captureEncoders();
 
     // ── Timing ──
     uint32_t now_us = micros();
@@ -458,6 +465,22 @@ class DriveSubsystem : public IMicroRosParticipant,
   // ── Constants ──────────────────────────────────────────────────────────
 
   static constexpr size_t MAX_TRAJECTORY_POINTS = 32;
+
+  // ── Encoder capture ──────────────────────────────────────────────────
+
+  /**
+   * @brief Read all 8 motor intended directions from MotorManager, then
+   *        call QTimerEncoder::captureAll() to accumulate deltas and sync
+   *        the hardware counter direction registers.
+   */
+  void captureEncoders() {
+    if (!setup_.encoder || !setup_.motorManager) return;
+    bool dirs[Encoders::NUM_ENCODER_CHANNELS];
+    for (uint8_t i = 0; i < Encoders::NUM_ENCODER_CHANNELS; i++) {
+      dirs[i] = setup_.motorManager->getIntendedDirection(i);
+    }
+    setup_.encoder->captureAll(dirs);
+  }
 
   // ── Control methods ────────────────────────────────────────────────────
 

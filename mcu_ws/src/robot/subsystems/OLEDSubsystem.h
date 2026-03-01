@@ -26,7 +26,7 @@
 #ifndef OLEDSUBSYSTEM_H
 #define OLEDSUBSYSTEM_H
 
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SSD1306_DMA.h>
 #include <BaseSubsystem.h>
 #include <SPI.h>
 #include <microros_manager_robot.h>
@@ -200,7 +200,7 @@ class OLEDSubsystem : public IMicroRosParticipant,
   void renderDashboard();
 
   const OLEDSubsystemSetup setup_;
-  Adafruit_SSD1306 display_;
+  Adafruit_SSD1306_DMA display_;
 
   rcl_node_t* node_ = nullptr;
 };

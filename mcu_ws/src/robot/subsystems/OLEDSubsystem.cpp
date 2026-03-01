@@ -41,6 +41,8 @@ bool OLEDSubsystem::init() {
 void OLEDSubsystem::reset() {
   if (!takeMutex()) return;
 
+  display_.waitForAsync();
+
   memset(lines_, 0, sizeof(lines_));
   next_write_ = 0;
   total_written_ = 0;
@@ -48,7 +50,7 @@ void OLEDSubsystem::reset() {
   dirty_ = false;
 
   display_.clearDisplay();
-  display_.display();
+  display_.display();  // sync flush on reset (rare, one-shot)
 
   giveMutex();
 }
@@ -63,6 +65,9 @@ const char* OLEDSubsystem::getInfo() {
 
 void OLEDSubsystem::update() {
   if (!takeMutex()) return;
+
+  // Wait for any in-flight DMA before touching the framebuffer
+  display_.waitForAsync();
 
   if (isDashboardMode()) {
     renderDashboard();
@@ -122,7 +127,7 @@ void OLEDSubsystem::renderLines() {
   }
 }
 
-void OLEDSubsystem::flushDisplay() { display_.display(); }
+void OLEDSubsystem::flushDisplay() { display_.displayAsync(); }
 
 // ── micro-ROS: LCD append subscription
 // ─────────────────────────────────────────

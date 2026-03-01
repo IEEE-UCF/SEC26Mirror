@@ -53,6 +53,8 @@
 // Debug logging (routed to SerialUSB1 when SERIAL_DEBUG is defined)
 #include "DebugLog.h"
 
+#include <math_utils.h>
+
 // Pin & address constants
 #include "robot/RobotConfig.h"
 #include "robot/RobotConstants.h"
@@ -228,6 +230,73 @@ static KeypadSubsystemSetup g_keypad_setup("keypad_subsystem", &g_servo,
                                             KEYPAD_SERVO_IDX, &g_drive);
 static KeypadSubsystem g_keypad(g_keypad_setup);
 
+// Configure drive subsystem control parameters from RobotConfig
+static void configureDriveSetup() {
+  using namespace RobotConfig;
+
+  // Channel mapping
+  g_drive_setup.leftMotorIdx = LEFT_MOTOR_IDX;
+  g_drive_setup.rightMotorIdx = RIGHT_MOTOR_IDX;
+  g_drive_setup.leftEncoderIdx = LEFT_ENCODER_IDX;
+  g_drive_setup.rightEncoderIdx = RIGHT_ENCODER_IDX;
+  g_drive_setup.leftEncoderInverted = LEFT_ENCODER_INVERTED;
+  g_drive_setup.rightEncoderInverted = RIGHT_ENCODER_INVERTED;
+
+  // Wheel velocity PID
+  auto makePID = []() {
+    PIDController::Config c;
+    c.gains.kp = WHEEL_PID_KP;
+    c.gains.ki = WHEEL_PID_KI;
+    c.gains.kd = WHEEL_PID_KD;
+    c.limits.out_min = WHEEL_PID_OUT_MIN;
+    c.limits.out_max = WHEEL_PID_OUT_MAX;
+    c.limits.i_min = WHEEL_PID_I_MIN;
+    c.limits.i_max = WHEEL_PID_I_MAX;
+    c.dmode = PIDController::DerivativeMode::OnMeasurement;
+    c.d_filter_alpha = WHEEL_PID_D_FILTER;
+    c.conditional_integration = true;
+    return c;
+  };
+  g_drive_setup.leftPID = makePID();
+  g_drive_setup.rightPID = makePID();
+
+  // Linear S-curve motion profile
+  g_drive_setup.linearProfile.limits.v_max = MAX_LINEAR_VEL_MPS;
+  g_drive_setup.linearProfile.limits.a_max = MAX_LINEAR_ACCEL_MPS2;
+  g_drive_setup.linearProfile.limits.d_max = MAX_LINEAR_ACCEL_MPS2;
+  g_drive_setup.linearProfile.limits.j_max = MAX_LINEAR_JERK_MPS3;
+
+  // Angular S-curve motion profile
+  g_drive_setup.angularProfile.limits.v_max = MAX_ANGULAR_VEL_RADPS;
+  g_drive_setup.angularProfile.limits.a_max = MAX_ANGULAR_ACCEL_RADPS2;
+  g_drive_setup.angularProfile.limits.d_max = MAX_ANGULAR_ACCEL_RADPS2;
+  g_drive_setup.angularProfile.limits.j_max = MAX_ANGULAR_JERK_RADPS3;
+
+  // Trajectory controller
+  g_drive_setup.trajConfig.lookahead_dist = TRAJ_LOOKAHEAD_M;
+  g_drive_setup.trajConfig.cruise_v = TRAJ_CRUISE_V_MPS;
+  g_drive_setup.trajConfig.max_v = MAX_LINEAR_VEL_MPS;
+  g_drive_setup.trajConfig.max_w = MAX_ANGULAR_VEL_RADPS;
+  g_drive_setup.trajConfig.slowdown_dist = TRAJ_SLOWDOWN_M;
+  g_drive_setup.trajConfig.min_v_near_goal = TRAJ_MIN_V_MPS;
+  g_drive_setup.trajConfig.pos_tol = TRAJ_POS_TOL_M;
+  g_drive_setup.trajConfig.heading_tol = TRAJ_HEADING_TOL_RAD;
+  g_drive_setup.trajConfig.k_heading = TRAJ_K_HEADING;
+  g_drive_setup.trajConfig.advance_tol = TRAJ_ADVANCE_TOL_M;
+
+  // Limits
+  g_drive_setup.maxLinearVel = MAX_LINEAR_VEL_MPS;
+  g_drive_setup.maxAngularVel = MAX_ANGULAR_VEL_RADPS;
+
+  // Pose drive gains
+  g_drive_setup.poseKLinear = POSE_K_LINEAR;
+  g_drive_setup.poseKAngular = POSE_K_ANGULAR;
+  g_drive_setup.poseDistTol = POSE_DIST_TOL_M;
+
+  // Safety
+  g_drive_setup.commandTimeoutMs = COMMAND_TIMEOUT_MS;
+}
+
 // --- PCA9685 flush task ---
 static void pca_task(void*) {
   while (true) {
@@ -283,9 +352,18 @@ void setup() {
   g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
   g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
   g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
-  SPI.begin();
-  g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
-  g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+
+  // Conditional UWB init — DIP 2 ON = UWB enabled
+  bool uwb_enabled = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_UWB_ENABLE);
+  if (uwb_enabled) {
+    SPI.begin();
+    g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
+    g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+  } else {
+    DEBUG_PRINTLN("[INIT] UWB SKIPPED (DIP 2 OFF)");
+  }
+
+  configureDriveSetup();
   g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
   g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
 
@@ -300,6 +378,10 @@ void setup() {
 
   // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
+
+  // 2d. Wire OLED dashboard data sources (DIP 6 = debug dashboard)
+  g_oled.setDashboardSources(&g_dip, &g_battery, &g_imu,
+                             uwb_enabled ? &g_uwb : nullptr);
 
   // 3. Register micro-ROS participants
   DEBUG_PRINTLN("[INIT] --- Registering micro-ROS participants ---");
@@ -316,7 +398,7 @@ void setup() {
   g_mr.registerParticipant(&g_crank);
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_encoder_sub);
-  g_mr.registerParticipant(&g_uwb);
+  if (uwb_enabled) g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
   g_mr.registerParticipant(&g_drive);
@@ -348,7 +430,7 @@ void setup() {
   g_btn.beginThreaded(1024, 1, 20);            // 50 Hz
   g_led.beginThreaded(1024, 1, 50);            // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
-  g_uwb.beginThreaded(2048, 2, 50);            // 20 Hz UWB ranging
+  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 50);  // 20 Hz UWB ranging
   g_deploy.beginThreaded(1024, 1, 20);         // 50 Hz deploy button
   g_crank.beginThreaded(1024, 1, 50);          // 20 Hz crank
   g_keypad.beginThreaded(1024, 1, 50);         // 20 Hz keypad
@@ -363,6 +445,35 @@ static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;
 void loop() {
   g_rc.update();
 
+  // RC manual drive — DIP 1 ON = RC override
+  if (g_dip.isSwitchOn(DipSwitchSubsystem::DIP_RC_OVERRIDE)) {
+    const auto& rc = g_rc.getData();
+    bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
+
+    if (swa_high) {
+      float ly = static_cast<float>(rc.channels[1]) / 255.0f;
+      float rx = static_cast<float>(rc.channels[2]) / 255.0f;
+
+      if (ly > -0.05f && ly < 0.05f) ly = 0.0f;
+      if (rx > -0.05f && rx < 0.05f) rx = 0.0f;
+
+      float left = secbot::utils::clamp(ly + rx, -1.0f, 1.0f);
+      float right = secbot::utils::clamp(ly - rx, -1.0f, 1.0f);
+
+      g_drive.manualDrive(left, right);
+    } else {
+      if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
+        g_drive.stop();
+      }
+    }
+  } else {
+    // DIP 1 OFF — not in RC mode; stop if we were in manual
+    if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
+      g_drive.stop();
+    }
+  }
+
+  // Periodic debug output
   uint32_t now = millis();
   if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
     s_last_debug_ms = now;

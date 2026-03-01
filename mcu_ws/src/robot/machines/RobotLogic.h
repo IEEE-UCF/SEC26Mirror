@@ -335,9 +335,17 @@ void setup() {
   g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
   g_intake.init();       DEBUG_PRINTLN("[INIT] Intake OK");
   g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
-  SPI.begin();
-  g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
-  g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+
+  // Conditional UWB init — DIP 2 ON = UWB enabled
+  bool uwb_enabled = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_UWB_ENABLE);
+  if (uwb_enabled) {
+    SPI.begin();
+    g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
+    g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+  } else {
+    DEBUG_PRINTLN("[INIT] UWB SKIPPED (DIP 2 OFF)");
+  }
+
   configureDriveSetup();
   g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
   g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
@@ -353,6 +361,10 @@ void setup() {
 
   // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
+
+  // 2d. Wire OLED dashboard data sources (DIP 6 = debug dashboard)
+  g_oled.setDashboardSources(&g_dip, &g_battery, &g_imu,
+                             uwb_enabled ? &g_uwb : nullptr);
 
   // 3. Register micro-ROS participants
   DEBUG_PRINTLN("[INIT] --- Registering micro-ROS participants ---");
@@ -370,7 +382,7 @@ void setup() {
   g_mr.registerParticipant(&g_crank);
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_encoder_sub);
-  g_mr.registerParticipant(&g_uwb);
+  if (uwb_enabled) g_mr.registerParticipant(&g_uwb);
   g_mr.registerParticipant(&g_intake);
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
@@ -405,7 +417,7 @@ void setup() {
   g_btn.beginThreaded(1024, 1, 20);       // 50 Hz
   g_led.beginThreaded(1024, 1, 50);       // 20 Hz
   g_hb.beginThreaded(1024, 1, 200);       // 5 Hz
-  g_uwb.beginThreaded(2048, 2, 50);       // 20 Hz UWB ranging
+  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 50);  // 20 Hz UWB ranging
   g_arm.beginThreaded(1024, 2, 20);       // 50 Hz arm
   g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
   g_deploy.beginThreaded(1024, 1, 20);    // 50 Hz deploy button
@@ -420,8 +432,8 @@ void setup() {
 void loop() {
   g_rc.update();
 
-  // RC manual drive — enabled when DIP switch 5 is OFF (bit 5 = 0)
-  if (!(g_dip.getState() & (1 << 5))) {
+  // RC manual drive — DIP 1 ON = RC override
+  if (g_dip.isSwitchOn(DipSwitchSubsystem::DIP_RC_OVERRIDE)) {
     const auto& rc = g_rc.getData();
     bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
 
@@ -446,7 +458,7 @@ void loop() {
       }
     }
   } else {
-    // DIP 5 ON — not in RC mode; stop if we were in manual
+    // DIP 1 OFF — not in RC mode; stop if we were in manual
     if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
       g_drive.stop();
     }

@@ -31,35 +31,38 @@ The codebase is split into two workspaces:
   - `src/test/`: Hardware test programs
   - `src/platform/`: Platform support files (e.g., `atomic_stubs_arm.c`)
 - **Robot subsystem headers** (`src/robot/subsystems/`):
-  - `BatterySubsystem` — INA219 power monitoring
-  - `ImuSubsystem` — BNO085 9-axis IMU
+  - `BatterySubsystem` — INA219 power monitoring (getVoltage/getCurrentA accessors)
+  - `ImuSubsystem` — BNO085 9-axis IMU (getYaw accessor)
   - `RCSubsystem` — FlySky IBUS receiver
-  - `OLEDSubsystem` — SSD1306 128x64 display (subscriptions for text append and scroll)
+  - `OLEDSubsystem` — SSD1306 128x64 display (terminal mode + debug dashboard mode via DIP 6)
   - `SensorSubsystem` — VL53L0X time-of-flight distance
   - `ArmSubsystem` — Arm control with servo/encoder
-  - `IntakeSubsystem` — Combined linear rail (encoder P-control + limit switches) and spinning intake motor via MotorManagerSubsystem
-  - `CrankSubsystem` — Servo-driven field crank mechanism
-  - `KeypadSubsystem` — Servo-driven keypad presser with drive-forward capability
-  - `EncoderSubsystem` — QTimerEncoder hardware FG pulse counting (8 channels, pins 2-9)
-  - `DeploySubsystem` — Button-triggered deployment state machine
-  - `ResetSubsystem` — micro-ROS service to reset all subsystems
+  - `IntakeSubsystem` — Intake/ejection mechanism
+  - `IntakeBridgeSubsystem` — Gear-and-rack mechanism for pressure plate duck retrieval
   - `MiniRobotSubsystem` — Mini-robot control
   - `ServoSubsystem` — PCA9685 servo manager with SetServo service
   - `MotorManagerSubsystem` — PCA9685 motor manager with SetMotor service
+  - `EncoderSubsystem` — QTimer hardware FG pulse counting (pins 2-9)
   - `ButtonSubsystem` — TCA9555 push button input with callbacks
-  - `DipSwitchSubsystem` — TCA9555 DIP switch reading
+  - `DipSwitchSubsystem` — TCA9555 DIP switch reading with named bit constants and `isSwitchOn()` helper
   - `LEDSubsystem` — WS2812B addressable RGB LEDs
+  - `CrankSubsystem` — Crank mechanism servo control
+  - `KeypadSubsystem` — Keypad servo + drive-to-press control
+  - `DeploySubsystem` — Button-triggered deployment (DIP 8 selects target)
+  - `ResetSubsystem` — micro-ROS service to reset all subsystems
 - **Robot pin/constant files** (`src/robot/`):
   - `RobotPins.h` — All Teensy 4.1 GPIO pin assignments and I2C addresses
   - `RobotConstants.h` — PCA9685 defaults (freq, channels)
-  - `RobotConfig.h` — Drive kinematics constants (placeholder values)
+  - `RobotConfig.h` — Drive kinematics, PID, motion profile, and trajectory constants
 - **Libraries**:
   - `lib/subsystems/`: Core subsystem abstractions (McuSubsystem lifecycle, UWBSubsystem, IMicroRosParticipant, TimedSubsystem)
   - `lib/robot/`: Hardware drivers (BNO085, TCA9555, PCA9685Driver/Manager, I2CMux, I2CPower, TOF, I2CBusLock, AnalogMux, AnalogRead)
   - `lib/drivers/`: Additional drivers (CD74HC4067 analog mux)
   - `lib/control/`: Control algorithms (PID, trapezoidal/S-curve motion profiles, trajectory controller, arm kinematics)
   - `lib/drive/`: Tank drive localization
+  - `lib/encoders/`: QTimerEncoder (hardware FG pulse counting on Teensy 4.1)
   - `lib/math/`: Vector2D, Pose2D, Pose3D
+  - `lib/mpu6050/`: MPU6050 IMU driver (alternative to BNO085)
   - `lib/uwb/`: UWB DW3000 driver
   - `lib/ir/`: IR NEC communication (ESP32 RMT-based)
   - `lib/field/`: Field element message definitions, ESP-NOW transport, shared protocol
@@ -80,7 +83,6 @@ The codebase is split into two workspaces:
 - `secbot_sim`: Gazebo Harmonic simulation with full MCU subsystem emulator (C++)
 - `secbot_health`: System health monitoring and MCU heartbeat watchdog (C++)
 - `secbot_bridge_i2c`: ROS ↔ Teensy I2C bridge with packet codec and fake Teensy for simulation (C++)
-- `secbot_deploy`: Deployment orchestration node (C++)
 - `secbot_tf`: TF static transform configuration (launch files + YAML)
 - `secbot_msgs`: Custom messages (TaskStatus, DuckDetection) and actions (NavigatePath, ApproachTarget)
 - `mcu_msgs`: Shared MCU↔ROS2 messages (symlinked to `mcu_ws/extra_packages/mcu_msgs`)
@@ -170,12 +172,15 @@ ros2 launch secbot_fusion fusion.launch.py
 
 ### Deployment
 
+**In-container (manual):**
 ```bash
 python3 /home/ubuntu/scripts/deploy-all.py             # Full deployment
 python3 /home/ubuntu/scripts/deploy-all.py --skip-mcu   # Skip MCU flash
 python3 /home/ubuntu/scripts/deploy-all.py --skip-ros   # Skip ROS build
 /home/ubuntu/scripts/start_robot.sh                      # Build ROS2 only
 ```
+
+**On-robot (automated):** `deploy-orchestrator.py` runs as a systemd service on the Pi. It watches for triggers from MCU button press (via `secbot_deploy` ROS2 node) or Gitea CI, then auto-pulls prod branch, detects changes, OTA-flashes ESP32s, USB-flashes Teensy, and rebuilds ROS2.
 
 ## Testing
 
@@ -220,7 +225,6 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | 3 | Drive | 20ms (50 Hz) | 4096 |
 | 2 | Servo | 25ms (40 Hz) | 1024 |
 | 2 | Motor Manager | 1ms (1000 Hz) | 1024 |
-| 2 | Encoder | 20ms (50 Hz) | 1024 |
 | 2 | UWB | 50ms (20 Hz) | 2048 |
 | 2 | Arm, Intake | 20ms (50 Hz) | 1024 |
 | 1 | OLED | 25ms (40 Hz) | 2048 |
@@ -240,7 +244,7 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 - **RC Receiver**: Must be polled from main `loop()`, not a TeensyThreads thread — IBusBM NOTIMER mode only works from the main thread context.
 - **Motor Manager**: Runs at 1000 Hz to handle NFPShop brushless motor reverse-pulse timing (~3ms pulse every ~103ms at low duty to prevent controller fault).
 - **OLED Display**: Uses hardware SPI1 (pins 26/27) — software SPI is unreliable under TeensyThreads preemption.
-- **UWB Init**: Must call `SPI.begin()` before `g_uwb.init()`. The DW3000 library has a hardcoded `RST_PIN 27` in `DW3000Constants.h` that conflicts with OLED SPI1 SCK — `UWBDriver.cpp` skips `hardReset()` when no reset pin is wired to avoid this.
+- **UWB Init**: Conditional on DIP switch 2 (ON = enabled). Must call `SPI.begin()` before `g_uwb.init()`. The DW3000 library has a hardcoded `RST_PIN 27` in `DW3000Constants.h` that conflicts with OLED SPI1 SCK — `UWBDriver.cpp` skips `hardReset()` when no reset pin is wired to avoid this.
 
 Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`) for ROS2 lifecycle.
 
@@ -267,24 +271,21 @@ See `src/robot/RobotPins.h` for full assignments. Key pins:
 
 All MCU subsystems inherit from `Classes::BaseSubsystem` with lifecycle: `init()` → `begin()` → `update()` (loop) / `pause()` → `reset()`. Subsystems that need ROS2 also implement `IMicroRosParticipant` and register with `MicrorosManager::registerParticipant()`.
 
-The MicrorosManager currently has 20 registered participants. micro-ROS limits are configured in `custom_microros.meta`: MAX_PUBLISHERS=22, MAX_SUBSCRIPTIONS=14, MAX_SERVICES=6. Publishers do not consume executor handles; only subscriptions, services, and timers do.
+The MicrorosManager supports up to 16 registered participants and initializes 10 executor handles (for subscriptions, services, and timers — publishers do not consume handles).
 
 ### micro-ROS Topic Namespace
 
 All robot topics use `/mcu_robot/` prefix:
 - `/mcu_robot/heartbeat` (String), `/mcu_robot/battery_health` (BatteryHealth), `/mcu_robot/imu/data` (Imu)
-- `/mcu_robot/tof_distances` (Float32MultiArray), `/mcu_robot/rc` (RC)
-- `/mcu_robot/intake/state` (IntakeState — rail position, encoder, limit switches, intake motor speed)
-- `/mcu_robot/intake/command` (subscription: IntakeCommand — initialize, extend, retract, set_position, set_intake_speed, stop)
-- `/mcu_robot/crank/state` (UInt8), `/mcu_robot/crank/command` (subscription: UInt8)
-- `/mcu_robot/encoders` (Float32MultiArray — 8 channels signed ticks/sec)
+- `/mcu_robot/tof_distances` (Float32MultiArray), `/mcu_robot/rc` (RC), `/mcu_robot/intake/state` (IntakeState)
 - `/mcu_robot/mini_robot/state` (MiniRobotState), `/mcu_robot/lcd/append` (subscription: String)
 - `/mcu_robot/servo/state` (Float32MultiArray), `/mcu_robot/servo/set` (service: SetServo)
 - `/mcu_robot/motor/state` (Float32MultiArray), `/mcu_robot/motor/set` (service: SetMotor)
+- `/mcu_robot/encoders` (Float32MultiArray)
 - `/mcu_robot/buttons` (UInt8), `/mcu_robot/dip_switches` (UInt8)
 - `/mcu_robot/led/set_all` (subscription: LedColor)
 - UWB: `mcu_uwb/ranging` (from beacons/robot tag)
-- Drive: `drive_base/status`, `drive_base/command`
+- Drive: `drive_base/status`, `drive_base/command` (currently commented out in RobotLogic.h)
 
 Minibot topics use `/mcu_minibot/` prefix:
 - `/mcu_minibot/cmd_vel` (subscription: geometry_msgs/Twist — differential drive mix)
@@ -344,9 +345,9 @@ Field elements (ESP32) communicate via **ESP-NOW** broadcast (not micro-ROS):
 - Source of truth: `ros2_ws/src/mcu_msgs`
 - Symlinked to: `mcu_ws/extra_packages/mcu_msgs`
 
-**Current message inventory** (20 msgs, 6 srvs):
-- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeCommand, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
-- Services: ArmControl, LCDAppend, OLEDControl, Reset, SetServo, SetMotor
+**Current message inventory** (21 msgs, 5 srvs):
+- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeBridgeCommand, IntakeBridgeState, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
+- Services: ArmControl, LCDAppend, OLEDControl, SetServo, SetMotor
 
 **When you add/modify a `.msg` or `.srv` file**: you must clean and rebuild micro-ROS:
 ```bash

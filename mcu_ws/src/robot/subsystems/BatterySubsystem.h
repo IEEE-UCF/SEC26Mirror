@@ -64,6 +64,12 @@ class BatterySubsystem : public IMicroRosParticipant,
   /** Set an OLED subsystem to receive a persistent battery status line. */
   void setOLED(OLEDSubsystem* oled) { oled_ = oled; }
 
+  /** Get load voltage in volts. */
+  float getVoltage() const { return setup_.driver_ ? setup_.driver_->getVoltage() : 0.0f; }
+
+  /** Get current draw in amps. */
+  float getCurrentA() const { return setup_.driver_ ? setup_.driver_->getCurrentmA() / 1000.0f : 0.0f; }
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 100) {

@@ -1,3 +1,7 @@
+import os
+from pathlib import Path
+os.chdir(Path(__file__).resolve().parent)
+
 from setuptools import setup
 from glob import glob
 import os

@@ -129,8 +129,8 @@ private:
   // grid configs from "arena_layout.yaml" ==================================
   // grid
   double resolution_ = 0.25;
-  int width = 0;
-  int height = 0;
+  double width = 0;
+  double height = 0;
   // robot start/goal
   double start_x_ = 0.0;
   double start_y_ = 0.0;
@@ -210,6 +210,44 @@ private:
   };
   std::vector<RectObs> obstacle_rects_;
 
+  // CONVERTERS ==============================================
+
+  // check if r and c in bounds ----------
+  bool cell_in_bounds(int r, int c) const {
+    return grid_map_ && r >= 0 && r < grid_map_->get_rows() && c >= 0 &&
+           c < grid_map_->get_cols();
+  }
+
+  // 0.5 >= x >>>> 1 | 0.5 < x >>>> 0
+  static inline int rounding_rules(double x) {
+    return (x >= 0.0) ? static_cast<int>(std::floor(x + 0.5))
+                      : static_cast<int>(std::ceil(x - 0.5));
+  }
+
+  // convert from meters >>>> grid coords --------------
+  std::pair<int, int> world_to_cell(double x, double y) const {
+    double convert_y = (y - origin_.second) / resolution_;
+    double convert_x = (x - origin_.first) / resolution_;
+    RCLCPP_INFO(this->get_logger(), "MATH AND STUFF for y: ((%f - %f) / %f) = %f, MATH AND STUFF for x: ((%f - %f) / %f) =%f", y , origin_.second, resolution_, convert_y, x , origin_.first, resolution_, convert_x);
+    return {rounding_rules((y - origin_.second) / resolution_),
+            rounding_rules((x - origin_.first) / resolution_)};
+  }
+
+  // converts coords >>> meters --------------
+  std::pair<double, double> cell_to_world(int r, int c) const {
+    return {(origin_.first + c) * resolution_,
+            (origin_.second + r) * resolution_};
+  }
+
+  // Normalize angle [-pi, pi]
+  static double oscolate_around_pi(double a) {
+    while (a > M_PI)
+      a -= 2.0 * M_PI;
+    while (a < -M_PI)
+      a += 2.0 * M_PI;
+    return a;
+  }
+
   // LOAD NAV CONFIGS ========================================================
   void load_config() {
     RCLCPP_INFO(this->get_logger(), "--------------------");
@@ -236,11 +274,16 @@ private:
 
       // Arena Config =======================================================
       if (arena_cfg["grid"]["width"])
-        width = arena_cfg["grid"]["width"].as<int>();
+        width = arena_cfg["grid"]["width"].as<double>();
       if (arena_cfg["grid"]["height"])
-        height = arena_cfg["grid"]["height"].as<int>();
+        height = arena_cfg["grid"]["height"].as<double>();
+      
       if (arena_cfg["grid"]["resolution"])
         resolution_ = arena_cfg["grid"]["resolution"].as<double>();
+
+      auto arena_grid = world_to_cell(width, height);
+      RCLCPP_INFO(this->get_logger(), "BEFORE WORLD TO CELL (%f, %f) ======= AFTER WORLD TO CELL (%d,%d)", width, height, arena_grid.second, arena_grid.first);
+
       if (arena_cfg["origin"]["x"])
         origin_.first = arena_cfg["origin"]["x"].as<double>();
       if (arena_cfg["origin"]["y"])
@@ -258,6 +301,9 @@ private:
       if (arena_cfg["start"]["y"])
         start_y_ = arena_cfg["start"]["y"].as<double>();
 
+      RCLCPP_INFO(this->get_logger(), "ROBOT SPAWN IN POINT: (%f %f) ===================================================================",
+                start_x_, start_y_);
+
       // Nav Config =======================================================
       if (nav_cfg["trajectory"]["speed"])
         speed_ = nav_cfg["trajectory"]["speed"].as<double>(); // add speed
@@ -268,8 +314,8 @@ private:
         max_skip_ = nav_cfg["smoothing"]["max_skip"].as<int>(); // add max skip
 
       // LOADED GRID ============================================
-      std::vector<std::vector<int>> grid_data(height,
-                                              std::vector<int>(width, 0));
+      RCLCPP_INFO(this->get_logger(), "======================================(%d,%d)======================================",arena_grid.first, arena_grid.second);
+      std::vector<std::vector<int>> grid_data(arena_grid.first, std::vector<int>(arena_grid.second, 0));
       grid_map_ = std::make_unique<GridMap>(grid_data);
 
       // LOADED Obstacles ============================================
@@ -308,41 +354,6 @@ private:
       reached.data = true;
       goal_reached_pub_->publish(reached); // if goal is reached -> publish
     }
-  }
-
-  // CONVERTERS ==============================================
-
-  // check if r and c in bounds ----------
-  bool cell_in_bounds(int r, int c) const {
-    return grid_map_ && r >= 0 && r < grid_map_->get_rows() && c >= 0 &&
-           c < grid_map_->get_cols();
-  }
-
-  // 0.5 >= x >>>> 1 | 0.5 < x >>>> 0
-  static inline int rounding_rules(double x) {
-    return (x >= 0.0) ? static_cast<int>(std::floor(x + 0.5))
-                      : static_cast<int>(std::ceil(x - 0.5));
-  }
-
-  // convert from meters >>>> grid coords --------------
-  std::pair<int, int> world_to_cell(double x, double y) const {
-    return {rounding_rules((y - origin_.second) / resolution_),
-            rounding_rules((x - origin_.first) / resolution_)};
-  }
-
-  // converts coords >>> meters --------------
-  std::pair<double, double> cell_to_world(int r, int c) const {
-    return {origin_.first + (c + 0.5) * resolution_,
-            origin_.second + (r + 0.5) * resolution_};
-  }
-
-  // Normalize angle [-pi, pi]
-  static double oscolate_around_pi(double a) {
-    while (a > M_PI)
-      a -= 2.0 * M_PI;
-    while (a < -M_PI)
-      a += 2.0 * M_PI;
-    return a;
   }
 
   // convert degrees -> radians
@@ -387,6 +398,7 @@ private:
                    "grid_map_ non existent. mostlikely configs");
       throw std::runtime_error("INITIALZIE grid_map_");
     }
+    if(goal_x_ == 0 &&  goal_y_ == 0) return;
     // creates plan with params
     PlannerConfig p_cfg;
     p_cfg.speed = speed_;
@@ -397,7 +409,7 @@ private:
 
     // check if goal is in bounds
     if (!cell_in_bounds(goal_cell.first, goal_cell.second)) {
-      RCLCPP_ERROR(this->get_logger(),
+      RCLCPP_INFO(this->get_logger(),
                    "GOAL OUT OF BOUNDS: world=(%.2f,%.2f) cell=(%d,%d) "
                    "grid=(%d,%d) origin=(%.2f,%.2f) res=%.2f",
                    goal_x_, goal_y_, goal_cell.first, goal_cell.second,
@@ -529,8 +541,8 @@ private:
     if (!cell_in_bounds(goal_cell.first, goal_cell.second)) {
       RCLCPP_WARN(
           this->get_logger(),
-          "Ignoring /goal_pose: out of bounds (%.2f, %.2f) -> cell(%d,%d)",
-          goal_raw.first, goal_raw.second, goal_cell.first, goal_cell.second);
+          "Ignoring /goal_pose: out of bounds (%.2f, %.2f) -> cell(%d,%d), GRID MAP (%d,%d) , ROBOT(%f,%f)",
+          goal_raw.first, goal_raw.second, goal_cell.first, goal_cell.second, grid_map_->get_rows(), grid_map_->get_cols(), robot_x_, robot_y_);
       return;
     }
 
@@ -557,6 +569,7 @@ private:
 
     // Initialize filter if first goal
     if (!have_goal_filt_) {
+      RCLCPP_INFO(this->get_logger(), "GOAL CELL (%d,%d) ======== GOAL METERS (%f,%f) =========" , goal_cell.first, goal_cell.second, goal_meters.first, goal_meters.second);
       goal_filt_x_ = goal_meters.first;
       goal_filt_y_ = goal_meters.second;
       have_goal_filt_ = true;
@@ -565,10 +578,8 @@ private:
                                          goal_meters.second - goal_filt_y_);
       if (d_change < accept_goal_change_dist_) {
         // small change = same target, EMA smooth
-        goal_filt_x_ = goal_ema_alpha_ * goal_meters.first +
-                       (1.0 - goal_ema_alpha_) * goal_filt_x_;
-        goal_filt_y_ = goal_ema_alpha_ * goal_meters.second +
-                       (1.0 - goal_ema_alpha_) * goal_filt_y_;
+        goal_filt_x_ = goal_ema_alpha_ * goal_meters.first + (1.0 - goal_ema_alpha_) * goal_filt_x_;
+        goal_filt_y_ = goal_ema_alpha_ * goal_meters.second + (1.0 - goal_ema_alpha_) * goal_filt_y_;
         return;
       }
 
@@ -582,8 +593,8 @@ private:
     pending_goal_y_ = goal_filt_y_;
     pending_replan_ = true;
 
-    RCLCPP_INFO(this->get_logger(), "NEW GOAL: (%.2f, %.2f)", pending_goal_x_,
-                pending_goal_y_);
+    RCLCPP_INFO(this->get_logger(), "NEW GOAL: (%.2f, %.2f), GRID (%d, %d)", pending_goal_x_,
+                pending_goal_y_, grid_map_->get_rows(), grid_map_->get_cols());
     return;
   }
 
@@ -632,6 +643,8 @@ private:
     printed_waiting_for_odom_ = false;
 
     if (!planned_once_) {
+      RCLCPP_INFO(this->get_logger(),
+                    "MAKING INIT PLANNER - GOAL:(%f, %f) =======================", goal_x_, goal_y_);
       init_planner();
       // Only compute a path if we actually have a goal (avoid degenerate
       // start==goal trajectory that causes the robot to spin on startup)

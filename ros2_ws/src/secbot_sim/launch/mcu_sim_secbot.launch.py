@@ -9,11 +9,11 @@ Higher-level launch files (sim_autonomy_secbot, uwb_sim, etc.) include this
 and add their own autonomy stack on top.
 """
 
-import os
+import os, random
 import yaml
 from launch import LaunchDescription
 from launch.actions import ExecuteProcess, DeclareLaunchArgument, OpaqueFunction
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration,PythonExpression
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
@@ -28,15 +28,15 @@ def generate_launch_description():
     bridge_config    = os.path.join(pkg_my_robot,       'config', 'ros_gz_bridge.yaml')
 
     # world / robot files ===================================
-    world_file        = os.path.join(pkg_secbot_sim,  'worlds', 'bot', 'my_bot_harmonic.sdf')
-    robot_urdf_file   = os.path.join(pkg_my_robot,    'urdf', 'robot.urdf')
+    world_file        = os.path.join(pkg_secbot_sim,  'worlds', 'proper_field', 'proper_field.world')
+    robot_file   = os.path.join(pkg_my_robot,    'urdf', 'robot.urdf')
     gz_resource_path  = os.path.join(pkg_secbot_sim,  'worlds')
     pkg_secbot_vision = get_package_share_directory('secbot_vision')
-    spawn_yaml_path   = os.path.join(pkg_secbot_vision,'controllers', 'spawn_locations.yaml')
+    spawn_yaml_path   = os.path.join(pkg_secbot_vision,'controller', 'spawn_locations.yaml')
     yellow_box_sdf    = os.path.join(pkg_secbot_sim,  'worlds', 'proper_field', 'yellow_box.sdf')
 
     # Read URDF for robot_state_publisher
-    with open(robot_urdf_file, 'r') as f:
+    with open(robot_file, 'r') as f:
         robot_description = f.read()
 
     # GZ resource path env ===========================
@@ -82,10 +82,11 @@ def generate_launch_description():
 
         if not spawn_poses:
             spawn_poses = [
-                {'x': '5.0',  'y':  '0.0', 'z': '0.1'},
-                {'x': '3.0',  'y':  '2.0', 'z': '0.1'},
-                {'x': '4.0',  'y': '-1.0', 'z': '0.1'},
+                # {'x': f'{random.random(0.20, 2.24)}',  'y':  f'{random.random(-1.37, -0.20)}', 'z': '0.1'},
+                { 'x': '1.830000', 'y': '-.27', 'z': '0.05' }
+                # {'x': '4.0',  'y': '-1.0', 'z': '0.1'},
             ]
+            print("COULD NOT FIND SPAWN POSES ================================================================================")
 
         num_blocks = max(0, min(num_blocks, len(spawn_poses)))
         nodes = []
@@ -111,13 +112,45 @@ def generate_launch_description():
     spawn_boxes_opaque = OpaqueFunction(function=spawn_yellow_boxes)
 
     # Spawn Robot from URDF =============================
+
+    # Load YAML if exists
+    yaml_data = {}
+    if os.path.exists(spawn_yaml_path):
+        with open(spawn_yaml_path, 'r') as f:
+            yaml_data = yaml.safe_load(f) or {}
+
+
+    # Default Spawn Location from YAML or Fallback
+    robot_cfg = yaml_data.get('robot', {})
+    default_x = str(robot_cfg.get('x', '0.25'))
+    default_y = str(robot_cfg.get('y', '-1.0'))
+    default_z = str(robot_cfg.get('z', '0.2'))
+    default_yaw = str(robot_cfg.get('yaw', '0.0'))
+
+    # Declare launch arguments for offsets
+    x_offset_arg = DeclareLaunchArgument('x_offset', default_value='0.0', description='X offset for robot spawn')
+    y_offset_arg = DeclareLaunchArgument('y_offset', default_value='0.0', description='Y offset for robot spawn')
+    z_offset_arg = DeclareLaunchArgument('z_offset', default_value='0.0', description='Z offset for robot spawn')
+    yaw_offset_arg = DeclareLaunchArgument('yaw_offset', default_value='0.0', description='Yaw offset for robot spawn')
+
+    # Calculate final spawn position
+    # Calculate final spawn position
+    x_pos = PythonExpression([default_x, " + ", LaunchConfiguration('x_offset')])
+    y_pos = PythonExpression([default_y, " + ", LaunchConfiguration('y_offset')])
+    z_pos = PythonExpression([default_z, " + ", LaunchConfiguration('z_offset')])
+    yaw_pos = PythonExpression([default_yaw, " + ", LaunchConfiguration('yaw_offset')])
+
+    # Spawn Robot
     spawn_robot = Node(
         package='ros_gz_sim',
         executable='create',
         arguments=[
-            '-file', robot_urdf_file,
-            '-name', 'my_robot',
-            '-x', '0', '-y', '0', '-z', '0.2',
+            '-file', robot_file,
+            '-name', 'my_bot',
+            '-x', x_pos,
+            '-y', y_pos,
+            '-z', z_pos,
+            '-Y', yaw_pos
         ],
         output='screen'
     )
@@ -194,6 +227,10 @@ def generate_launch_description():
 
     return LaunchDescription([
         # simulation
+        x_offset_arg,
+        y_offset_arg,
+        z_offset_arg,
+        yaw_offset_arg,
         gz_sim,
 
         # args

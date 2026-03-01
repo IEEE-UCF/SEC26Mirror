@@ -5,11 +5,11 @@ frames:
   base: "base_link"
 
 topics:
-  odom: "/odom"
+  odom: "/odometry/filtered"
   cmd_vel: "/cmd_vel"
   goal: "/goal_pose"
   path: "/global_path"
-  trajectory: "/trajectory"
+  trajectory: "/drive_base/trajectory"
 
 smoothing:
   max_skip: 3

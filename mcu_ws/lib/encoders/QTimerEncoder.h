@@ -44,14 +44,34 @@
    */
   int16_t getDelta(uint8_t channel) const;
    /**
-   * @brief Change count direction for a channel
+   * @brief Change count direction for a channel.
    * @param channel 0-7.
-   * @param dir true = negative, false = positive
+   * @param dir true = count down (negative), false = count up (positive).
    */
   void changeDir(uint8_t channel, bool dir);
 
-  private:
+  /**
+   * @brief Capture deltas from all channels, accumulate signed ticks,
+   *        and update hardware count direction for the next period.
+   * @param dirs Array of 8 booleans from MotorManager::getIntendedDirection().
+   *             true = forward (count up), false = reverse (count down).
+   */
+  void captureAll(const bool* dirs);
+
+  /**
+   * @brief Get accumulated signed ticks for a channel.
+   * @param channel 0-7.
+   */
+  int32_t getTicks(uint8_t channel) const;
+
+  /**
+   * @brief Reset all accumulators and hardware counters to zero.
+   */
+  void resetAll();
+
+ private:
   EncoderChannel channels_[NUM_ENCODER_CHANNELS] = {};
+  int32_t ticks_[NUM_ENCODER_CHANNELS] = {};
   void enableClockGates();
   void configureIOMUX();
   void configureXBAR();

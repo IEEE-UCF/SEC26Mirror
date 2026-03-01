@@ -184,7 +184,31 @@ int16_t QTimerEncoder::getDelta(uint8_t channel) const {
 
 void QTimerEncoder::changeDir(uint8_t channel, bool dir) {
   if (channel >= NUM_ENCODER_CHANNELS) return;
-  if(dir) *channels_[channel].dir_reg |= TMR_CTRL_DIR;
+  if (dir) *channels_[channel].dir_reg |= TMR_CTRL_DIR;
   else *channels_[channel].dir_reg &= ~TMR_CTRL_DIR;
+}
+
+void QTimerEncoder::captureAll(const bool* dirs) {
+  for (uint8_t i = 0; i < NUM_ENCODER_CHANNELS; i++) {
+    // Read delta (signed by current hardware DIR bit) and reset counter
+    int16_t delta = getDelta(i);
+    ticks_[i] += delta;
+    // Update hardware count direction for the next period:
+    // dirs[i]=true (forward) → count up (dir=false)
+    // dirs[i]=false (reverse) → count down (dir=true)
+    changeDir(i, !dirs[i]);
+  }
+}
+
+int32_t QTimerEncoder::getTicks(uint8_t channel) const {
+  if (channel >= NUM_ENCODER_CHANNELS) return 0;
+  return ticks_[channel];
+}
+
+void QTimerEncoder::resetAll() {
+  for (uint8_t i = 0; i < NUM_ENCODER_CHANNELS; i++) {
+    ticks_[i] = 0;
+    *channels_[i].cntr_reg = UINT16_C(UINT16_MAX / 2);
+  }
 }
 }  // namespace Encoders

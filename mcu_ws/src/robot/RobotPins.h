@@ -18,14 +18,14 @@
 // ── Motor FG Encoder Inputs (GPIO 2-9) ───────────────────────────────
 // FG (frequency generator) speed signals from motor encoders.
 // Configured as QTimer inputs via XBAR crossbar (see QTimerEncoder.cpp).
-// Pin 2: Motor 1 FG (EMC_04 -> XBAR In 6  -> QTimer1 Timer 0)
-// Pin 3: Motor 2 FG (EMC_05 -> XBAR In 7  -> QTimer1 Timer 1)
-// Pin 4: Motor 3 FG (EMC_06 -> XBAR In 8  -> QTimer1 Timer 2)
-// Pin 5: Motor 4 FG (EMC_08 -> XBAR In 17 -> QTimer1 Timer 3)
-// Pin 6: Motor 5 FG (B0_10  -> direct      -> QTimer4 Timer 1)
-// Pin 7: Motor 6 FG (B1_01  -> XBAR In 15 -> QTimer2 Timer 0)
-// Pin 8: Motor 7 FG (B1_00  -> XBAR In 14 -> QTimer2 Timer 1)
-// Pin 9: Motor 8 FG (B0_11  -> direct      -> QTimer4 Timer 2)
+// Pin 2: Motor 1 FG [idx 0] (EMC_04 -> XBAR In 6  -> QTimer3 Timer 0)
+// Pin 3: Motor 2 FG [idx 1] (EMC_05 -> XBAR In 7  -> QTimer3 Timer 1)
+// Pin 4: Motor 3 FG [idx 2] (EMC_06 -> XBAR In 8  -> QTimer3 Timer 2)
+// Pin 5: Motor 4 FG [idx 3] (EMC_08 -> XBAR In 17 -> QTimer3 Timer 3)
+// Pin 6: Motor 5 FG [idx 4] (B0_10  -> direct      -> QTimer4 Timer 0)
+// Pin 7: Motor 6 FG [idx 5] (B1_01  -> XBAR In 15 -> QTimer4 Timer 1)
+// Pin 8: Motor 7 FG [idx 6] (B1_00  -> XBAR In 14 -> QTimer4 Timer 2) — DISABLED
+// Pin 9: Motor 8 FG [idx 7] (B0_11  -> direct      -> QTimer4 Timer 3)
 
 // ── UWB Module (SPI0) ───────────────────────────────────────────────
 constexpr uint8_t PIN_UWB_CS = 10;    // SPI0 CS0
@@ -63,8 +63,8 @@ constexpr uint8_t PIN_MOTOR_OE = 29;  // PCA9685 #1 OE (active LOW)
 
 // ── Misc GPIO ───────────────────────────────────────────────────────
 constexpr uint8_t PIN_RC_RX = 34;     // FlySky IBUS receiver (Serial8 RX)
-constexpr uint8_t PIN_RGB_LEDS = 35;  // WS2812B data line
-constexpr uint8_t PIN_BUTTON_INTERRUPT = 36;  // Standalone reset button
+constexpr uint8_t PIN_RGB_LEDS = 35;  // WS2812B data line (5 LEDs)
+constexpr uint8_t PIN_BUTTON_INTERRUPT = 36;  // TCA9555 INT (active LOW)
 
 // ── Not Connected ───────────────────────────────────────────────────
 // Pin 14: NC
@@ -98,33 +98,49 @@ constexpr uint8_t MUX_CH_BATTERY = 0;  // INA219 power sensor
 //  TCA9555 GPIO expander pin mapping
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Port 0 (pins 0-7):   DIP switches (active HIGH = ON)
-// Port 1 (pins 8-15):  Push buttons (active HIGH = pressed)
-//   Datasheet labels Port 1 pins as P10-P17.
+// Port 0 (pins 0-7): DIP switches (active HIGH = ON)
+//   DIP 1 (bit 0): RC override — ON = RC transmitter drives motors
+//   DIP 2 (bit 1): UWB enable — ON = DW3000 ranging active
+//   DIP 3 (bit 2): Vision enable — ON = duck detection (ROS2)
+//   DIP 4 (bit 3): Speed profile — ON = half speed (ROS2)
+//   DIP 5 (bit 4): Autonomy enable — ON = mission FSM auto (ROS2)
+//   DIP 6 (bit 5): OLED debug — ON = debug dashboard mode
+//   DIP 7 (bit 6): Force reflash — ON = force OTA reflash
+//   DIP 8 (bit 7): Deploy target — ON = selects deploy target
+
+// Port 1 (pins 8-15): Push buttons (active HIGH = pressed)
+//   Button 1 (bit 0): (unassigned)
+//   Button 2 (bit 1): (unassigned)
+//   Button 3 (bit 2): (unassigned)
+//   Button 4 (bit 3): Deploy trigger — hold 1s to trigger deployment
+//   Button 5 (bit 4): (unassigned)
+//   Button 6 (bit 5): (unassigned)
+//   Button 7 (bit 6): (unassigned)
+//   Button 8 (bit 7): (unassigned)
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  PCA9685 channel mapping
 // ═══════════════════════════════════════════════════════════════════════════
 
-// PCA9685 #0 (I2C_ADDR_SERVO) — Servos
+// PCA9685 #0 (I2C_ADDR_SERVO, OE = pin 28) — Servos
 //   Channel 0: Crank servo
 //   Channel 1: Keypad servo
-//   Channel 2: Servo 3
-//   Channel 3: Servo 4
-//   Channel 4: Servo 5
-//   Channel 5: Servo 6
-//   Channel 6: Servo 7
-//   Channel 7: Servo 8
+//   Channel 2: (unassigned)
+//   Channel 3: (unassigned)
+//   Channel 4: (unassigned)
+//   Channel 5: (unassigned)
+//   Channel 6: (unassigned)
+//   Channel 7: (unassigned)
 
-// PCA9685 #1 (I2C_ADDR_MOTOR) — Motors (PWM + DIR pairs)
-//   Channel 0,1:   Motor 1 (PWM, DIR)
-//   Channel 2,3:   Motor 2 (PWM, DIR)
-//   Channel 4,5:   Motor 3 (PWM, DIR)
-//   Channel 6,7:   Motor 4 (PWM, DIR)
-//   Channel 8,9:   Motor 5 (PWM, DIR)
-//   Channel 10,11: Motor 6 (PWM, DIR)
-//   Channel 12,13: Motor 7 (PWM, DIR)
-//   Channel 14,15: Motor 8 (PWM, DIR)
+// PCA9685 #1 (I2C_ADDR_MOTOR, OE = pin 29) — Motors (PWM + DIR pairs)
+//   Channel 0,1:   Motor 1 — right drive (PWM, DIR)  [encoder idx 0, pin 2]
+//   Channel 2,3:   Motor 2 — left drive  (PWM, DIR)  [encoder idx 1, pin 3]
+//   Channel 4,5:   Motor 3 (PWM, DIR)                [encoder idx 2, pin 4]
+//   Channel 6,7:   Motor 4 (PWM, DIR)                [encoder idx 3, pin 5]
+//   Channel 8,9:   Motor 5 (PWM, DIR)                [encoder idx 4, pin 6]
+//   Channel 10,11: Motor 6 (PWM, DIR)                [encoder idx 5, pin 7]
+//   Channel 12,13: Motor 7 (PWM, DIR)                [encoder idx 6, pin 8]
+//   Channel 14,15: Motor 8 (PWM, DIR)                [encoder idx 7, pin 9]
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Peripheral configuration constants

@@ -111,10 +111,10 @@ void RCSubsystem::updateRCMessage() {
   }
 
   // Extract joystick values (channels 0-3)
-  msg_.lx = data_.channels[0];  // left stick X
-  msg_.ly = data_.channels[1];  // left stick Y
-  msg_.rx = data_.channels[2];  // right stick X
-  msg_.ry = data_.channels[3];  // right stick Y
+  msg_.lx = data_.channels[3];  // left stick X
+  msg_.ly = data_.channels[2];  // left stick Y
+  msg_.rx = data_.channels[0];  // right stick X
+  msg_.ry = data_.channels[1];  // right stick Y
 
   // Extract knob values (channels 4-5)
   msg_.knobl = data_.channels[4];  // left knob

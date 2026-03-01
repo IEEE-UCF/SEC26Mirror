@@ -442,19 +442,9 @@ void loop() {
     bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
 
     if (swa_high) {
-      // Normalize LY (ch1) and RX (ch2) from [-255, 255] to [-1.0, 1.0]
-      float ly = static_cast<float>(rc.channels[1]) / 255.0f;
-      float rx = static_cast<float>(rc.channels[2]) / 255.0f;
-
-      // Dead zone (ignore small stick noise)
-      if (ly > -0.05f && ly < 0.05f) ly = 0.0f;
-      if (rx > -0.05f && rx < 0.05f) rx = 0.0f;
-
-      // Arcade drive mix: left = ly + rx, right = ly - rx
-      float left = secbot::utils::clamp(ly + rx, -1.0f, 1.0f);
-      float right = secbot::utils::clamp(ly - rx, -1.0f, 1.0f);
-
-      g_drive.manualDrive(left, right);
+      float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
+      float steering = static_cast<float>(rc.channels[3]) / 255.0f;
+      g_drive.rcDrive(throttle, steering);
     } else {
       // SWA off — stop if we were in manual mode
       if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {

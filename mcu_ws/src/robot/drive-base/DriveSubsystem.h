@@ -22,6 +22,7 @@
 #include <TankDriveLocalization.h>
 #include <Vector2D.h>
 #include <geometry_msgs/msg/pose.h>
+#include <filters.h>
 #include <math_utils.h>
 #include <mcu_msgs/msg/drive_base.h>
 #include <micro_ros_utilities/type_utilities.h>
@@ -94,6 +95,10 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   float poseKLinear = 2.0f;
   float poseKAngular = 4.0f;
   float poseDistTol = 0.015f;    // meters
+
+  // Motor direction multipliers (1.0 or -1.0 to reverse a motor)
+  float leftMotorMultiplier = -1.0f;
+  float rightMotorMultiplier = 1.0f;
 
   // Safety
   uint32_t commandTimeoutMs = 500;
@@ -398,10 +403,26 @@ class DriveSubsystem : public IMicroRosParticipant,
    */
   void manualDrive(float left, float right) {
     mode_ = DriveMode::MANUAL;
-    setup_.motorManager->setSpeed(setup_.leftMotorIdx,
-                                  secbot::utils::clamp(left, -1.0f, 1.0f));
-    setup_.motorManager->setSpeed(setup_.rightMotorIdx,
-                                  secbot::utils::clamp(right, -1.0f, 1.0f));
+    float l = secbot::utils::clamp(left * setup_.leftMotorMultiplier, -1.0f, 1.0f);
+    float r = secbot::utils::clamp(right * setup_.rightMotorMultiplier, -1.0f, 1.0f);
+    setup_.motorManager->setSpeed(setup_.leftMotorIdx, l);
+    setup_.motorManager->setSpeed(setup_.rightMotorIdx, r);
+  }
+
+  /**
+   * @brief Arcade drive from RC stick inputs.
+   * @param throttle  Forward/backward (-1.0 to 1.0), positive = forward
+   * @param steering  Turn left/right (-1.0 to 1.0), positive = turn right
+   * Deadzone of 0.05 applied to both axes.
+   */
+  void rcDrive(float throttle, float steering) {
+    static constexpr float DEADZONE = 0.05f;
+    if (throttle > -DEADZONE && throttle < DEADZONE) throttle = 0.0f;
+    if (steering > -DEADZONE && steering < DEADZONE) steering = 0.0f;
+
+    float left = secbot::utils::clamp(throttle + steering, -1.0f, 1.0f);
+    float right = secbot::utils::clamp(throttle - steering, -1.0f, 1.0f);
+    manualDrive(left, right);
   }
 
   /** @brief Stop all motors and enter IDLE mode. */

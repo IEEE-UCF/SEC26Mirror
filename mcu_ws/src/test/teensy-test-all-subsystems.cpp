@@ -46,6 +46,9 @@
  */
 
 #include <Arduino.h>
+
+#include "../robot/ultrareset.h"
+
 #include <SPI.h>
 #include <TeensyThreads.h>
 #include <microros_manager_robot.h>
@@ -191,13 +194,16 @@ static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
 static UWBSubsystem g_uwb(g_uwb_setup);
 
+// --- QTimer encoder hardware driver (pins 2-9, must precede motor manager) ---
+static Encoders::QTimerEncoder g_qtimer_encoder;
+
 // --- Motor manager subsystem (PCA9685 #1, OE = pin 21) ---
 static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
-                                                PIN_MOTOR_OE, NUM_MOTORS);
+                                                PIN_MOTOR_OE, NUM_MOTORS,
+                                                &g_qtimer_encoder);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
-// --- Encoder subsystem (QTimer hardware FG pulse counting, pins 2-9) ---
-static Encoders::QTimerEncoder g_qtimer_encoder;
+// --- Encoder subsystem (QTimer FG pulse rate publisher) ---
 static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
                                                   &g_qtimer_encoder, &g_motor);
 static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
@@ -221,7 +227,8 @@ static Drive::TankDriveLocalizationSetup g_loc_setup(
     RobotConfig::START_X, RobotConfig::START_Y, RobotConfig::START_THETA);
 
 static DriveSubsystemSetup g_drive_setup(
-    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup);
+    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup,
+    &g_qtimer_encoder);
 
 static DriveSubsystem g_drive(g_drive_setup);
 
@@ -376,6 +383,11 @@ void setup() {
   g_oled.appendText("Subsystems OK");
   g_oled.appendText("Waiting for uROS...");
 
+  // 2b2. Update OLED when micro-ROS connects/disconnects
+  g_mr.setStateCallback([](bool connected) {
+    g_oled.appendText(connected ? "uROS CONNECTED" : "uROS DISCONNECTED");
+  });
+
   // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
@@ -451,16 +463,9 @@ void loop() {
     bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
 
     if (swa_high) {
-      float ly = static_cast<float>(rc.channels[1]) / 255.0f;
-      float rx = static_cast<float>(rc.channels[2]) / 255.0f;
-
-      if (ly > -0.05f && ly < 0.05f) ly = 0.0f;
-      if (rx > -0.05f && rx < 0.05f) rx = 0.0f;
-
-      float left = secbot::utils::clamp(ly + rx, -1.0f, 1.0f);
-      float right = secbot::utils::clamp(ly - rx, -1.0f, 1.0f);
-
-      g_drive.manualDrive(left, right);
+      float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
+      float steering = static_cast<float>(rc.channels[3]) / 255.0f;
+      g_drive.rcDrive(throttle, steering);
     } else {
       if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
         g_drive.stop();

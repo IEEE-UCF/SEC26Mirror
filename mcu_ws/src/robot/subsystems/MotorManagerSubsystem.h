@@ -24,6 +24,7 @@
 
 #include <BaseSubsystem.h>
 #include <PCA9685Driver.h>
+#include <QTimerEncoder.h>
 #include "DebugLog.h"
 #include <mcu_msgs/srv/set_motor.h>
 #include <microros_manager_robot.h>
@@ -47,18 +48,21 @@ class MotorManagerSubsystemSetup : public Classes::BaseSetup {
    */
   MotorManagerSubsystemSetup(const char* _id, Robot::PCA9685Driver* driver,
                              uint8_t oePin = 255, uint8_t numMotors = 8,
+                             Encoders::QTimerEncoder* encoder = nullptr,
                              const char* stateTopic = "/mcu_robot/motor/state",
                              const char* serviceName = "/mcu_robot/motor/set")
       : Classes::BaseSetup(_id),
         driver_(driver),
         oePin_(oePin),
         numMotors_(numMotors),
+        encoder_(encoder),
         stateTopic_(stateTopic),
         serviceName_(serviceName) {}
 
   Robot::PCA9685Driver* driver_ = nullptr;
   uint8_t oePin_ = 255;
   uint8_t numMotors_ = 8;
+  Encoders::QTimerEncoder* encoder_ = nullptr;
   const char* stateTopic_ = "/mcu_robot/motor/state";
   const char* serviceName_ = "/mcu_robot/motor/set";
 };
@@ -194,6 +198,13 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     dirs_[motor] = (speed >= 0.0f);
 
     applyMotorOutput(motor);
+
+    // Sync QTimer hardware counter direction immediately so the encoder
+    // register is always correct when PCA9685 flushes.
+    // dirs_[motor]=true (forward) → count up (dir=false)
+    if (setup_.encoder_) {
+      setup_.encoder_->changeDir(motor, !dirs_[motor]);
+    }
   }
 
   float getSpeed(uint8_t motor) const {

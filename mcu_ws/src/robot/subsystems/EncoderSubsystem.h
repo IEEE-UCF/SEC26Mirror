@@ -82,19 +82,11 @@ class EncoderSubsystem : public IMicroRosParticipant,
   void begin() override {}
 
   void update() override {
-    if (!setup_.encoder_ || !setup_.motorManager_) return;
+    if (!setup_.encoder_) return;
 
-    // Read intended motor directions (ignores NFPShop reverse pulses)
-    bool dirs[NUM_CHANNELS];
-    for (uint8_t i = 0; i < NUM_CHANNELS; i++) {
-      dirs[i] = setup_.motorManager_->getIntendedDirection(setup_.motorMap_[i]);
-    }
-
-    // Capture all encoder counters and apply direction signs
-    setup_.encoder_->captureAll(dirs);
-
-    // Compute ticks/sec from deltas (accumulated ticks are preserved for
-    // localization — never reset)
+    // Tick capture and direction sync is owned by DriveSubsystem (or
+    // MotorManager changeDir callback).  We only read accumulated ticks
+    // and compute rates for publishing.
     uint32_t now_us = micros();
     uint32_t dt_us = now_us - last_capture_us_;
     last_capture_us_ = now_us;

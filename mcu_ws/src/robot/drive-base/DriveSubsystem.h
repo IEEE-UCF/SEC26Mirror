@@ -22,6 +22,7 @@
 #include <TankDriveLocalization.h>
 #include <Vector2D.h>
 #include <geometry_msgs/msg/pose.h>
+#include <filters.h>
 #include <math_utils.h>
 #include <mcu_msgs/msg/drive_base.h>
 #include <micro_ros_utilities/type_utilities.h>
@@ -62,6 +63,7 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   MotorManagerSubsystem* motorManager = nullptr;
   EncoderSubsystem* encoderSub = nullptr;
   ImuSubsystem* imuSub = nullptr;
+  Encoders::QTimerEncoder* encoder = nullptr;  // direct QTimer access for captureAll
 
   // Channel mapping
   uint8_t leftMotorIdx = 1;
@@ -94,6 +96,10 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   float poseKAngular = 4.0f;
   float poseDistTol = 0.015f;    // meters
 
+  // Motor direction multipliers (1.0 or -1.0 to reverse a motor)
+  float leftMotorMultiplier = -1.0f;
+  float rightMotorMultiplier = 1.0f;
+
   // Safety
   uint32_t commandTimeoutMs = 500;
 
@@ -108,13 +114,15 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   DriveSubsystemSetup(
       const char* _id,
       MotorManagerSubsystem* _motor,
-      EncoderSubsystem* _encoder,
+      EncoderSubsystem* _encoderSub,
       ImuSubsystem* _imu,
-      const Drive::TankDriveLocalizationSetup& _locSetup)
+      const Drive::TankDriveLocalizationSetup& _locSetup,
+      Encoders::QTimerEncoder* _encoder = nullptr)
       : Classes::BaseSetup(_id),
         motorManager(_motor),
-        encoderSub(_encoder),
+        encoderSub(_encoderSub),
         imuSub(_imu),
+        encoder(_encoder),
         locSetup(_locSetup) {}
 };
 
@@ -147,6 +155,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     angularProfile_.configure(setup_.angularProfile);
     trajController_.configure(setup_.trajConfig);
 
+    // RC input smoothing: tau=0.15s, dt=0.005s (5ms main loop polling rate)
+    rcThrottleFilter_.configureTauDtFast(0.15f, 0.005f);
+    rcSteeringFilter_.configureTauDtFast(0.15f, 0.005f);
+
     // Ensure motors are off at startup
     stopMotors();
     last_update_us_ = micros();
@@ -160,6 +172,10 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   void update() override {
     if (!setup_.motorManager || !setup_.encoderSub || !setup_.imuSub) return;
+
+    // Capture all encoder deltas and sync hardware direction registers.
+    // Must happen before reading ticks so accumulated values are fresh.
+    captureEncoders();
 
     // ── Timing ──
     uint32_t now_us = micros();
@@ -391,10 +407,30 @@ class DriveSubsystem : public IMicroRosParticipant,
    */
   void manualDrive(float left, float right) {
     mode_ = DriveMode::MANUAL;
-    setup_.motorManager->setSpeed(setup_.leftMotorIdx,
-                                  secbot::utils::clamp(left, -1.0f, 1.0f));
-    setup_.motorManager->setSpeed(setup_.rightMotorIdx,
-                                  secbot::utils::clamp(right, -1.0f, 1.0f));
+    float l = secbot::utils::clamp(left * setup_.leftMotorMultiplier, -1.0f, 1.0f);
+    float r = secbot::utils::clamp(right * setup_.rightMotorMultiplier, -1.0f, 1.0f);
+    setup_.motorManager->setSpeed(setup_.leftMotorIdx, l);
+    setup_.motorManager->setSpeed(setup_.rightMotorIdx, r);
+  }
+
+  /**
+   * @brief Arcade drive from RC stick inputs.
+   * @param throttle  Forward/backward (-1.0 to 1.0), positive = forward
+   * @param steering  Turn left/right (-1.0 to 1.0), positive = turn right
+   * Deadzone of 0.05 applied to both axes.
+   */
+  void rcDrive(float throttle, float steering) {
+    static constexpr float DEADZONE = 0.05f;
+    if (throttle > -DEADZONE && throttle < DEADZONE) throttle = 0.0f;
+    if (steering > -DEADZONE && steering < DEADZONE) steering = 0.0f;
+
+    // Smooth RC inputs to prevent jerky motor transitions
+    throttle = rcThrottleFilter_.update(throttle);
+    steering = rcSteeringFilter_.update(steering);
+
+    float left = secbot::utils::clamp(throttle + steering, -1.0f, 1.0f);
+    float right = secbot::utils::clamp(throttle - steering, -1.0f, 1.0f);
+    manualDrive(left, right);
   }
 
   /** @brief Stop all motors and enter IDLE mode. */
@@ -405,6 +441,8 @@ class DriveSubsystem : public IMicroRosParticipant,
     rightPID_.reset();
     linearProfile_.reset();
     angularProfile_.reset();
+    rcThrottleFilter_.reset(0.0f, false);
+    rcSteeringFilter_.reset(0.0f, false);
   }
 
   /** @brief Override the internal pose estimate (e.g., from Pi EKF). */
@@ -458,6 +496,22 @@ class DriveSubsystem : public IMicroRosParticipant,
   // ── Constants ──────────────────────────────────────────────────────────
 
   static constexpr size_t MAX_TRAJECTORY_POINTS = 32;
+
+  // ── Encoder capture ──────────────────────────────────────────────────
+
+  /**
+   * @brief Read all 8 motor intended directions from MotorManager, then
+   *        call QTimerEncoder::captureAll() to accumulate deltas and sync
+   *        the hardware counter direction registers.
+   */
+  void captureEncoders() {
+    if (!setup_.encoder || !setup_.motorManager) return;
+    bool dirs[Encoders::NUM_ENCODER_CHANNELS];
+    for (uint8_t i = 0; i < Encoders::NUM_ENCODER_CHANNELS; i++) {
+      dirs[i] = setup_.motorManager->getIntendedDirection(i);
+    }
+    setup_.encoder->captureAll(dirs);
+  }
 
   // ── Control methods ────────────────────────────────────────────────────
 
@@ -767,6 +821,10 @@ class DriveSubsystem : public IMicroRosParticipant,
   float currentLinearVel_ = 0.0f;
   float currentAngularVel_ = 0.0f;
   Pose2D targetPose_;
+
+  // RC input smoothing
+  secbot::utils::LowPass1P rcThrottleFilter_;
+  secbot::utils::LowPass1P rcSteeringFilter_;
 
   // Timing
   uint32_t last_update_us_ = 0;

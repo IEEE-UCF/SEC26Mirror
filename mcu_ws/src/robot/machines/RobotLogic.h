@@ -154,13 +154,16 @@ static CrankSubsystemSetup g_crank_setup("crank_subsystem", &g_servo,
                                           CRANK_SERVO_IDX);
 static CrankSubsystem g_crank(g_crank_setup);
 
+// --- QTimer encoder hardware driver (pins 2-9, must precede motor manager) ---
+static Encoders::QTimerEncoder g_qtimer_encoder;
+
 // --- Motor manager subsystem (PCA9685 #1) ---
 static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
-                                                PIN_MOTOR_OE, NUM_MOTORS);
+                                                PIN_MOTOR_OE, NUM_MOTORS,
+                                                &g_qtimer_encoder);
 static MotorManagerSubsystem g_motor(g_motor_setup);
 
-// --- Encoder subsystem (QTimer hardware FG pulse counting, pins 2-9) ---
-static Encoders::QTimerEncoder g_qtimer_encoder;
+// --- Encoder subsystem (QTimer FG pulse rate publisher) ---
 static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
                                                   &g_qtimer_encoder, &g_motor);
 static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
@@ -202,7 +205,8 @@ static Drive::TankDriveLocalizationSetup g_loc_setup(
     RobotConfig::START_X, RobotConfig::START_Y, RobotConfig::START_THETA);
 
 static DriveSubsystemSetup g_drive_setup(
-    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup);
+    "drive_subsystem", &g_motor, &g_encoder_sub, &g_imu, g_loc_setup,
+    &g_qtimer_encoder);
 
 // Configure drive subsystem control parameters from RobotConfig
 static void configureDriveSetup() {
@@ -359,6 +363,11 @@ void setup() {
   g_oled.appendText("Subsystems OK");
   g_oled.appendText("Waiting for uROS...");
 
+  // 2b2. Update OLED when micro-ROS connects/disconnects
+  g_mr.setStateCallback([](bool connected) {
+    g_oled.appendText(connected ? "uROS CONNECTED" : "uROS DISCONNECTED");
+  });
+
   // 2c. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
@@ -438,19 +447,9 @@ void loop() {
     bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
 
     if (swa_high) {
-      // Normalize LY (ch1) and RX (ch2) from [-255, 255] to [-1.0, 1.0]
-      float ly = static_cast<float>(rc.channels[1]) / 255.0f;
-      float rx = static_cast<float>(rc.channels[2]) / 255.0f;
-
-      // Dead zone (ignore small stick noise)
-      if (ly > -0.05f && ly < 0.05f) ly = 0.0f;
-      if (rx > -0.05f && rx < 0.05f) rx = 0.0f;
-
-      // Arcade drive mix: left = ly + rx, right = ly - rx
-      float left = secbot::utils::clamp(ly + rx, -1.0f, 1.0f);
-      float right = secbot::utils::clamp(ly - rx, -1.0f, 1.0f);
-
-      g_drive.manualDrive(left, right);
+      float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
+      float steering = static_cast<float>(rc.channels[3]) / 255.0f;
+      g_drive.rcDrive(throttle, steering);
     } else {
       // SWA off — stop if we were in manual mode
       if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {

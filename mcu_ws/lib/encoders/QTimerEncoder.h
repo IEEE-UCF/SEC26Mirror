@@ -16,68 +16,65 @@
  *   Pin 8 (B1_00)  -> XBAR In 14 -> Out 91 -> QTimer2 Timer 1
  *   Pin 9 (B0_11)  -> Direct TMR4 ch2       -> QTimer4 Timer 2
  */
-
-#pragma once
-
-#include <stdint.h>
-
-namespace Encoders {
-
-static constexpr uint8_t NUM_ENCODER_CHANNELS = 8;
-
-struct EncoderChannel {
+ #pragma once
+ #include <stdint.h>
+ namespace Encoders {
+ static constexpr uint8_t NUM_ENCODER_CHANNELS = 8;
+ struct EncoderChannel {
   volatile uint16_t* cntr_reg;
-  uint16_t last_count;
-  int32_t accumulated_ticks;
+  volatile uint16_t* dir_reg;
 };
-
-class QTimerEncoder {
+ class QTimerEncoder {
  public:
   QTimerEncoder() = default;
-
-  /**
+   /**
    * @brief Initialize all 8 QTimer encoder channels.
    * Configures clock gates, IOMUX, XBAR routing, and QTimer registers.
    * Must be called once during setup().
    */
   bool init();
-
-  /**
+   /**
    * @brief Read the raw 16-bit counter value for a channel.
    * @param channel 0-7.
    */
-  uint16_t readRaw(uint8_t channel) const;
-
-  /**
-   * @brief Capture deltas for all 8 channels.
-   * Reads all counters, computes unsigned deltas (handles 16-bit wrap),
-   * applies direction sign, and accumulates into signed tick counts.
-   * @param directions Array of 8 bools: true = forward, false = reverse.
+  int16_t readRaw(uint8_t channel) const;
+   /**
+   * @brief Get delta for a channel and reset
+   * @param channel 0-7.
    */
-  void captureAll(const bool directions[NUM_ENCODER_CHANNELS]);
+  int16_t getDelta(uint8_t channel) const;
+   /**
+   * @brief Change count direction for a channel.
+   * @param channel 0-7.
+   * @param dir true = count down (negative), false = count up (positive).
+   */
+  void changeDir(uint8_t channel, bool dir);
 
   /**
-   * @brief Get accumulated signed ticks for a channel since last reset.
+   * @brief Capture deltas from all channels, accumulate signed ticks,
+   *        and update hardware count direction for the next period.
+   * @param dirs Array of 8 booleans from MotorManager::getIntendedDirection().
+   *             true = forward (count up), false = reverse (count down).
+   */
+  void captureAll(const bool* dirs);
+
+  /**
+   * @brief Get accumulated signed ticks for a channel.
    * @param channel 0-7.
    */
   int32_t getTicks(uint8_t channel) const;
 
   /**
-   * @brief Reset accumulated ticks for a channel to zero.
-   * @param channel 0-7.
+   * @brief Reset all accumulators and hardware counters to zero.
    */
-  void resetTicks(uint8_t channel);
-
-  /** @brief Reset all channels' accumulated ticks to zero. */
   void resetAll();
 
  private:
   EncoderChannel channels_[NUM_ENCODER_CHANNELS] = {};
-
+  int32_t ticks_[NUM_ENCODER_CHANNELS] = {};
   void enableClockGates();
   void configureIOMUX();
   void configureXBAR();
   void configureQTimers();
 };
-
-}  // namespace Encoders
+ }  // namespace Encoders

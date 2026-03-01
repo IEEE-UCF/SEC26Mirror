@@ -601,12 +601,12 @@ def build_firmware_in_docker(env_name: str) -> str | None:
 
 
 def step_clean_microros() -> bool:
-    """Clean shared micro-ROS libraries (libs_external).
+    """Clean micro-ROS libraries for both platforms (libs_external/teensy + esp32).
 
     Required when mcu_msgs definitions, micro_ros_platformio submodules,
     custom_microros.meta, or platformio.ini change so that libmicroros is
-    regenerated. All environments share the same libs_external, so a single
-    clean suffices. Also clears cached firmware binaries for all micro-ROS
+    regenerated. Teensy and ESP32 have separate libs_external dirs, so both
+    must be cleaned. Also clears cached firmware binaries for all micro-ROS
     environments to force fresh rebuilds.
     """
     write_status("clean_microros", "Cleaning micro-ROS libraries...")
@@ -616,13 +616,25 @@ def step_clean_microros() -> bool:
 
     t0 = time.time()
 
-    # Single clean — all envs share libs_external
+    # Restart container so the mcu_msgs symlink in extra_packages/ picks up
+    # any host-side changes (the Docker volume may have stale content)
     try:
-        run(f"docker exec {CONTAINER_NAME} bash -c "
-            f"'cd {MCU_WS} && pio run -e robot -t clean_microros'",
-            timeout=120, check=False)
+        log.info("  [MICROROS] Restarting container to refresh mcu_msgs symlink...")
+        run(f"{DOCKER_COMPOSE} restart", cwd=str(REPO_DIR), timeout=120)
+        time.sleep(5)
     except Exception as e:
-        log.warning("  [MICROROS] Clean failed: %s", e)
+        log.warning("  [MICROROS] Container restart failed: %s", e)
+
+    # Clean both platforms — Teensy and ESP32 have separate libs_external dirs
+    for clean_env, platform in [("robot", "teensy"), ("beacon1", "esp32")]:
+        try:
+            log.info("  [MICROROS] Cleaning %s micro-ROS (via %s)...",
+                     platform, clean_env)
+            run(f"docker exec {CONTAINER_NAME} bash -c "
+                f"'cd {MCU_WS} && pio run -e {clean_env} -t clean_microros'",
+                timeout=120, check=False)
+        except Exception as e:
+            log.warning("  [MICROROS] Clean %s failed: %s", platform, e)
 
     # Clear cached firmware binaries so stale builds aren't reused
     fw_cache = DEPLOY_DIR / "firmware"
@@ -694,7 +706,7 @@ def step_esp32_ota(config: dict, force: bool = False) -> bool:
         try:
             run(f"docker exec {CONTAINER_NAME} bash -c "
                 f"'cd {MCU_WS} && pio run -e {env} --target upload"
-                f" --upload-port {ip} --upload-protocol espota'",
+                f" --upload-port {ip}'",
                 timeout=120, stream=True)
             elapsed = time.time() - t0
             log.info("  [OTA] %s: SUCCESS in %s", name, fmt_duration(elapsed))

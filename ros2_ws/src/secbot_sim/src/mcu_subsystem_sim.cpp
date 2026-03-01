@@ -231,6 +231,11 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::bind(&McuSubsystemSimulator::jointStateCallback, this,
                 std::placeholders::_1));
 
+  ekf_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+      "/odometry/filtered", 10,
+      std::bind(&McuSubsystemSimulator::ekfOdomCallback, this,
+                std::placeholders::_1));
+
   // Timers
   // Physics + control update @ 100 Hz (10 ms)
   update_timer_ = this->create_wall_timer(
@@ -621,16 +626,13 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
   if (dt < 0.001f)
     return;
 
-  static constexpr float M_TO_IN = 39.37007874f;
-
-  // In simulation, use Gazebo's ground-truth odom so the trajectory controller
-  // knows where the robot ACTUALLY is (not where the simulated encoders think).
-  // This prevents the robot from overshooting the goal.
   TrajectoryController::Pose2D traj_pose;
-  if (gz_odom_received_) {
-    traj_pose.x = static_cast<float>(gz_odom_x_);
-    traj_pose.y = static_cast<float>(gz_odom_y_);
-    traj_pose.theta = static_cast<float>(gz_odom_yaw_);
+
+  // Use EKF filtered odometry to align with the path planner
+  if (ekf_received_) {
+    traj_pose.x = static_cast<float>(ekf_x_);
+    traj_pose.y = static_cast<float>(ekf_y_);
+    traj_pose.theta = static_cast<float>(ekf_yaw_);
   } else {
     // Fallback to internal localization (inches -> meters) if no odom yet
     static constexpr float IN_TO_M = 0.0254f;
@@ -645,7 +647,7 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                        "[TRAJ] src=%s pose=(%.3f,%.3f,%.2f) cmd v=%.3f m/s "
                        "w=%.3f rad/s finished=%d",
-                       gz_odom_received_ ? "gz_odom" : "FALLBACK", traj_pose.x,
+                       ekf_received_ ? "ekf_odom" : "FALLBACK", traj_pose.x,
                        traj_pose.y, traj_pose.theta, cmd.v, cmd.w,
                        cmd.finished);
 
@@ -994,6 +996,18 @@ void McuSubsystemSimulator::jointStateCallback(
       right_encoder_accum_ = msg->position[i] * ticks_per_rad;
     }
   }
+}
+
+void McuSubsystemSimulator::ekfOdomCallback(
+    const nav_msgs::msg::Odometry::SharedPtr msg) {
+  ekf_x_ = msg->pose.pose.position.x;
+  ekf_y_ = msg->pose.pose.position.y;
+
+  double qz = msg->pose.pose.orientation.z;
+  double qw = msg->pose.pose.orientation.w;
+  ekf_yaw_ = 2.0 * std::atan2(qz, qw);
+
+  ekf_received_ = true;
 }
 
 // MiniRobot publish

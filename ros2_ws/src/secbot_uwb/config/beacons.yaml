@@ -69,5 +69,5 @@
 
     # Publishing settings
     publishing:
-      rate_hz: 20.0  # Publishing rate for position estimates
+      rate_hz: 10.0  # Publishing rate for position estimates
       publish_diagnostics: true  # Publish diagnostic information

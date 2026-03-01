@@ -191,6 +191,14 @@ private:
   bool sim_duck_detected_ = false;
   int16_t sim_intake_speed_ = 0;
   std::chrono::steady_clock::time_point intake_state_time_;
+
+  double ekf_x_ = 0.0;
+  double ekf_y_ = 0.0;
+  double ekf_yaw_ = 0.0;
+  bool ekf_received_ = false;
+
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr ekf_sub_;
+  void ekfOdomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 };
 
 } // namespace secbot_sim

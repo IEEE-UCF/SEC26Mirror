@@ -155,6 +155,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     angularProfile_.configure(setup_.angularProfile);
     trajController_.configure(setup_.trajConfig);
 
+    // RC input smoothing: tau=0.15s, dt=0.005s (5ms main loop polling rate)
+    rcThrottleFilter_.configureTauDtFast(0.15f, 0.005f);
+    rcSteeringFilter_.configureTauDtFast(0.15f, 0.005f);
+
     // Ensure motors are off at startup
     stopMotors();
     last_update_us_ = micros();
@@ -420,6 +424,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     if (throttle > -DEADZONE && throttle < DEADZONE) throttle = 0.0f;
     if (steering > -DEADZONE && steering < DEADZONE) steering = 0.0f;
 
+    // Smooth RC inputs to prevent jerky motor transitions
+    throttle = rcThrottleFilter_.update(throttle);
+    steering = rcSteeringFilter_.update(steering);
+
     float left = secbot::utils::clamp(throttle + steering, -1.0f, 1.0f);
     float right = secbot::utils::clamp(throttle - steering, -1.0f, 1.0f);
     manualDrive(left, right);
@@ -433,6 +441,8 @@ class DriveSubsystem : public IMicroRosParticipant,
     rightPID_.reset();
     linearProfile_.reset();
     angularProfile_.reset();
+    rcThrottleFilter_.reset(0.0f, false);
+    rcSteeringFilter_.reset(0.0f, false);
   }
 
   /** @brief Override the internal pose estimate (e.g., from Pi EKF). */
@@ -811,6 +821,10 @@ class DriveSubsystem : public IMicroRosParticipant,
   float currentLinearVel_ = 0.0f;
   float currentAngularVel_ = 0.0f;
   Pose2D targetPose_;
+
+  // RC input smoothing
+  secbot::utils::LowPass1P rcThrottleFilter_;
+  secbot::utils::LowPass1P rcSteeringFilter_;
 
   // Timing
   uint32_t last_update_us_ = 0;

@@ -46,6 +46,9 @@
  */
 
 #include <Arduino.h>
+
+#include "../robot/ultrareset.h"
+
 #include <SPI.h>
 #include <TeensyThreads.h>
 #include <microros_manager_robot.h>

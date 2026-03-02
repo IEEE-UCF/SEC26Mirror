@@ -75,6 +75,7 @@ class TankDriveLocalization {
 
   Pose2D getPose() const { return currentPose; }
   void update(long leftTicks, long rightTicks, float yaw);
+  void setPose(float x, float y, float theta);
   const char* getInfo();
   void reset();
 

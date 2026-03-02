@@ -271,6 +271,10 @@ static void configureDriveSetup() {
   g_drive_setup.poseKAngular = POSE_K_ANGULAR;
   g_drive_setup.poseDistTol = POSE_DIST_TOL_M;
 
+  // Motor direction multipliers
+  g_drive_setup.leftMotorMultiplier = LEFT_MOTOR_MULTIPLIER;
+  g_drive_setup.rightMotorMultiplier = RIGHT_MOTOR_MULTIPLIER;
+
   // Safety
   g_drive_setup.commandTimeoutMs = COMMAND_TIMEOUT_MS;
 }

@@ -300,6 +300,10 @@ static void configureDriveSetup() {
   g_drive_setup.poseKAngular = POSE_K_ANGULAR;
   g_drive_setup.poseDistTol = POSE_DIST_TOL_M;
 
+  // Motor direction multipliers
+  g_drive_setup.leftMotorMultiplier = LEFT_MOTOR_MULTIPLIER;
+  g_drive_setup.rightMotorMultiplier = RIGHT_MOTOR_MULTIPLIER;
+
   // Safety
   g_drive_setup.commandTimeoutMs = COMMAND_TIMEOUT_MS;
 }
@@ -361,7 +365,8 @@ void setup() {
   g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
 
   // Conditional UWB init — DIP 2 ON = UWB enabled
-  bool uwb_enabled = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_UWB_ENABLE);
+  s_uwb_enabled = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_UWB_ENABLE);
+  bool uwb_enabled = s_uwb_enabled;
   if (uwb_enabled) {
     SPI.begin();
     g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
@@ -451,6 +456,7 @@ void setup() {
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 
+static bool s_uwb_enabled = false;
 static uint32_t s_last_debug_ms = 0;
 static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;
 
@@ -505,6 +511,41 @@ void loop() {
                  imu_data.yaw);
     DEBUG_PRINTF("  DIP        : 0x%02X\n", g_dip.getState());
     DEBUG_PRINTF("  Buttons    : 0x%02X\n", g_btn.getState());
+
+    // --- Encoder-based odometry (wheel odometry, NOT UWB) ---
+    {
+      Pose2D pose = g_drive.getPose();
+      static const char* mode_names[] = {"IDLE", "VEL", "GOAL", "TRAJ", "RC"};
+      uint8_t mi = static_cast<uint8_t>(g_drive.getMode());
+      const char* mname = (mi < 5) ? mode_names[mi] : "?";
+
+      DEBUG_PRINTF("  --- Encoder Odometry (NOT UWB) ---\n");
+      DEBUG_PRINTF("  Pose       : x=%.3fm  y=%.3fm  th=%.1fdeg\n",
+                   pose.getX(), pose.getY(),
+                   pose.getTheta() * 180.0f / (float)M_PI);
+      DEBUG_PRINTF("  Velocity   : v=%.3fm/s  w=%.2frad/s\n",
+                   g_drive.getLinearVelocity(),
+                   g_drive.getAngularVelocity());
+      DEBUG_PRINTF("  Drive mode : %s\n", mname);
+
+      // Raw encoder data for debugging direction/tick issues
+      int32_t lTicks = g_encoder_sub.getAccumulatedTicks(
+          RobotConfig::LEFT_ENCODER_IDX);
+      int32_t rTicks = g_encoder_sub.getAccumulatedTicks(
+          RobotConfig::RIGHT_ENCODER_IDX);
+      DEBUG_PRINTF("  Enc ticks  : L=%ld  R=%ld\n", (long)lTicks, (long)rTicks);
+      DEBUG_PRINTF("  Enc rates  : L=%.0f  R=%.0f ticks/s\n",
+                   g_encoder_sub.getTickRate(RobotConfig::LEFT_ENCODER_IDX),
+                   g_encoder_sub.getTickRate(RobotConfig::RIGHT_ENCODER_IDX));
+    }
+
+    // --- UWB status (separate positioning system) ---
+    if (s_uwb_enabled) {
+      DEBUG_PRINTF("  UWB        : ENABLED (triangulation — separate from odom)\n");
+    } else {
+      DEBUG_PRINTF("  UWB        : OFF (encoder odom only)\n");
+    }
+
     DEBUG_PRINTF("  Uptime     : %lus\n", now / 1000);
   }
 

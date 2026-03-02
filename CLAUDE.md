@@ -26,7 +26,7 @@ The codebase is split into two workspaces:
   - `src/robot/`: Main Teensy41 robot firmware (uses micro-ROS)
   - `src/beacon/`: UWB beacon nodes (differentiated by `BEACON_ID` build flag)
   - `src/drone/`: Drone controller (flight controller, IMU, height, IR subsystems)
-  - `src/minibot/`: Mini-robot ESP32 firmware (MinibotMotorDriver, MinibotDriveSubsystem, UWB tag, micro-ROS WiFi)
+  - `src/minibot/`: Mini-robot firmware (Seeed XIAO ESP32-S3: MinibotMotorDriver, MinibotDriveSubsystem, MiniBotIMUSubsystem, micro-ROS WiFi)
   - `src/field/`: Field element controllers (button, crank, earth, keypad, pressure)
   - `src/test/`: Hardware test programs
   - `src/platform/`: Platform support files (e.g., `atomic_stubs_arm.c`)
@@ -37,8 +37,7 @@ The codebase is split into two workspaces:
   - `OLEDSubsystem` — SSD1306 128x64 display (terminal mode + debug dashboard mode via DIP 6)
   - `SensorSubsystem` — VL53L0X time-of-flight distance
   - `ArmSubsystem` — Arm control with servo/encoder
-  - `IntakeSubsystem` — Intake/ejection mechanism
-  - `IntakeBridgeSubsystem` — Gear-and-rack mechanism for pressure plate duck retrieval
+  - `IntakeSubsystem` — Linear rail + spinning motor intake/ejection mechanism
   - `MiniRobotSubsystem` — Mini-robot control
   - `ServoSubsystem` — PCA9685 servo manager with SetServo service
   - `MotorManagerSubsystem` — PCA9685 motor manager with SetMotor service
@@ -67,8 +66,6 @@ The codebase is split into two workspaces:
   - `lib/ir/`: IR NEC communication (ESP32 RMT-based)
   - `lib/field/`: Field element message definitions, ESP-NOW transport, shared protocol
   - `lib/hal/`: Hardware abstraction layer (NativeGPIO, PCA9685GPIO, MCP23017GPIO, CD74HC4067GPIO)
-  - `lib/encoders/`: QTimerEncoder hardware encoder driver (IMXRT1062 QTimer + XBAR)
-  - `lib/mpu6050/`: MPU6050 IMU driver (used by minibot/drone)
   - `lib/utils/`: Signal filters, unit conversions, duck tracker, math helpers
   - `lib/sensors/`: Photodiode signal conditioning
   - `lib/microros/`: MicrorosManager (agent lifecycle, participant registry, executor)
@@ -83,6 +80,7 @@ The codebase is split into two workspaces:
 - `secbot_sim`: Gazebo Harmonic simulation with full MCU subsystem emulator (C++)
 - `secbot_health`: System health monitoring and MCU heartbeat watchdog (C++)
 - `secbot_bridge_i2c`: ROS ↔ Teensy I2C bridge with packet codec and fake Teensy for simulation (C++)
+- `secbot_deploy`: Deployment trigger bridge — MCU button press → deploy-orchestrator (C++)
 - `secbot_tf`: TF static transform configuration (launch files + YAML)
 - `secbot_msgs`: Custom messages (TaskStatus, DuckDetection) and actions (NavigatePath, ApproachTarget)
 - `mcu_msgs`: Shared MCU↔ROS2 messages (symlinked to `mcu_ws/extra_packages/mcu_msgs`)
@@ -225,6 +223,7 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | 3 | Drive | 20ms (50 Hz) | 4096 |
 | 2 | Servo | 25ms (40 Hz) | 1024 |
 | 2 | Motor Manager | 1ms (1000 Hz) | 1024 |
+| 2 | Encoder | 20ms (50 Hz) | 1024 |
 | 2 | UWB | 50ms (20 Hz) | 2048 |
 | 2 | Arm, Intake | 20ms (50 Hz) | 1024 |
 | 1 | OLED | 25ms (40 Hz) | 2048 |
@@ -261,7 +260,7 @@ I2C bus access is mutex-protected via `I2CBusLock` (RAII pattern: `I2CBus::Lock 
 ### Teensy 4.1 Pin Map
 
 See `src/robot/RobotPins.h` for full assignments. Key pins:
-- **Motors**: GPIO 2-9 (reserved for motor outputs)
+- **Motor FG Encoders**: GPIO 2-9 (QTimer3/QTimer4 pulse inputs; pin 8 disabled)
 - **UWB SPI**: CS=10, MOSI=11, MISO=12, CLK=13
 - **Display SPI1**: MOSI=26, SCK=27, CS=38, DC=37, RST=33 (hardware SPI1, not SPI0)
 - **Misc GPIO**: WS2812B=35, RC RX=34 (Serial8), Mux Reset=23, Button INT=36
@@ -285,7 +284,7 @@ All robot topics use `/mcu_robot/` prefix:
 - `/mcu_robot/buttons` (UInt8), `/mcu_robot/dip_switches` (UInt8)
 - `/mcu_robot/led/set_all` (subscription: LedColor)
 - UWB: `mcu_uwb/ranging` (from beacons/robot tag)
-- Drive: `drive_base/status`, `drive_base/command` (currently commented out in RobotLogic.h)
+- Drive: `drive_base/status` (DriveBase), `drive_base/command` (subscription: DriveCommand)
 
 Minibot topics use `/mcu_minibot/` prefix:
 - `/mcu_minibot/cmd_vel` (subscription: geometry_msgs/Twist — differential drive mix)
@@ -345,9 +344,9 @@ Field elements (ESP32) communicate via **ESP-NOW** broadcast (not micro-ROS):
 - Source of truth: `ros2_ws/src/mcu_msgs`
 - Symlinked to: `mcu_ws/extra_packages/mcu_msgs`
 
-**Current message inventory** (21 msgs, 5 srvs):
-- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeBridgeCommand, IntakeBridgeState, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
-- Services: ArmControl, LCDAppend, OLEDControl, SetServo, SetMotor
+**Current message inventory** (20 msgs, 6 srvs):
+- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeCommand, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
+- Services: ArmControl, LCDAppend, OLEDControl, Reset, SetServo, SetMotor
 
 **When you add/modify a `.msg` or `.srv` file**: you must clean and rebuild micro-ROS:
 ```bash
@@ -399,7 +398,7 @@ Hosted on **Gitea** (not GitHub). Workflows in `.gitea/workflows/`:
 | `platformio-robot.yml` | PR touching mcu_ws or mcu_msgs | Builds ALL non-test PlatformIO environments |
 | `build-ws.yml` | PR/push to master touching ros2_ws | Docker image build + colcon build |
 | `prod-push.yml` | Push to `master` | Auto-syncs master → prod branch |
-| `auto-format.yml` | PR labeled `format` | Runs clang-format, auto-commits |
+| `auto-format.yml` | PR labeled `format` OR push to master | Runs clang-format, auto-commits |
 | `commit-linter.yml` | All PRs | Enforces Conventional Commits |
 | `test-multiarch.yml` | Manual dispatch only | Multi-architecture runner test |
 
@@ -416,3 +415,4 @@ Commits must follow **Conventional Commits** format (enforced by CI): `feat:`, `
 - **ESP32 transport**: WiFi UDP to Pi agent
 - **Beacon IPs**: beacon1=192.168.4.20, beacon2=192.168.4.21, beacon3=192.168.4.22
 - **Minibot IP**: 192.168.4.24
+- **Drone IP**: 192.168.4.25

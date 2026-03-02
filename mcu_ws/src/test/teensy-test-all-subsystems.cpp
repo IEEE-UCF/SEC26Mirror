@@ -478,6 +478,16 @@ void loop() {
     }
   }
 
+  // RC knob motor control — knob 1 (left) → motor 2 (linear extension),
+  //                         knob 2 (right) → motor 3 (intake)
+  {
+    const auto& rc = g_rc.getData();
+    float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;  // left knob
+    float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;  // right knob
+    g_motor.setSpeed(2, knob1);
+    g_motor.setSpeed(3, knob2);
+  }
+
   // Periodic debug output
   uint32_t now = millis();
   if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {

@@ -66,13 +66,18 @@ constexpr uint8_t PIN_RC_RX = 34;     // FlySky IBUS receiver (Serial8 RX)
 constexpr uint8_t PIN_RGB_LEDS = 35;  // WS2812B data line (5 LEDs)
 constexpr uint8_t PIN_BUTTON_INTERRUPT = 36;  // TCA9555 INT (active LOW)
 
+// ── New PCB revision pin assignments ────────────────────────────────
+constexpr uint8_t PIN_GYRO_INT_NEW = 33;         // BNO085 interrupt (new PCB)
+constexpr uint8_t PIN_GYRO_RST_NEW = 32;         // BNO085 reset (new PCB)
+constexpr uint8_t PIN_BUTTON_INTERRUPT_NEW = 28;  // TCA9555 INT (new PCB)
+constexpr uint8_t PIN_MUX_RESET_NEW = 45;        // TCA9548A reset (new PCB)
+
 // ── Not Connected ───────────────────────────────────────────────────
 // Pin 14: NC
 // Pin 15: NC
 // Pin 20: NC
 // Pin 21: NC
 // Pin 22: NC
-// Pin 33: Display RST (PIN_DISP_RST)
 // Pin 39: NC
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -1,11 +1,13 @@
 /**
- * @file PCA9685DMAManager.h
- * @brief DMA manager for multiple PCA9685 ICs on a shared I2C bus.
+ * @file PCA9685Manager.h
+ * @brief PCA9685 command builder for the shared I2CDMABus.
  *
- * Owns a single DMA channel!!! On update(), builds one combined MTDR
- * command buffer for all registered drivers. Only dirty channels are
- * written (selective write with auto-increment grouping), then fires
- * a single DMA transfer that updates every IC in one shot.
+ * No longer owns a DMA channel. Instead, call setDMABus() to link to the
+ * shared I2CDMABus, then call buildInto() each cycle to append selective
+ * PCA9685 writes into the bus's TX buffer.
+ *
+ * Legacy mode: if no DMA bus is set, update() still works as a standalone
+ * DMA manager (backwards compatible).
  */
 
 #pragma once
@@ -13,6 +15,7 @@
 #include <DMAChannel.h>
 #include <Wire.h>
 
+#include "I2CDMABus.h"
 #include "PCA9685Driver.h"
 
 class PCA9685DMAManager
@@ -32,6 +35,15 @@ public:
   uint8_t count() const { return num_drivers_; }
   PCA9685Driver *get(uint8_t i) { return i < num_drivers_ ? drivers_[i] : nullptr; }
 
+  // ── Shared DMA bus mode ────────────────────────────────────────────
+  void setDMABus(I2CDMABus *bus) { dma_bus_ = bus; }
+
+  /// Append PCA9685 selective writes into the shared I2CDMABus TX buffer.
+  /// Call this after dispatch() and before fire() each cycle.
+  /// Returns number of MTDR words written (0 if nothing dirty).
+  uint16_t buildInto();
+
+  // ── Legacy standalone mode ─────────────────────────────────────────
   bool update(); // build selective buffer + fire DMA, non-blocking
   bool isComplete();
 
@@ -44,6 +56,9 @@ private:
   PCA9685Driver *drivers_[MAX_DRIVERS];
   uint8_t num_drivers_;
 
+  I2CDMABus *dma_bus_ = nullptr;
+
+  // Legacy standalone DMA (unused when dma_bus_ is set)
   DMAChannel dma_;
   uint16_t buf_[MAX_BUF_ENTRIES] __attribute__((aligned(32)));
 

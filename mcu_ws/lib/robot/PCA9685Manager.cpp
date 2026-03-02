@@ -1,4 +1,4 @@
-#include "PCA9685DMAManager.h"
+#include "PCA9685Manager.h"
 
 PCA9685DMAManager::PCA9685DMAManager(TwoWire &wire, uint32_t clock_hz)
     : wire_(wire),
@@ -95,6 +95,37 @@ uint16_t PCA9685DMAManager::buildForDriver(PCA9685Driver *drv, uint16_t *out)
 
   return (uint16_t)(p - out);
 }
+
+// ── Shared DMA bus mode ────────────────────────────────────────────────────
+
+uint16_t PCA9685DMAManager::buildInto()
+{
+  if (!dma_bus_) return 0;
+
+  // Calculate worst-case space needed
+  uint16_t needed = MAX_BUF_PER_DRIVER * num_drivers_;
+  uint16_t save_pos = dma_bus_->txPos();
+
+  uint16_t *slot = dma_bus_->reserveTx(needed);
+  if (!slot) return 0;
+
+  uint16_t total = 0;
+  for (uint8_t d = 0; d < num_drivers_; d++)
+    total += buildForDriver(drivers_[d], slot + total);
+
+  if (total == 0)
+  {
+    // Nothing dirty — give back the reserved space.
+    dma_bus_->rewindTx(save_pos);
+    return 0;
+  }
+
+  // Rewind unused tail of the reservation.
+  dma_bus_->rewindTx(save_pos + total);
+  return total;
+}
+
+// ── Legacy standalone mode ─────────────────────────────────────────────────
 
 bool PCA9685DMAManager::update()
 {

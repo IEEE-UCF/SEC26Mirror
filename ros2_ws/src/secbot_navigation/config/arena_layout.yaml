@@ -2,65 +2,62 @@
 # COORDS IN WORLD METERS - DERIVED FROM robot_field.stl
 
 grid:
-  resolution: 0.05 # meters per cell
-  width: 2.4384 # 16.0 m / 0.25
-  height: 1.2192 # 8.0  m / 0.25
+  # resolution: 0.25
+  # width: 64
+  # height: 32
+  # MY CHANGES =================================
+  resolution: 0.05
+  width: 96
+  height: 48
 
 # Where grid is generated from
 origin:
+  # x: -8.0 # left edge of field
+  # y: -4.0 # bottom edge of field
+  # MY CHANGES =================================
   x: 0 # left edge of field
   y: 0 # bottom edge of field
 
+walls:
+  enabled: true
+  thickness: 1
+
+robot:
+ width: 11
+ inflation: 0
+
 # === world coordinates ===
 start:
-  x: 0.25
-  y: -1.0
-
-# goal:
-#   x: 6.0
-#   y: -1.0
+  x: 6
+  y: 6
 
 obstacles:
-  # # === FIELD WALLS ===
-  # # Top wall
-  # - type: rectangle
-  #   x: -8.0
-  #   y: 3.9
-  #   width: 16.0
-  #   height: 0.4
 
-  # # Bottom wall
-  # - type: rectangle
-  #   x: -8.0
-  #   y: -4.3
-  #   width: 16.0
-  #   height: 0.4
+  # === OBSTACLES ===
+  # BUTTON
+  - type: rectangle
+    x: 5.5
+    y: 41
+    width: 5
+    height: 5
 
-  # # Left wall
-  # - type: rectangle
-  #   x: -8.3
-  #   y: -4.0
-  #   width: 0.4
-  #   height: 8.0
+  # CRANK
+  - type: rectangle
+    x: 89.5
+    y: 41
+    width: 5
+    height: 5
 
-  # # Right wall
-  # - type: rectangle
-  #   x: 7.9
-  #   y: -4.0
-  #   width: 0.4
-  #   height: 8.0
+  # KEYPAD
+  - type: rectangle
+    x: 38.5
+    y: 5
+    width: 5
+    height: 5
 
-  # # # === custom obstical ===
-  # # - type: rectangle
-  # #   x: 0.0
-  # #   y: -2.0
-  # #   width: 1.0
-  # #   height: 4.0
-
-  # # === custom obstical ===
-  # - type: rectangle
-  #   x: 3.0
-  #   y: -1.0
-  #   width: 1.0
-  #   height: 1.0
+  # CRATER
+  - type: circle
+    x: 59.5
+    y: 23.5
+    diameter: 22
 

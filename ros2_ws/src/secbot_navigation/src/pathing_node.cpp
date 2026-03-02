@@ -118,13 +118,11 @@ private:
   bool have_last_time_ = false;
 
   // State from odom
-  double robot_x_ = 0.0;
-  double robot_y_ = 0.0;
   double robot_theta_ = 0.0;
   bool state_received_ = false;
 
-  double robot_radius_ = 0.22;
-  double inflation_ = 0.08;
+  double robot_radius_ = 0.07;
+  double inflation_ = 0;
 
   // grid configs from "arena_layout.yaml" ==================================
   // grid
@@ -134,8 +132,14 @@ private:
   // robot start/goal
   double start_x_ = 0.0;
   double start_y_ = 0.0;
+  double robot_x_ = 0.0;
+  double robot_y_ = 0.0;
   double goal_x_ = 0.0;
   double goal_y_ = 0.0;
+  double spawn_x_ = 0.0;
+  double spawn_y_ = 0.0;
+
+  std::pair<int, int> start_cell = {0, 0};
   // origin of field
   std::pair<double, double> origin_ = {0.0, 0.0};
 
@@ -210,7 +214,17 @@ private:
   };
   std::vector<RectObs> obstacle_rects_;
 
+  struct CircleObs {
+    double x;
+    double y;
+    double d;
+  };
+  std::vector<CircleObs> obstacle_circles_;
+
   // CONVERTERS ==============================================
+  double IN_2_M(double val) {
+    return val*0.0254;
+  }
 
   // check if r and c in bounds ----------
   bool cell_in_bounds(int r, int c) const {
@@ -226,9 +240,6 @@ private:
 
   // convert from meters >>>> grid coords --------------
   std::pair<int, int> world_to_cell(double x, double y) const {
-    double convert_y = (y - origin_.second) / resolution_;
-    double convert_x = (x - origin_.first) / resolution_;
-    RCLCPP_INFO(this->get_logger(), "MATH AND STUFF for y: ((%f - %f) / %f) = %f, MATH AND STUFF for x: ((%f - %f) / %f) =%f", y , origin_.second, resolution_, convert_y, x , origin_.first, resolution_, convert_x);
     return {rounding_rules((y - origin_.second) / resolution_),
             rounding_rules((x - origin_.first) / resolution_)};
   }
@@ -274,35 +285,43 @@ private:
 
       // Arena Config =======================================================
       if (arena_cfg["grid"]["width"])
-        width = arena_cfg["grid"]["width"].as<double>();
+        width = IN_2_M(arena_cfg["grid"]["width"].as<double>());
       if (arena_cfg["grid"]["height"])
-        height = arena_cfg["grid"]["height"].as<double>();
+        height = IN_2_M(arena_cfg["grid"]["height"].as<double>());
       
       if (arena_cfg["grid"]["resolution"])
         resolution_ = arena_cfg["grid"]["resolution"].as<double>();
 
-      auto arena_grid = world_to_cell(width, height);
-      RCLCPP_INFO(this->get_logger(), "BEFORE WORLD TO CELL (%f, %f) ======= AFTER WORLD TO CELL (%d,%d)", width, height, arena_grid.second, arena_grid.first);
-
       if (arena_cfg["origin"]["x"])
-        origin_.first = arena_cfg["origin"]["x"].as<double>();
+        origin_.first = IN_2_M(arena_cfg["origin"]["x"].as<double>());
       if (arena_cfg["origin"]["y"])
-        origin_.second = arena_cfg["origin"]["y"].as<double>();
+        origin_.second = IN_2_M(arena_cfg["origin"]["y"].as<double>());
 
       // Goal =======================================================
       if (arena_cfg["goal"]["x"])
-        goal_x_ = arena_cfg["goal"]["x"].as<double>();
+        goal_x_ = IN_2_M(arena_cfg["goal"]["x"].as<double>());
       if (arena_cfg["goal"]["y"])
-        goal_y_ = arena_cfg["goal"]["y"].as<double>();
+        goal_y_ = IN_2_M(arena_cfg["goal"]["y"].as<double>());
 
       // Start =======================================================
       if (arena_cfg["start"]["x"])
-        start_x_ = arena_cfg["start"]["x"].as<double>();
+        start_x_ = IN_2_M(arena_cfg["start"]["x"].as<double>());
       if (arena_cfg["start"]["y"])
-        start_y_ = arena_cfg["start"]["y"].as<double>();
+        start_y_ = IN_2_M(arena_cfg["start"]["y"].as<double>());
 
-      RCLCPP_INFO(this->get_logger(), "ROBOT SPAWN IN POINT: (%f %f) ===================================================================",
-                start_x_, start_y_);
+      robot_x_ = start_x_;
+      robot_y_ = start_y_;
+      spawn_x_ = start_x_;   // ADD THIS
+      spawn_y_ = start_y_;   // ADD THIS
+      start_cell = world_to_cell(robot_x_, robot_y_);
+      RCLCPP_INFO(this->get_logger(),
+                  "ROBOT SPAWN IN POINT: (%.4f, %.4f)  START CELL: (%d, %d)",
+                  robot_x_, robot_y_, start_cell.first, start_cell.second);
+
+      if (arena_cfg["robot"]["width"])
+        robot_radius_ = IN_2_M(arena_cfg["robot"]["width"].as<double>()) / 2;
+      if (arena_cfg["robot"]["inflation"])
+        inflation_ = IN_2_M(arena_cfg["robot"]["inflation"].as<double>());
 
       // Nav Config =======================================================
       if (nav_cfg["trajectory"]["speed"])
@@ -314,16 +333,48 @@ private:
         max_skip_ = nav_cfg["smoothing"]["max_skip"].as<int>(); // add max skip
 
       // LOADED GRID ============================================
-      RCLCPP_INFO(this->get_logger(), "======================================(%d,%d)======================================",arena_grid.first, arena_grid.second);
-      std::vector<std::vector<int>> grid_data(arena_grid.first, std::vector<int>(arena_grid.second, 0));
+      
+      const int cols = std::max(1, static_cast<int>(std::ceil(width  / resolution_)));
+      const int rows = std::max(1, static_cast<int>(std::ceil(height / resolution_)));
+      RCLCPP_INFO(this->get_logger(),
+                  "Grid alloc: width=%.3fm height=%.3fm res=%.4fm -> rows=%d cols=%d origin=(%.3f,%.3f)",
+                  width, height, resolution_, rows, cols, origin_.first, origin_.second);
+      std::vector<std::vector<int>> grid_data(rows, std::vector<int>(cols, 0));
       grid_map_ = std::make_unique<GridMap>(grid_data);
 
+      // Walls =======================================================
+      // Add perimeter walls as 1" thick rectangles (no inflation) so we never plan outside the field.
+      bool walls_enabled = true;
+      double wall_t = IN_2_M(0.5); // default 1 inch
+      if (arena_cfg["walls"]) {
+        if (arena_cfg["walls"]["enabled"])   walls_enabled = arena_cfg["walls"]["enabled"].as<bool>();
+        if (arena_cfg["walls"]["thickness"]) wall_t = IN_2_M(arena_cfg["walls"]["thickness"].as<double>());
+      }
+      if (walls_enabled) {
+        for (int c = 0; c < cols; ++c) {
+            grid_map_->set_obstacle({0, c});           // bottom row
+            grid_map_->set_obstacle({rows - 1, c});    // top row
+        }
+        for (int r = 0; r < rows; ++r) {
+            grid_map_->set_obstacle({r, 0});           // left col
+            grid_map_->set_obstacle({r, cols - 1});    // right col
+        }
+      }
+
       // LOADED Obstacles ============================================
-      const YAML::Node &obstacles = arena_cfg["obstacles"];
-      for (std::size_t i = 0; i < obstacles.size(); ++i) {
-        const YAML::Node &obs = obstacles[i];
-        if (obs["type"].as<std::string>() == "rectangle") {
-          mark_rectangle_obstacle(obs);
+      if (arena_cfg["obstacles"] && arena_cfg["obstacles"].IsSequence()){
+        for (const auto& obs: arena_cfg["obstacles"]){
+          const std::string type = obs["type"].as<std::string>();
+          const double cx = IN_2_M(obs["x"].as<double>());
+          const double cy = IN_2_M(obs["y"].as<double>());
+          if (type == "rectangle") {
+            const double w = IN_2_M(obs["width"].as<double>());
+            const double h = IN_2_M(obs["height"].as<double>());
+            mark_rectangle_obstacle_centered(cx, cy, w, h);
+          }else if (type == "circle") {
+            const double d = IN_2_M(obs["diameter"].as<double>());
+            mark_circle_obstacle_centered(cx, cy, d);
+          }
         }
       }
 
@@ -332,6 +383,9 @@ private:
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "Config Load Error: %s", e.what());
     }
+
+
+    print_grid_snapshot("GRID AFTER LOADING OBSTACLES (NO PATH)");
   }
 
   // safety for TF failure ------------------
@@ -445,7 +499,10 @@ private:
     RCLCPP_INFO(this->get_logger(), "Computing initial path");
 
     // starting cell
-    auto start_cell = world_to_cell(robot_x_, robot_y_);
+    RCLCPP_INFO(this->get_logger(),
+                  "ROBOT SPAWN IN POINT: (%.4f, %.4f)",
+                  robot_x_, robot_y_);
+    start_cell = world_to_cell(robot_x_, robot_y_);
     if (!cell_in_bounds(start_cell.first, start_cell.second)) {
       RCLCPP_ERROR(this->get_logger(),
                    "START OUT OF BOUNDS: world=(%.2f,%.2f) cell=(%d,%d)",
@@ -458,7 +515,9 @@ private:
         GridMap::Cell{start_cell.first, start_cell.second});
 
     if (!trajectory_plan) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to compute initial path");
+      RCLCPP_ERROR(this->get_logger(),
+                   "Failed to compute path: start=(%d,%d) world=(%.2f,%.2f) goal=(%.2f,%.2f)",
+                   start_cell.first, start_cell.second, robot_x_, robot_y_, goal_x_, goal_y_);
       return;
     }
 
@@ -480,7 +539,7 @@ private:
     this->publish_and_print_path(
         *current_trajectory_); // (TO REMOVE): CAN REMOVE LATER JUST VISUALIZES
                                // PATH
-    print_grid_with_path(*current_trajectory_); // (TO REMOVE): CAN REMOVE
+    print_grid_with_path("GRID WITH PATH", current_trajectory_.get()); // (TO REMOVE): CAN REMOVE
                                                 // LATER JUST VISUALIZES PATH
   }
 
@@ -497,8 +556,8 @@ private:
     double roll, pitch, yaw;
     m.getRPY(roll, pitch, yaw);
 
-    robot_x_ = msg->pose.pose.position.x;
-    robot_y_ = msg->pose.pose.position.y;
+    robot_x_ = msg->pose.pose.position.x + spawn_x_;
+    robot_y_ = msg->pose.pose.position.y + spawn_y_;
     robot_theta_ = yaw;
     state_received_ = true; // so control loop can run
   }
@@ -649,6 +708,10 @@ private:
       // Only compute a path if we actually have a goal (avoid degenerate
       // start==goal trajectory that causes the robot to spin on startup)
       if (has_goal_) {
+        RCLCPP_INFO(this->get_logger(), "GETTING THE PLAN FROM COMPUTE PLAN ===========================================================================================");
+        RCLCPP_INFO(this->get_logger(),
+                  "ROBOT SPAWN IN POINT: (%.4f, %.4f) WORLD POITNS (%d,%d) ===================================",
+                  robot_x_, robot_y_, start_cell.first, start_cell.second);
         compute_plan();
       }
       planned_once_ = true;
@@ -667,6 +730,9 @@ private:
         goal_reached_ = false;
 
         init_planner();
+        RCLCPP_INFO(this->get_logger(),
+                  "ROBOT SPAWN IN POINT: (%.4f, %.4f) WORLD POITNS (%d,%d) ===================================",
+                  robot_x_, robot_y_, start_cell.first, start_cell.second);
         compute_plan();
 
         last_replan_time_ = now;
@@ -786,119 +852,159 @@ private:
   }
 
   // PURLY FOR PRINTING OBSTACLES =========================================
-  void mark_rectangle_obstacle(const YAML::Node &obs) {
-    const double x0 = obs["x"].as<double>();
-    const double y0 = obs["y"].as<double>();
-    const double w = obs["width"].as<double>();
-    const double h = obs["height"].as<double>();
+  void mark_rectangle_obstacle_centered(double cx, double cy, double w, double h) {
+    if (!grid_map_) return;
 
     // Inflate obstacle by robot footprint + safety margin
     const double pad = robot_radius_ + inflation_;
 
-    const double x_min = x0 - pad;
-    const double x_max = x0 + w + pad;
-    const double y_min = y0 - pad;
-    const double y_max = y0 + h + pad;
+    const double half_w = 0.5 * w;
+    const double half_h = 0.5 * h;
+
+    const double x_min = cx - half_w - pad;
+    const double x_max = cx + half_w + pad;
+    const double y_min = cy - half_h - pad;
+    const double y_max = cy + half_h + pad;
 
     for (double x = x_min; x <= x_max; x += resolution_) {
       for (double y = y_min; y <= y_max; y += resolution_) {
-        int r = static_cast<int>((y - origin_.second) / resolution_);
-        int c = static_cast<int>((x - origin_.first) / resolution_);
+        const int r = static_cast<int>(std::floor((y - origin_.second) / resolution_));
+        const int c = static_cast<int>(std::floor((x - origin_.first) / resolution_));
 
-        if (r >= 0 && r < grid_map_->get_rows() && c >= 0 &&
-            c < grid_map_->get_cols()) {
+        if (r >= 0 && r < grid_map_->get_rows() && c >= 0 && c < grid_map_->get_cols()) {
           grid_map_->set_obstacle({r, c});
         }
       }
     }
-    obstacle_rects_.push_back(RectObs{x0, y0, w, h});
+
+    obstacle_rects_.push_back(RectObs{cx, cy, w, h}); // store center + size
+  }
+
+  void mark_circle_obstacle_centered(double cx, double cy, double diameter) {
+    if (!grid_map_) return;
+
+    const double pad = robot_radius_ + inflation_;
+    const double r = 0.5 * diameter + pad;   // inflated radius
+
+    const double x_min = cx - r;
+    const double x_max = cx + r;
+    const double y_min = cy - r;
+    const double y_max = cy + r;
+
+    // Iterate grid cells in the bounding box (in world meters)
+    for (double x = x_min; x <= x_max; x += resolution_) {
+      for (double y = y_min; y <= y_max; y += resolution_) {
+
+        // Test distance from circle center
+        const double dx = x - cx;
+        const double dy = y - cy;
+        if ((dx * dx + dy * dy) > (r * r)) continue;
+
+        // Convert to cell indices (use floor to avoid edge rounding issues)
+        const int row = static_cast<int>(std::floor((y - origin_.second) / resolution_));
+        const int col = static_cast<int>(std::floor((x - origin_.first) / resolution_));
+
+        if (row >= 0 && row < grid_map_->get_rows() && col >= 0 && col < grid_map_->get_cols()) {
+          grid_map_->set_obstacle({row, col});
+        }
+      }
+    }
+
+    obstacle_circles_.push_back(CircleObs{cx, cy, diameter});
+  }
+
+  void print_grid_snapshot(const std::string &title) {
+    print_grid_with_path(title, nullptr);
   }
 
   // PURELY FOR PRINTING THE GRID ====================================
-  void print_grid_with_path(const Trajectory &traj) {
+  void print_grid_with_path(const std::string &title, const Trajectory *traj = nullptr) {
     if (!grid_map_) {
-      RCLCPP_WARN(this->get_logger(),
-                  "print_grid_with_path: grid_map_ is null");
+      RCLCPP_WARN(this->get_logger(), "print_grid_with_path: grid_map_ is null");
       return;
     }
 
     const int rows = grid_map_->get_rows();
     const int cols = grid_map_->get_cols();
 
-    // Pack (r,c) -> single key for hash set
     auto pack = [cols](int r, int c) -> long long {
       return static_cast<long long>(r) * static_cast<long long>(cols) + c;
     };
 
-    // Collect path cells into a fast lookup set
+    // Path lookup
     std::unordered_set<long long> path_cells;
-    path_cells.reserve(traj.get_points().size() * 2 + 64);
-
-    for (const auto &p : traj.get_points()) {
-      auto [r, c] = world_to_cell(p.x, p.y);
-      if (r >= 0 && r < rows && c >= 0 && c < cols)
-        path_cells.insert(pack(r, c));
+    if (traj) {
+      path_cells.reserve(traj->get_points().size() * 2 + 64);
+      for (const auto &p : traj->get_points()) {
+        auto [r, c] = world_to_cell(p.x, p.y);
+        if (r >= 0 && r < rows && c >= 0 && c < cols)
+          path_cells.insert(pack(r, c));
+      }
     }
 
-    // Start/Goal/Robot cells (robot marker is optional but very helpful)
-    auto [sr, sc] = world_to_cell(start_x_, start_y_);
-    auto [gr, gc] = world_to_cell(goal_x_, goal_y_);
-    auto [rr, rc] = world_to_cell(robot_x_, robot_y_);
+    // Start / Goal / Robot markers (guarded)
+    int sr=-1, sc=-1, gr=-1, gc=-1, rr=-1, rc=-1;
 
-    std::ostringstream out;
-    out << "\n========== GRID VIEW (top = +y) ==========\n";
-    out << "Legend: . free, # obstacle, * path, X path-in-obstacle, S start, G "
-           "goal, R robot\n";
-    out << "Grid: " << rows << " rows x " << cols
-        << " cols, res=" << resolution_ << " origin=(" << origin_.first << ","
-        << origin_.second << ")\n\n";
+    {
+      auto [r, c] = world_to_cell(start_x_, start_y_);
+      if (r >= 0 && r < rows && c >= 0 && c < cols) { sr=r; sc=c; }
+    }
 
+    if (!(goal_x_ == 0.0 && goal_y_ == 0.0)) {
+      auto [r, c] = world_to_cell(goal_x_, goal_y_);
+      if (r >= 0 && r < rows && c >= 0 && c < cols) { gr=r; gc=c; }
+    }
+
+    if (state_received_) {
+      auto [r, c] = world_to_cell(robot_x_, robot_y_);
+      if (r >= 0 && r < rows && c >= 0 && c < cols) { rr=r; rc=c; }
+    }
+
+    // Header (short log line so it won’t truncate)
+    RCLCPP_INFO(this->get_logger(),
+                "\n========== %s ==========\n"
+                "Legend: . free, # obstacle, * path, X path-in-obstacle, S start, G goal, R robot\n"
+                "Grid: rows=%d cols=%d  res=%.6f  origin=(%.3f, %.3f)\n",
+                title.c_str(), rows, cols, resolution_, origin_.first, origin_.second);
+
+    // Print ENTIRE grid row-by-row (no truncation)
     for (int r = rows - 1; r >= 0; --r) {
-      out << std::setw(3) << r << " ";
+      std::ostringstream line;
+      line << std::setw(4) << r << " ";
 
       for (int c = 0; c < cols; ++c) {
         const bool obstacle = !grid_map_->is_free(GridMap::Cell{r, c});
-        const bool on_path = (path_cells.find(pack(r, c)) != path_cells.end());
+        const bool on_path  = traj ? (path_cells.find(pack(r, c)) != path_cells.end()) : false;
 
         char ch = '.';
-        if (obstacle && on_path)
-          ch = 'X';
-        else if (obstacle)
-          ch = '#';
-        else if (on_path)
-          ch = '*';
+        if (obstacle && on_path) ch = 'X';
+        else if (obstacle)       ch = '#';
+        else if (on_path)        ch = '*';
 
-        // Overrides (most important last)
-        if (r == sr && c == sc)
-          ch = 'S';
-        if (r == gr && c == gc)
-          ch = 'G';
-        if (r == rr && c == rc)
-          ch = 'R';
+        // Override markers (robot > goal > start)
+        if (r == sr && c == sc) ch = 'S';
+        if (r == gr && c == gc) ch = 'G';
+        if (r == rr && c == rc) ch = 'R';
 
-        out << ch;
+        line << ch;
       }
-      out << "\n";
+
+      RCLCPP_INFO(this->get_logger(), "%s", line.str().c_str());
     }
 
-    // Simple, readable axis: mark every 5 columns
-    out << "    ";
-    for (int c = 0; c < cols; ++c)
-      out << ((c % 5 == 0) ? '|' : ' ');
-    out << "\n";
-
-    out << "    ";
-    for (int c = 0; c < cols; ++c) {
-      if (c % 5 == 0)
-        out << static_cast<char>('0' + (c % 10)); // ones digit
-      else
-        out << ' ';
+    // Bottom axis (also printed line-by-line)
+    {
+      std::ostringstream axis1, axis2;
+      axis1 << "     ";
+      axis2 << "     ";
+      for (int c = 0; c < cols; ++c) {
+        axis1 << ((c % 10 == 0) ? '|' : ' ');
+        axis2 << ((c % 10 == 0) ? static_cast<char>('0' + (c / 10) % 10) : ' ');
+      }
+      RCLCPP_INFO(this->get_logger(), "%s", axis1.str().c_str());
+      RCLCPP_INFO(this->get_logger(), "%s", axis2.str().c_str());
+      RCLCPP_INFO(this->get_logger(), "==========================================");
     }
-    out << "\n";
-
-    out << "==========================================\n";
-
-    RCLCPP_INFO(this->get_logger(), "%s", out.str().c_str());
   }
 };
 

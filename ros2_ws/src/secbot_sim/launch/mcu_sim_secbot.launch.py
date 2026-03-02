@@ -32,7 +32,7 @@ def generate_launch_description():
     robot_file   = os.path.join(pkg_my_robot,    'urdf', 'robot.urdf')
     gz_resource_path  = os.path.join(pkg_secbot_sim,  'worlds')
     pkg_secbot_vision = get_package_share_directory('secbot_vision')
-    spawn_yaml_path   = os.path.join(pkg_secbot_vision,'controller', 'spawn_locations.yaml')
+    spawn_yaml_path   = os.path.join(pkg_secbot_vision,'config', 'spawn_locations.yaml')
     yellow_box_sdf    = os.path.join(pkg_secbot_sim,  'worlds', 'proper_field', 'yellow_box.sdf')
 
     # Read URDF for robot_state_publisher

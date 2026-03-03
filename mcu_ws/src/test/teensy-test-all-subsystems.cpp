@@ -320,6 +320,8 @@ static void pca_task(void*) {
 //  Arduino entry points
 // ═══════════════════════════════════════════════════════════════════════════
 
+static bool s_uwb_enabled = false;
+
 void setup() {
   Serial.begin(0);
   DEBUG_BEGIN();
@@ -456,7 +458,6 @@ void setup() {
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 
-static bool s_uwb_enabled = false;
 static uint32_t s_last_debug_ms = 0;
 static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;
 

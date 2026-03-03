@@ -16,6 +16,8 @@
 
 #include "I2CBusLock.h"
 
+class PCA9685DMAManager;  // forward declaration (global namespace)
+
 namespace Robot {
 
 class PCA9685DriverSetup : public Classes::BaseSetup {
@@ -39,7 +41,7 @@ class PCA9685DriverSetup : public Classes::BaseSetup {
 };
 
 class PCA9685Driver : public Classes::BaseDriver {
-  friend class PCA9685DMAManager;
+  friend class ::PCA9685DMAManager;
 
  public:
   explicit PCA9685Driver(const PCA9685DriverSetup& setup);

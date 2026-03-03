@@ -147,16 +147,19 @@ static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
 
-// --- Wire2: PCA9685 manager (servo + motor boards) ---
-static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
-static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
+// --- Wire2: I2C DMA bus + PCA9685 manager ---
+static I2CDMABus g_wire2_dma(Wire2, 1000000);
+static PCA9685DMAManager g_pca_mgr(Wire2, 1000000);
 
-static Robot::PCA9685Driver* g_pca_servo =
-    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2));
-static Robot::PCA9685Driver* g_pca_motor =
-    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2));
+static Robot::PCA9685DriverSetup g_pca_servo_setup(
+    "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2);
+static Robot::PCA9685Driver g_pca_servo_drv(g_pca_servo_setup);
+static Robot::PCA9685Driver* g_pca_servo = &g_pca_servo_drv;
+
+static Robot::PCA9685DriverSetup g_pca_motor_setup(
+    "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2);
+static Robot::PCA9685Driver g_pca_motor_drv(g_pca_motor_setup);
+static Robot::PCA9685Driver* g_pca_motor = &g_pca_motor_drv;
 
 // --- RC subsystem (FlySky, Serial8 RX = pin 34) ---
 static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial8);
@@ -304,11 +307,15 @@ static void configureDriveSetup() {
   g_drive_setup.commandTimeoutMs = COMMAND_TIMEOUT_MS;
 }
 
-// --- PCA9685 flush task ---
+// --- PCA9685 DMA flush task (1000 Hz via I2CDMABus) ---
 static void pca_task(void*) {
   while (true) {
-    g_pca_mgr.update();
-    threads.delay(20);
+    if (g_wire2_dma.isComplete()) {
+      g_wire2_dma.dispatch();
+      g_pca_mgr.buildInto();
+      g_wire2_dma.fire();
+    }
+    threads.delay(1);
   }
 }
 
@@ -349,7 +356,12 @@ void setup() {
   g_battery.init();  DEBUG_PRINTLN("[INIT] Battery OK");
   g_sensor.init();   DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
   g_imu.init();      DEBUG_PRINTLN("[INIT] IMU OK");
-  g_pca_mgr.init();  DEBUG_PRINTLN("[INIT] PCA9685 Manager OK");
+  g_pca_servo->init();
+  g_pca_motor->init();
+  g_pca_mgr.addDriver(g_pca_servo);
+  g_pca_mgr.addDriver(g_pca_motor);
+  g_pca_mgr.setDMABus(&g_wire2_dma);
+  DEBUG_PRINTLN("[INIT] PCA9685 DMA Bus OK");
   g_rc.init();       DEBUG_PRINTLN("[INIT] RC Receiver OK");
   g_dip.init();      DEBUG_PRINTLN("[INIT] DIP Switch OK");
   g_btn.init();      DEBUG_PRINTLN("[INIT] Buttons OK");

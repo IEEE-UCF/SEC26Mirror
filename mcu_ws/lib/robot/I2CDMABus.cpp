@@ -1,3 +1,10 @@
+/**
+ * @file I2CDMABus.cpp
+ * @brief Implementation of I2CDMABus — two-phase DMA engine for shared
+ *        I2C buses on Teensy 4.1 (i.MX RT1062).
+ * @see I2CDMABus.h
+ */
+
 #include "I2CDMABus.h"
 
 // ── Static instance table for ISR routing ──────────────────────────────────

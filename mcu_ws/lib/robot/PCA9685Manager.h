@@ -1,13 +1,27 @@
 /**
  * @file PCA9685Manager.h
- * @brief PCA9685 command builder for the shared I2CDMABus.
+ * @brief DMA-accelerated PCA9685 multi-board manager for Teensy 4.1 (i.MX RT1062).
  *
- * No longer owns a DMA channel. Instead, call setDMABus() to link to the
- * shared I2CDMABus, then call buildInto() each cycle to append selective
- * PCA9685 writes into the bus's TX buffer.
+ * Manages up to @ref MAX_DRIVERS PCA9685 boards on a single I2C bus.
+ * Only dirty channels are written each cycle, using run-length-compressed
+ * MTDR command sequences for minimal bus time.
  *
- * Legacy mode: if no DMA bus is set, update() still works as a standalone
- * DMA manager (backwards compatible).
+ * Two operating modes:
+ *
+ * **Shared bus mode** (preferred):
+ *   Call setDMABus() to link to an I2CDMABus, then call buildInto() each
+ *   cycle to append selective PCA9685 writes into the shared TX buffer.
+ *   The I2CDMABus owns the DMA channels and bus lock.
+ *
+ * **Legacy standalone mode**:
+ *   If no DMA bus is set, update() uses an internal DMA channel to fire
+ *   transfers directly.  Retained for backwards compatibility.
+ *
+ * @note Thread safety: PCA9685Driver::bufferPWM() / bufferDigital() may be
+ *       called from any thread.  buildInto() / update() should be called
+ *       from a single dedicated flush task.
+ *
+ * @see I2CDMABus, Robot::PCA9685Driver
  */
 
 #pragma once
@@ -18,49 +32,119 @@
 #include "I2CDMABus.h"
 #include "PCA9685Driver.h"
 
+/**
+ * @class PCA9685DMAManager
+ * @brief Batches dirty-channel writes from multiple PCA9685 boards into
+ *        DMA transfers on a shared I2C bus.
+ */
 class PCA9685DMAManager
 {
 public:
+  /** @brief Maximum number of PCA9685 boards managed by one instance. */
   static constexpr uint8_t MAX_DRIVERS = 4;
 
-  // worst case per driver: 1 START + 1 REG + (16ch * 4 bytes) + 1 STOP = 67
+  /**
+   * @brief Worst-case MTDR words per driver per cycle.
+   *
+   * 1 START + 1 REG + (16 channels * 4 bytes) + 1 STOP = 67.
+   */
   static constexpr uint16_t MAX_BUF_PER_DRIVER = 67;
+
+  /** @brief Total standalone buffer capacity (words). */
   static constexpr uint16_t MAX_BUF_ENTRIES = MAX_BUF_PER_DRIVER * MAX_DRIVERS;
 
+  /**
+   * @brief Construct a PCA9685DMAManager.
+   * @param wire      I2C bus the PCA9685 boards are on (Wire, Wire1, or Wire2).
+   * @param clock_hz  I2C clock speed in Hz (default 1 MHz for fast mode+).
+   */
   explicit PCA9685DMAManager(TwoWire &wire = Wire2,
                              uint32_t clock_hz = 1000000);
 
-  bool addDriver(PCA9685Driver *drv);
+  /**
+   * @brief Register a PCA9685 driver with this manager.
+   * @param drv  Pointer to an initialised PCA9685Driver.
+   * @return true on success, false if MAX_DRIVERS already registered.
+   */
+  bool addDriver(Robot::PCA9685Driver *drv);
 
+  /** @brief Number of currently registered drivers. */
   uint8_t count() const { return num_drivers_; }
-  PCA9685Driver *get(uint8_t i) { return i < num_drivers_ ? drivers_[i] : nullptr; }
+
+  /**
+   * @brief Access a registered driver by index.
+   * @param i  Driver index (0-based).
+   * @return Pointer to the driver, or nullptr if index out of range.
+   */
+  Robot::PCA9685Driver *get(uint8_t i) { return i < num_drivers_ ? drivers_[i] : nullptr; }
 
   // ── Shared DMA bus mode ────────────────────────────────────────────
+
+  /**
+   * @brief Link this manager to a shared I2CDMABus.
+   *
+   * When set, buildInto() appends commands to the bus's TX buffer instead
+   * of using the internal standalone DMA channel.
+   *
+   * @param bus  Pointer to the I2CDMABus (nullptr reverts to standalone).
+   */
   void setDMABus(I2CDMABus *bus) { dma_bus_ = bus; }
 
-  /// Append PCA9685 selective writes into the shared I2CDMABus TX buffer.
-  /// Call this after dispatch() and before fire() each cycle.
-  /// Returns number of MTDR words written (0 if nothing dirty).
+  /**
+   * @brief Append PCA9685 selective writes into the shared I2CDMABus TX buffer.
+   *
+   * Call sequence each cycle: dispatch() -> buildInto() -> fire().
+   * Reserves worst-case space, builds only dirty channels, then rewinds
+   * unused buffer space.
+   *
+   * @return Number of MTDR words written (0 if nothing dirty).
+   */
   uint16_t buildInto();
 
   // ── Legacy standalone mode ─────────────────────────────────────────
-  bool update(); // build selective buffer + fire DMA, non-blocking
+
+  /**
+   * @brief Build selective buffer and fire DMA (standalone mode, non-blocking).
+   *
+   * Scans all registered drivers for dirty channels, builds the MTDR
+   * command buffer, and starts a DMA transfer to the LPI2C peripheral.
+   *
+   * @return true if a transfer was started, false if previous transfer
+   *         still in progress or nothing dirty.
+   */
+  bool update();
+
+  /**
+   * @brief Check if the previous standalone DMA transfer has completed.
+   * @return true when the DMA channel reports completion.
+   */
   bool isComplete();
 
 private:
-  TwoWire &wire_;
-  IMXRT_LPI2C_t *port_;
-  uint8_t dma_src_;
-  uint32_t clock_hz_;
+  TwoWire &wire_;              ///< I2C bus reference.
+  IMXRT_LPI2C_t *port_;        ///< LPI2C peripheral register block.
+  uint8_t dma_src_;            ///< DMAMUX source for the I2C peripheral.
+  uint32_t clock_hz_;          ///< I2C clock speed in Hz.
 
-  PCA9685Driver *drivers_[MAX_DRIVERS];
-  uint8_t num_drivers_;
+  Robot::PCA9685Driver *drivers_[MAX_DRIVERS];  ///< Registered driver pointers.
+  uint8_t num_drivers_;                         ///< Number of registered drivers.
 
-  I2CDMABus *dma_bus_ = nullptr;
+  I2CDMABus *dma_bus_ = nullptr;  ///< Shared DMA bus (nullptr = standalone mode).
 
   // Legacy standalone DMA (unused when dma_bus_ is set)
-  DMAChannel dma_;
-  uint16_t buf_[MAX_BUF_ENTRIES] __attribute__((aligned(32)));
+  DMAChannel dma_;  ///< Standalone DMA channel.
+  uint16_t buf_[MAX_BUF_ENTRIES] __attribute__((aligned(32)));  ///< Standalone TX buffer.
 
-  uint16_t buildForDriver(PCA9685Driver *drv, uint16_t *out);
+  /**
+   * @brief Build MTDR commands for a single PCA9685 driver's dirty channels.
+   *
+   * Scans the driver's dirty flags, clears them, and emits run-length
+   * compressed MTDR command sequences (START, addr, reg, ON_L/H, OFF_L/H,
+   * ..., STOP) for consecutive dirty channels.
+   *
+   * @param drv  Driver to scan.
+   * @param out  Output buffer for MTDR words.
+   * @return Number of MTDR words written.
+   */
+  uint16_t buildForDriver(Robot::PCA9685Driver *drv, uint16_t *out);
 };

@@ -5,7 +5,7 @@
  * @brief Mission sequencer that coordinates the full competition run
  *
  * Sequences navigation, task execution, minibot/drone deployment, and duck
- * handling.
+ * handling.  Drives the robot via drive_base/command (DriveBase msg) — no Nav2.
  *
  * State ordering:
  *   0-WAIT -> 1-START -> 2-MINIBOT -> 3-NAV_UWB -> 4-PLACE_UWB ->
@@ -18,24 +18,22 @@
 
 #include <array>
 #include <chrono>
-#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <mcu_msgs/msg/antenna_marker.hpp>
 #include <mcu_msgs/msg/arm_command.hpp>
+#include <mcu_msgs/msg/drive_base.hpp>
 #include <mcu_msgs/msg/drone_control.hpp>
 #include <mcu_msgs/msg/drone_state.hpp>
-#include <mcu_msgs/msg/intake_bridge_command.hpp>
-#include <mcu_msgs/msg/intake_bridge_state.hpp>
+#include <mcu_msgs/msg/intake_command.hpp>
 #include <mcu_msgs/msg/intake_state.hpp>
 #include <mcu_msgs/msg/mini_robot_state.hpp>
 #include <mcu_msgs/msg/robot_inputs.hpp>
-#include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <secbot_msgs/msg/duck_detections.hpp>
 #include <secbot_msgs/msg/task_status.hpp>
-#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/int16.hpp>
 #include <std_msgs/msg/u_int8.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <vector>
 
 namespace secbot {
@@ -76,8 +74,8 @@ enum class MissionPhase : uint8_t {
 /** @brief Sub-steps for antenna-align-then-solve pattern */
 enum class SolveSubStep : uint8_t { ALIGN_ANTENNA, EXECUTE_TASK, DONE };
 
-/** @brief Sub-steps for intake bridge operation in SOLVE_PRESSURE */
-enum class IntakeBridgeStep : uint8_t { EXTEND, WAIT_CAPTURE, RETRACT, DONE };
+/** @brief Sub-steps for intake rail operation in SOLVE_PRESSURE */
+enum class IntakeRailStep : uint8_t { EXTEND, WAIT_CAPTURE, RETRACT, DONE };
 
 /** @brief Sub-steps for COLLECT_KNOWN_DUCKS multi-duck loop */
 enum class DuckCollectStep : uint8_t {
@@ -111,8 +109,9 @@ struct ArenaPosition {
  * @brief Mission sequencer node
  *
  * Orchestrates the entire competition run as a linear state machine.
- * Talks to pathing_node via /goal_pose and /nav/goal_reached, and to
- * autonomy_node via /autonomy/task_command and /autonomy/task_status.
+ * Drives robot via drive_base/command (DriveBase msg) and reads pose from
+ * drive_base/status.  Talks to autonomy_node via /autonomy/task_command and
+ * /autonomy/task_status.
  */
 class MissionNode : public rclcpp::Node {
  public:
@@ -124,29 +123,33 @@ class MissionNode : public rclcpp::Node {
   void transitionTo(MissionPhase phase);
   const char* phaseName(MissionPhase phase) const;
 
-  // Navigation helpers
-  void sendNavGoal(const ArenaPosition& pos);
+  // Navigation helpers (DriveBase)
+  void sendDriveGoal(const ArenaPosition& pos);
+  void sendDrivePath(const std::vector<ArenaPosition>& waypoints);
+  void sendVelocity(double vx, double omega);
+  void stopRobot();
+  void refreshDriveCommand();
 
   // Task helpers
   void sendTaskCommand(uint8_t task_id);
   void sendAntennaTarget(uint8_t antenna_id);
-  void sendBackup(double speed, double duration_sec);
   void sendArmCommand(uint8_t joint_id, int16_t position, uint8_t speed);
-  void setIntakeSpeed(int16_t speed);
-  void sendBridgeCommand(uint8_t cmd);
+  void sendIntakeCommand(uint8_t cmd, float value = 0.0f);
 
   // Timeout helper
   bool checkStateTimeout(double timeout_s);
 
+  // Service callbacks
+  void onStartService(const std_srvs::srv::Trigger::Request::SharedPtr req,
+                      std_srvs::srv::Trigger::Response::SharedPtr res);
+
   // Callbacks
-  void onGoalReached(const std_msgs::msg::Bool::SharedPtr msg);
+  void onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg);
   void onTaskStatus(const secbot_msgs::msg::TaskStatus::SharedPtr msg);
-  void onOdom(const nav_msgs::msg::Odometry::SharedPtr msg);
   void onMinibotState(const mcu_msgs::msg::MiniRobotState::SharedPtr msg);
   void onDroneState(const mcu_msgs::msg::DroneState::SharedPtr msg);
   void onRobotInputs(const mcu_msgs::msg::RobotInputs::SharedPtr msg);
   void onIntakeState(const mcu_msgs::msg::IntakeState::SharedPtr msg);
-  void onBridgeState(const mcu_msgs::msg::IntakeBridgeState::SharedPtr msg);
   void onDuckDetections(const secbot_msgs::msg::DuckDetections::SharedPtr msg);
   void onAntennaMarker(const mcu_msgs::msg::AntennaMarker::SharedPtr msg);
 
@@ -156,6 +159,9 @@ class MissionNode : public rclcpp::Node {
 
   // Navigation state
   bool goal_reached_ = false;
+  ArenaPosition nav_target_ = {0.0, 0.0};
+  mcu_msgs::msg::DriveBase last_drive_cmd_;
+  uint8_t last_drive_mode_ = 0;
 
   // Task state
   uint8_t current_task_id_ = 0;
@@ -164,10 +170,10 @@ class MissionNode : public rclcpp::Node {
   // Solve sub-step (antenna align then task execute)
   SolveSubStep sub_step_ = SolveSubStep::ALIGN_ANTENNA;
 
-  // Intake bridge sub-step (for SOLVE_PRESSURE)
-  IntakeBridgeStep bridge_step_ = IntakeBridgeStep::EXTEND;
+  // Intake rail sub-step (for SOLVE_PRESSURE)
+  IntakeRailStep rail_step_ = IntakeRailStep::EXTEND;
 
-  // Robot pose from odom
+  // Robot pose from drive_base/status
   double robot_x_ = 0.0;
   double robot_y_ = 0.0;
 
@@ -182,19 +188,16 @@ class MissionNode : public rclcpp::Node {
   uint8_t drone_state_ = 0;
   uint8_t drone_task_ = 0;
 
-  // Intake state
+  // Intake state (from IntakeState msg)
   uint8_t intake_state_ = 0;
-  bool duck_in_intake_ = false;
-
-  // Bridge state
-  uint8_t bridge_state_ = 0;
-  bool bridge_duck_detected_ = false;
+  float intake_position_ = 0.0f;
+  bool intake_limit_extend_ = false;
+  bool intake_limit_retract_ = false;
 
   // Backup / phase timing
   std::chrono::steady_clock::time_point phase_timer_;
-  double backup_duration_sec_ = 0.0;
 
-  // Match timer (5 minute limit)
+  // Match timer (3 minute competition limit)
   std::chrono::steady_clock::time_point match_start_;
 
   // Duck collection
@@ -215,21 +218,24 @@ class MissionNode : public rclcpp::Node {
   std::array<uint8_t, 5> antenna_colors_ = {};  // indexed by antenna_id (1-4)
   uint8_t antennas_read_ = 0;
 
-  // Arena positions (UPDATE WITH REAL FIELD COORDINATES FOR GODS SAKE)
-  static constexpr ArenaPosition POS_UWB_CORNER = {1.5, 0.5};
-  static constexpr ArenaPosition POS_BUTTON_BEACON = {2.0, 1.0};
-  static constexpr ArenaPosition POS_CRANK_FLAG = {3.5, 1.0};
-  static constexpr ArenaPosition POS_CRANK_APPROACH = {4.0, 1.0};
-  static constexpr ArenaPosition POS_KEYPAD_BEACON = {6.0, 1.0};
-  static constexpr ArenaPosition POS_PRESSURE_PLATE = {6.0, -1.0};
-  static constexpr ArenaPosition POS_DUCK_DEPOSIT = {3.0, -2.0};
-  static constexpr ArenaPosition POS_MINIBOT_LAUNCH = {1.0, 0.0};
-  static constexpr ArenaPosition POS_LAUNCH_POINT = {1.0, -1.0};
-  static constexpr ArenaPosition POS_FINISH = {1.0, 0.5};
+  // Arena positions — real field coordinates (inches -> meters, 1" = 0.0254m)
+  static constexpr ArenaPosition POS_START_ZONE = {0.1524, 0.1524};
+  static constexpr ArenaPosition POS_UWB_CORNER = {1.1176, 0.0762};
+  static constexpr ArenaPosition POS_BUTTON_APPROACH = {0.9652, 0.1397};
+  static constexpr ArenaPosition POS_CRANK_FLAG = {1.1176, 2.1590};
+  static constexpr ArenaPosition POS_CRANK_APPROACH = {0.9652, 2.2733};
+  static constexpr ArenaPosition POS_KEYPAD_APPROACH = {0.2032, 0.9779};
+  static constexpr ArenaPosition POS_PRESSURE_APPROACH = {0.3810, 1.5113};
+  static constexpr ArenaPosition POS_DUCK_DEPOSIT = {0.9144, 0.9144};
+  static constexpr ArenaPosition POS_LAUNCH_POINT = {0.1524, 0.3048};
+  static constexpr ArenaPosition POS_FINISH = {0.1524, 0.1524};
 
   // Per-state timeout defaults (seconds)
   static constexpr double DEFAULT_NAV_TIMEOUT_S = 30.0;
   static constexpr double DEFAULT_TASK_TIMEOUT_S = 15.0;
+
+  // Goal-reached distance tolerance (meters)
+  static constexpr double GOAL_REACHED_TOL = 0.05;
 
   // Task IDs (must match autonomy_node TaskId enum)
   static constexpr uint8_t TASK_NONE = 0;
@@ -251,38 +257,28 @@ class MissionNode : public rclcpp::Node {
   static constexpr int16_t SERVO_EXTENDED = 90;
   static constexpr uint8_t SERVO_SPEED = 200;
 
-  // Intake speeds
-  static constexpr int16_t INTAKE_CAPTURE_SPEED = 200;
-  static constexpr int16_t INTAKE_EJECT_SPEED = -200;
-  static constexpr int16_t INTAKE_OFF_SPEED = 0;
-
   // ROS interfaces
   rclcpp::TimerBase::SharedPtr step_timer_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_service_;
 
   // Publishers
-  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pub_;
+  rclcpp::Publisher<mcu_msgs::msg::DriveBase>::SharedPtr drive_cmd_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr task_cmd_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr antenna_target_pub_;
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr minibot_cmd_pub_;
   rclcpp::Publisher<mcu_msgs::msg::ArmCommand>::SharedPtr arm_cmd_pub_;
-  rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr intake_speed_pub_;
+  rclcpp::Publisher<mcu_msgs::msg::IntakeCommand>::SharedPtr intake_cmd_pub_;
   rclcpp::Publisher<mcu_msgs::msg::DroneControl>::SharedPtr drone_cmd_pub_;
-  rclcpp::Publisher<mcu_msgs::msg::IntakeBridgeCommand>::SharedPtr
-      bridge_cmd_pub_;
 
   // Subscribers
-  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr goal_reached_sub_;
+  rclcpp::Subscription<mcu_msgs::msg::DriveBase>::SharedPtr drive_status_sub_;
   rclcpp::Subscription<secbot_msgs::msg::TaskStatus>::SharedPtr
       task_status_sub_;
-  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<mcu_msgs::msg::MiniRobotState>::SharedPtr
       minibot_state_sub_;
   rclcpp::Subscription<mcu_msgs::msg::DroneState>::SharedPtr drone_state_sub_;
   rclcpp::Subscription<mcu_msgs::msg::RobotInputs>::SharedPtr robot_inputs_sub_;
   rclcpp::Subscription<mcu_msgs::msg::IntakeState>::SharedPtr intake_state_sub_;
-  rclcpp::Subscription<mcu_msgs::msg::IntakeBridgeState>::SharedPtr
-      bridge_state_sub_;
   rclcpp::Subscription<secbot_msgs::msg::DuckDetections>::SharedPtr
       duck_detect_sub_;
   rclcpp::Subscription<mcu_msgs::msg::AntennaMarker>::SharedPtr

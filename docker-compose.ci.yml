@@ -1,5 +1,7 @@
 services:
   devcontainer:
+    restart: "no"
+    command: sleep infinity
     volumes:
       # Override dev bind with named volume for CI runners (long syntax for clarity)
       - type: volume

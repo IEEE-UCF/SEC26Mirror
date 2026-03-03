@@ -73,6 +73,9 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
+  /** @brief Access raw RC channel data (updated every loop cycle). */
+  const RCSubsystemData& getData() const { return data_; }
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 5) {

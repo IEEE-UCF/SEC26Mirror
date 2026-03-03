@@ -30,6 +30,10 @@ constexpr float mm_i32_to_m(int32_t mm) { return float(mm) * 0.001f; }
 constexpr float cm_to_m(float cm) { return cm * 0.01f; }
 constexpr float m_to_cm(float m) { return m * 100.0f; }
 
+// Inches <-> meters
+constexpr float in_to_m(float in) { return in * 0.0254f; }
+constexpr float m_to_in(float m) { return m / 0.0254f; }
+
 // ----------------------------
 // Linear speed
 // ----------------------------
@@ -41,6 +45,10 @@ constexpr float mps_to_mmps(float mps) { return mps * 1000.0f; }
 // cm/s <-> m/s
 constexpr float cmps_to_mps(float cmps) { return cmps * 0.01f; }
 constexpr float mps_to_cmps(float mps) { return mps * 100.0f; }
+
+// in/s <-> m/s
+constexpr float inps_to_mps(float inps) { return inps * 0.0254f; }
+constexpr float mps_to_inps(float mps) { return mps / 0.0254f; }
 
 // ----------------------------
 // Angular speed

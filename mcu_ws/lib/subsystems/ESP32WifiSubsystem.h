@@ -68,6 +68,27 @@ class ESP32WifiSubsystemSetup : public Classes::BaseSetup {
   }
 
   /**
+   * @brief Construct setup for single AP mode with static IP
+   */
+  ESP32WifiSubsystemSetup(const char* _id, const char* ssid,
+                          const char* password, IPAddress local_ip,
+                          IPAddress gateway, IPAddress subnet,
+                          uint32_t connection_timeout_ms = 10000,
+                          uint32_t reconnect_interval_ms = 5000,
+                          uint8_t max_retries = 5)
+      : Classes::BaseSetup(_id),
+        connection_timeout_ms_(connection_timeout_ms),
+        reconnect_interval_ms_(reconnect_interval_ms),
+        max_retries_(max_retries),
+        ap_count_(1),
+        local_ip_(local_ip),
+        gateway_(gateway),
+        subnet_(subnet),
+        use_static_ip_(true) {
+    ap_list_[0] = {ssid, password};
+  }
+
+  /**
    * @brief Construct setup for multi-AP mode
    * @param ap_list Array of WifiCredentials (max 4 ofc)
    * @param ap_count Number of APs in the list
@@ -92,8 +113,15 @@ class ESP32WifiSubsystemSetup : public Classes::BaseSetup {
   uint32_t connection_timeout_ms_;  // Timeout for initial connection attempt
   uint32_t reconnect_interval_ms_;  // Delay between reconnection attempts
   uint8_t max_retries_;  // Max consecutive failed attempts before FAILED state
+                         // (0 = infinite retries)
   uint8_t ap_count_;     // Number of configured APs
   WifiCredentials ap_list_[kMaxAPs] = {};  // List of AP credentials
+
+  // Static IP configuration (optional)
+  IPAddress local_ip_{INADDR_NONE};
+  IPAddress gateway_{INADDR_NONE};
+  IPAddress subnet_{INADDR_NONE};
+  bool use_static_ip_ = false;
 };
 
 /**

@@ -8,6 +8,8 @@
 #pragma once
 
 #include <Arduino.h>
+#include <ArduinoOTA.h>
+#include <ESP32WifiSubsystem.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -39,6 +41,16 @@ static constexpr uint8_t NUM_ALL_BEACONS = 3;
 static uint8_t g_peer_ids[NUM_ALL_BEACONS];
 static uint8_t g_num_peers = 0;
 
+// --- WiFi subsystem (manages connection lifecycle + auto-reconnect) ---
+static IPAddress g_local_ip(LOCAL_IP);
+static ESP32WifiSubsystemSetup g_wifi_setup(
+    "wifi", WIFI_SSID, WIFI_PASSWORD, g_local_ip,
+    IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0),
+    /*connection_timeout_ms=*/10000,
+    /*reconnect_interval_ms=*/5000,
+    /*max_retries=*/0);  // 0 = infinite retries
+static ESP32WifiSubsystem g_wifi(g_wifi_setup);
+
 // --- micro-ROS manager ---
 static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
@@ -68,20 +80,31 @@ void setup() {
   Serial.println(" starting...");
   Serial.flush();
 
-  // Step 1: WiFi transport first — must match esp32-test-microros-wifi pattern.
-  // begin() calls set_microros_transports() which connects WiFi and configures
-  // the UDP transport to the agent. All other init must follow this.
-  Serial.println("[DBG] g_mr.init");
+  // Step 1: WiFi connection (managed by ESP32WifiSubsystem with auto-reconnect)
+  g_wifi.init();
+  g_wifi.begin();
+  Serial.println("Waiting for WiFi...");
   Serial.flush();
-  g_mr.init();
-  Serial.println("[DBG] g_mr.begin (WiFi connect)");
-  Serial.flush();
-  g_mr.begin();
-  Serial.println("[DBG] g_mr.begin done");
+  while (!g_wifi.isConnected()) {
+    g_wifi.update();
+    delay(10);
+  }
+  Serial.printf("WiFi connected: %s\n", WiFi.localIP().toString().c_str());
   Serial.flush();
 
-  Serial.printf("WiFi status: %d (3=connected)\n", WiFi.status());
-  Serial.flush();
+  // Step 1b: ArduinoOTA for wireless firmware updates (needs WiFi up)
+  {
+    char hostname[32];
+    snprintf(hostname, sizeof(hostname), "sec26-beacon-%d", BEACON_ID);
+    ArduinoOTA.setHostname(hostname);
+    ArduinoOTA.begin();
+    Serial.printf("[OTA] Ready as %s\n", hostname);
+    Serial.flush();
+  }
+
+  // Step 1c: micro-ROS transport (registers UDP callbacks, no WiFi.begin())
+  g_mr.init();
+  g_mr.begin();
 
   // Step 2: SPI for DW3000
   SPI.begin();
@@ -137,6 +160,8 @@ void setup() {
 }
 
 void loop() {
+  g_wifi.update();  // WiFi reconnection monitoring
+  ArduinoOTA.handle();
   g_mr.update();
   g_hb.update();
   g_uwb.update();

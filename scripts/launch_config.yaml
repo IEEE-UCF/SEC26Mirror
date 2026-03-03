@@ -1,7 +1,0 @@
-# Example launch configuration
-# Provide an explicit list of packages and (optionally) the launch file to run.
-# If `launch` is omitted, the master will pick the first `*.py` under
-# `src/<package>/launch/`.
-launches:
-  - package: test_package
-    launch: test_package_launch.py

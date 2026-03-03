@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "DebugLog.h"
 #include "OLEDSubsystem.h"
 #include "robot/RobotConstants.h"
 
@@ -17,7 +18,11 @@ int estimateBatteryPercent(float voltage) {
 }
 }  // namespace
 
-bool BatterySubsystem::init() { return setup_.driver_->init(); }
+bool BatterySubsystem::init() {
+  bool ok = setup_.driver_->init();
+  DEBUG_PRINTF("[BAT] init: %s\n", ok ? "OK" : "FAIL");
+  return ok;
+}
 
 void BatterySubsystem::update() {
   setup_.driver_->update();
@@ -56,8 +61,10 @@ bool BatterySubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
           &pub_, node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, BatteryHealth),
           "/mcu_robot/battery_health") != RCL_RET_OK) {
+    DEBUG_PRINTLN("[BAT] onCreate FAIL: publisher init");
     return false;
   }
+  DEBUG_PRINTLN("[BAT] onCreate OK");
   return true;
 }
 

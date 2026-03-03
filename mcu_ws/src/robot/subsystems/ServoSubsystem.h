@@ -15,6 +15,7 @@
 
 #include <BaseSubsystem.h>
 #include <PCA9685Driver.h>
+#include "DebugLog.h"
 #include <mcu_msgs/srv/set_servo.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
@@ -70,6 +71,8 @@ class ServoSubsystem : public IMicroRosParticipant,
       pinMode(setup_.oePin_, OUTPUT);
       digitalWrite(setup_.oePin_, LOW);
     }
+    DEBUG_PRINTF("[SERVO] init OK (%d servos, OE=%d)\n", setup_.numServos_,
+                 setup_.oePin_);
     return true;
   }
 
@@ -118,9 +121,11 @@ class ServoSubsystem : public IMicroRosParticipant,
     if (rclc_executor_add_service_with_context(
             executor, &srv_, &srv_req_, &srv_res_, &ServoSubsystem::srvCallback,
             this) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[SERVO] onCreate FAIL: service executor");
       return false;
     }
 
+    DEBUG_PRINTLN("[SERVO] onCreate OK");
     return true;
   }
 
@@ -191,8 +196,10 @@ class ServoSubsystem : public IMicroRosParticipant,
     if (r->index < self->setup_.numServos_) {
       self->setAngle(r->index, r->angle);
       rsp->success = true;
+      DEBUG_PRINTF("[SERVO] set ch%d = %.1f deg\n", r->index, r->angle);
     } else {
       rsp->success = false;
+      DEBUG_PRINTF("[SERVO] set FAIL: ch%d out of range\n", r->index);
     }
   }
 

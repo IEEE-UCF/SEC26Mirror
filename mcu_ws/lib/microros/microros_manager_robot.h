@@ -96,6 +96,11 @@ class MicrorosManager : public Classes::BaseSubsystem {
   // Query agent connection state
   bool isConnected() const;
 
+  // Set a callback invoked on connection state changes.
+  // cb(true) = just connected, cb(false) = just disconnected.
+  using StateCallback = void (*)(bool connected);
+  void setStateCallback(StateCallback cb) { state_cb_ = cb; }
+
   // Returns index of participant that failed onCreate, or -1 if all succeeded.
   int lastFailedParticipant() const { return last_failed_participant_; }
 
@@ -117,7 +122,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
   std_msgs__msg__String debug_msg_{};
 
   // Registered participants (increase capacity as subsystems are added)
-  static constexpr size_t MAX_PARTICIPANTS = 16;
+  static constexpr size_t MAX_PARTICIPANTS = 32;
   IMicroRosParticipant* participants_[MAX_PARTICIPANTS] = {nullptr};
   size_t participants_count_ = 0;
 
@@ -135,6 +140,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
   std::mutex mutex_;
 #endif
   int last_failed_participant_ = -1;
+  StateCallback state_cb_ = nullptr;
   bool create_entities();
   void destroy_entities();
 

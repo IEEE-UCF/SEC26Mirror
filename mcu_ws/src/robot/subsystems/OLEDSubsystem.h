@@ -39,6 +39,12 @@
 
 namespace Subsystem {
 
+// Forward declarations for dashboard data sources
+class DipSwitchSubsystem;
+class BatterySubsystem;
+class ImuSubsystem;
+class UWBSubsystem;
+
 // ── Setup
 // ─────────────────────────────────────────────────────────────────────
 
@@ -116,6 +122,13 @@ class OLEDSubsystem : public IMicroRosParticipant,
    */
   void setStatusLine(const char* text);
 
+  /**
+   * Set subsystem pointers for debug dashboard mode (DIP bit 5).
+   * Pass nullptr for uwb if UWB is disabled.
+   */
+  void setDashboardSources(DipSwitchSubsystem* dip, BatterySubsystem* battery,
+                           ImuSubsystem* imu, UWBSubsystem* uwb);
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 50) {
@@ -176,6 +189,15 @@ class OLEDSubsystem : public IMicroRosParticipant,
   bool takeMutex() { return true; }
   void giveMutex() {}
 #endif
+
+  // ── Dashboard mode (DIP bit 5) ──────────────────────────────────────────
+  DipSwitchSubsystem* dash_dip_ = nullptr;
+  BatterySubsystem* dash_battery_ = nullptr;
+  ImuSubsystem* dash_imu_ = nullptr;
+  UWBSubsystem* dash_uwb_ = nullptr;
+
+  bool isDashboardMode() const;
+  void renderDashboard();
 
   const OLEDSubsystemSetup setup_;
   Adafruit_SSD1306 display_;

@@ -8,6 +8,7 @@ geometry_msgs/Twist twist
 # Drive Modes
 uint8 DRIVE_VECTOR=0  # Command by twist vector
 uint8 DRIVE_GOAL=1    # Drive towards goal transform
+uint8 DRIVE_TRAJ=2
 uint8 drive_mode      # One of DRIVE_VECTOR / DRIVE_GOAL
 
 # Goal position and velocity
@@ -16,3 +17,4 @@ uint8 drive_mode      # One of DRIVE_VECTOR / DRIVE_GOAL
 # depending on the mode, one of these will be empty.
 geometry_msgs/TransformStamped goal_transform
 geometry_msgs/Twist goal_velocity
+nav_msgs/Path goal_path

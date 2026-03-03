@@ -17,8 +17,8 @@ void TankDriveLocalization::update(long leftTicks, long rightTicks, float yaw) {
   prevLeftTicks = leftTicks;
   prevRightTicks = rightTicks;
 
-  const float leftDist = deltaLeftTicks * setup_.inches_per_tick;
-  const float rightDist = deltaRightTicks * setup_.inches_per_tick;
+  const float leftDist = deltaLeftTicks * setup_.dist_per_tick;
+  const float rightDist = deltaRightTicks * setup_.dist_per_tick;
 
   const float distTravel = (leftDist + rightDist) * 0.5f;
 
@@ -29,6 +29,13 @@ void TankDriveLocalization::update(long leftTicks, long rightTicks, float yaw) {
   currentPose.normalizeTheta();
   currentPose.x += deltaX;
   currentPose.y += deltaY;
+}
+
+void TankDriveLocalization::setPose(float x, float y, float theta) {
+  currentPose.x = x;
+  currentPose.y = y;
+  currentPose.theta = theta;
+  currentPose.normalizeTheta();
 }
 
 const char* TankDriveLocalization::getInfo() {

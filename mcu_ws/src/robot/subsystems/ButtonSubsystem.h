@@ -5,6 +5,8 @@
  * @date 2026-02-24
  *
  * Publishes an 8-bit bitmask (bit N = button N).
+ * Hardware is active-low and bit-reversed; this subsystem corrects both
+ * so consumers see active-HIGH (1 = pressed), bit 0 = button 0.
  * Callbacks are invoked on the rising edge of each button (press).
  *
  * -- ROS2 interface (defaults) ---------------------------------------------
@@ -15,6 +17,7 @@
 
 #include <BaseSubsystem.h>
 #include <TCA9555Driver.h>
+#include "DebugLog.h"
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/u_int8.h>
 
@@ -49,8 +52,12 @@ class ButtonSubsystem : public IMicroRosParticipant,
       : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override {
-    if (!setup_.driver_) return false;
+    if (!setup_.driver_) {
+      DEBUG_PRINTLN("[BTN] init FAIL: no driver");
+      return false;
+    }
     setup_.driver_->configurePort(1, 0xFF);
+    DEBUG_PRINTLN("[BTN] init OK (port 1, 8 buttons)");
     return true;
   }
 
@@ -60,12 +67,13 @@ class ButtonSubsystem : public IMicroRosParticipant,
     if (!setup_.driver_) return;
     setup_.driver_->update();
 
-    uint8_t current = setup_.driver_->readPort(1);
+    uint8_t current = fixGPIO(setup_.driver_->readPort(1));
 
     // Detect rising edges (not-pressed -> pressed)
     uint8_t pressed = current & ~prev_state_;
     for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
       if ((pressed >> i) & 0x01) {
+        DEBUG_PRINTF("[BTN] press: button %d\n", i);
         if (callbacks_[i]) callbacks_[i]();
       }
     }
@@ -97,9 +105,11 @@ class ButtonSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     (void)executor;
     node_ = node;
-    return rclc_publisher_init_best_effort(
-               &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
-               setup_.topic_) == RCL_RET_OK;
+    bool ok = rclc_publisher_init_best_effort(
+                  &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
+                  setup_.topic_) == RCL_RET_OK;
+    DEBUG_PRINTF("[BTN] onCreate %s\n", ok ? "OK" : "FAIL");
+    return ok;
   }
 
   void onDestroy() override {
@@ -137,6 +147,15 @@ class ButtonSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  // Hardware is active-low and bit-reversed (button 0 appears at bit 7).
+  // Reverse bits and invert so bit 0 = button 0, 1 = pressed.
+  static uint8_t fixGPIO(uint8_t b) {
+    b = ((b & 0xF0) >> 4) | ((b & 0x0F) << 4);
+    b = ((b & 0xCC) >> 2) | ((b & 0x33) << 2);
+    b = ((b & 0xAA) >> 1) | ((b & 0x55) << 1);
+    return ~b;
+  }
+
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;
   const ButtonSubsystemSetup setup_;
   rcl_publisher_t pub_{};

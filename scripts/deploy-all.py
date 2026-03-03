@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+In-container deployment script: flash MCU + build ROS2 + launch.
+
+This script runs INSIDE the Docker container. For the main automated
+deployment pipeline, see deploy-orchestrator.py (runs on the host).
+"""
 
 import argparse
 import os
@@ -12,37 +18,6 @@ SCRIPTS_DIR = Path("/home/ubuntu/scripts")
 MCU_WS = Path("/home/ubuntu/mcu_workspaces/sec26mcu")
 ROS_WS = Path("/home/ubuntu/ros2_workspaces")
 ROS_INSTALL_SETUP = ROS_WS / "install" / "setup.bash"
-TEST_PKG_LAUNCH = Path("/home/ubuntu/ros2_workspaces/src/sec26ros/test_package/launch/test_node.launch.py")
-PREBUILT_DIR = MCU_WS / "prebuilt"
-
-
-def stage_prebuilt_artifacts():
-    # Copy prebuilt firmware into PlatformIO build folders so upload can run without compiling.
-    if not PREBUILT_DIR.exists():
-        print(f"ℹ️ No prebuilt directory found at {PREBUILT_DIR}; will fall back to normal build")
-        return
-
-    robot_build_dir = MCU_WS / ".pio" / "build" / "robot"
-    robot_build_dir.mkdir(parents=True, exist_ok=True)
-
-    # Search broadly in PREBUILT_DIR to handle nested paths from artifact download
-    robot_candidates = []
-    for pattern in ["**/robot/firmware.*", "**/robot/**/*.hex", "**/robot/**/*.elf"]:
-        robot_candidates.extend(PREBUILT_DIR.glob(pattern))
-
-    staged = False
-    if robot_candidates:
-        # Prefer firmware.hex if present; else take first match
-        preferred = next((p for p in robot_candidates if p.name == "firmware.hex"), robot_candidates[0])
-        target = robot_build_dir / "firmware.hex"
-        print(f"📦 Staging Teensy artifact: {preferred} -> {target}")
-        target.write_bytes(preferred.read_bytes())
-        staged = True
-
-    if staged:
-        print("✅ Prebuilt Teensy artifact staged into .pio/build/robot")
-    else:
-        print("ℹ️ No matching prebuilt artifacts found; will fall back to normal build")
 
 
 def run(cmd, env=None, cwd=None, shell=False):
@@ -66,7 +41,6 @@ def try_run(cmd, env=None, cwd=None, shell=False) -> bool:
 
 
 def ensure_in_container():
-    # Best-effort check to ensure paths exist in the container
     missing = []
     for p in [SCRIPTS_DIR, MCU_WS, ROS_WS]:
         if not p.exists():
@@ -83,7 +57,6 @@ def ensure_in_container():
 def get_ros_distro() -> str:
     dist = os.environ.get("ROS_DISTRO")
     if not dist and Path("/opt/ros").exists():
-        # Pick the latest alphabetically (rough but effective)
         dists = [p.name for p in Path("/opt/ros").iterdir() if p.is_dir()]
         if dists:
             dist = sorted(dists)[-1]
@@ -91,30 +64,20 @@ def get_ros_distro() -> str:
 
 
 def rosdep_update_and_install():
-    """Ensure rosdep is available, updated, and install workspace deps.
-
-    - Updates apt-get package lists
-    - Installs rosdep if missing
-    - Initializes rosdep if needed
-    - Retries `rosdep update` up to 3 times
-    - Installs dependencies for ROS workspace src with ament_python skipped
-    """
+    """Ensure rosdep is available, updated, and install workspace deps."""
     distro = get_ros_distro()
     src_path = ROS_WS / "src"
 
-    # Update apt-get package lists first
     print("🔄 Updating apt-get package lists...")
     if not try_run(["bash", "-lc", "sudo apt-get update"]):
         print("⚠️ apt-get update had some issues, continuing...")
 
-    # Ensure rosdep exists
     if not try_run(["bash", "-lc", "command -v rosdep >/dev/null 2>&1"]):
         print("ℹ️ rosdep not found; installing via apt")
         if not try_run(["bash", "-lc", "sudo apt-get update && sudo apt-get install -y python3-rosdep"]):
             print("❌ Failed to install rosdep (python3-rosdep)")
             sys.exit(1)
 
-    # Ensure rosdep is initialized
     default_list = Path("/etc/ros/rosdep/sources.list.d/20-default.list")
     if not default_list.exists():
         print("ℹ️ rosdep not initialized; running 'sudo rosdep init'")
@@ -122,7 +85,6 @@ def rosdep_update_and_install():
             print("❌ Failed to initialize rosdep")
             sys.exit(1)
 
-    # rosdep update with retries (handles network flakiness)
     updated = False
     for attempt in range(1, 4):
         print(f"🔄 rosdep update attempt {attempt}/3")
@@ -134,7 +96,6 @@ def rosdep_update_and_install():
     if not updated:
         print("⚠️ rosdep update had issues, continuing anyway...")
 
-    # Install workspace dependencies with ament_python skipped
     install_cmd = (
         f"sudo -n rosdep install --rosdistro {distro} --from-paths {src_path} -y --ignore-src --skip-keys ament_python "
         f"|| rosdep install --rosdistro {distro} --from-paths {src_path} -y --ignore-src --skip-keys ament_python"
@@ -150,8 +111,6 @@ def flash_mcu():
     if not script.exists():
         print(f"❌ Missing script: {script}")
         sys.exit(1)
-    # Stage artifacts (if any) before flashing, to enable upload without rebuild
-    stage_prebuilt_artifacts()
     print("🚀 Flashing MCU (Teensy)...")
     run(["bash", str(script)])
     print("✅ MCU flashing completed")
@@ -169,41 +128,13 @@ def build_ros():
     print("✅ ROS 2 build completed")
 
 
-def launch_test_node():
-    if not ROS_INSTALL_SETUP.exists():
-        print(f"❌ ROS install setup not found: {ROS_INSTALL_SETUP}")
-        print("Run the build step first or investigate build errors.")
-        sys.exit(1)
-
-    print("▶️ Launching test node from test_package...")
-    # Prefer a Python launch file if available; fallback to ros2 run
-    if TEST_PKG_LAUNCH.exists():
-        # Use ros2 launch with the exact file path to avoid naming mismatch
-        cmd = (
-            f"source {ROS_INSTALL_SETUP} && "
-            f"ros2 launch {TEST_PKG_LAUNCH}"
-        )
-        # Use bash -lc so that 'source' and env persist within the shell
-        run(["bash", "-lc", cmd])
-    else:
-        cmd = (
-            f"source {ROS_INSTALL_SETUP} && "
-            f"ros2 run test_package test_node"
-        )
-        # Use bash -lc to ensure ROS environment is active for the command
-        run(["bash", "-lc", cmd])
-    print("✅ Test node launched")
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Deploy all components: MCU + ROS + test node")
-    # Flags:
-    # --skip-mcu: Skip flashing Teensy/ESP32 using scripts/flash_mcu.sh
-    # --skip-ros: Skip colcon build using scripts/start_robot.sh
-    # --skip-launch: Skip launching the test node (ros2 launch/run)
-    parser.add_argument("--skip-mcu", action="store_true", help="Skip MCU flashing")
-    parser.add_argument("--skip-ros", action="store_true", help="Skip ROS build")
-    parser.add_argument("--skip-launch", action="store_true", help="Skip launching test node")
+    parser = argparse.ArgumentParser(
+        description="In-container deployment: MCU flash + ROS build")
+    parser.add_argument("--skip-mcu", action="store_true",
+                        help="Skip MCU flashing")
+    parser.add_argument("--skip-ros", action="store_true",
+                        help="Skip ROS build")
     args = parser.parse_args()
 
     ensure_in_container()
@@ -218,12 +149,8 @@ def main():
         else:
             print("⏭️ Skipping ROS build by request")
 
-        if not args.skip_launch:
-            launch_test_node()
-        else:
-            print("⏭️ Skipping test node launch by request")
         print("\n🎉 Deployment sequence completed")
-    except SystemExit as e:
+    except SystemExit:
         raise
 
 

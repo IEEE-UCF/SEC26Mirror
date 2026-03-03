@@ -45,6 +45,9 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   void publishData();
 
+  /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (atomic float read). */
+  float getYaw() const { return yaw_rad_; }
+
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 20) {
@@ -71,6 +74,7 @@ class ImuSubsystem : public IMicroRosParticipant,
   rcl_publisher_t pub_{};
   sensor_msgs__msg__Imu msg_{};
   rcl_node_t* node_ = nullptr;
+  float yaw_rad_ = 0.0f;
 
   // Gyro calibration offsets (they're calculated during init)
   float gyro_offset_x_ = 0.0f;

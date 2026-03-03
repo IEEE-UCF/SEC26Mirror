@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Shortcut Path
+
+**`C:/Users/medla/SEC2026/SEC26`** is a symlink to the full OneDrive path. Use this shorter path when possible for convenience.
+
 ## Project Overview
 
 SEC26 is the IEEE UCF SoutheastCon 2026 Hardware Competition robot repository. It contains firmware for multiple microcontrollers (field elements, robot, beacons, drone) and ROS2 software for robot autonomy, navigation, and vision.
@@ -22,36 +26,42 @@ The codebase is split into two workspaces:
   - `src/robot/`: Main Teensy41 robot firmware (uses micro-ROS)
   - `src/beacon/`: UWB beacon nodes (differentiated by `BEACON_ID` build flag)
   - `src/drone/`: Drone controller (flight controller, IMU, height, IR subsystems)
-  - `src/minibot/`: Mini-robot ESP32 firmware (MinibotMotorDriver, MinibotDriveSubsystem, UWB tag, micro-ROS WiFi)
+  - `src/minibot/`: Mini-robot firmware (Seeed XIAO ESP32-S3: MinibotMotorDriver, MinibotDriveSubsystem, MiniBotIMUSubsystem, micro-ROS WiFi)
   - `src/field/`: Field element controllers (button, crank, earth, keypad, pressure)
   - `src/test/`: Hardware test programs
   - `src/platform/`: Platform support files (e.g., `atomic_stubs_arm.c`)
 - **Robot subsystem headers** (`src/robot/subsystems/`):
-  - `BatterySubsystem` — INA219 power monitoring
-  - `ImuSubsystem` — BNO085 9-axis IMU
+  - `BatterySubsystem` — INA219 power monitoring (getVoltage/getCurrentA accessors)
+  - `ImuSubsystem` — BNO085 9-axis IMU (getYaw accessor)
   - `RCSubsystem` — FlySky IBUS receiver
-  - `OLEDSubsystem` — SSD1306 128x64 display (subscriptions for text append and scroll)
+  - `OLEDSubsystem` — SSD1306 128x64 display (terminal mode + debug dashboard mode via DIP 6)
   - `SensorSubsystem` — VL53L0X time-of-flight distance
   - `ArmSubsystem` — Arm control with servo/encoder
-  - `IntakeSubsystem` — Intake/ejection mechanism
-  - `IntakeBridgeSubsystem` — Gear-and-rack mechanism for pressure plate duck retrieval
+  - `IntakeSubsystem` — Linear rail + spinning motor intake/ejection mechanism
   - `MiniRobotSubsystem` — Mini-robot control
   - `ServoSubsystem` — PCA9685 servo manager with SetServo service
   - `MotorManagerSubsystem` — PCA9685 motor manager with SetMotor service
+  - `EncoderSubsystem` — QTimer hardware FG pulse counting (pins 2-9)
   - `ButtonSubsystem` — TCA9555 push button input with callbacks
-  - `DipSwitchSubsystem` — TCA9555 DIP switch reading
+  - `DipSwitchSubsystem` — TCA9555 DIP switch reading with named bit constants and `isSwitchOn()` helper
   - `LEDSubsystem` — WS2812B addressable RGB LEDs
+  - `CrankSubsystem` — Crank mechanism servo control
+  - `KeypadSubsystem` — Keypad servo + drive-to-press control
+  - `DeploySubsystem` — Button-triggered deployment (DIP 8 selects target)
+  - `ResetSubsystem` — micro-ROS service to reset all subsystems
 - **Robot pin/constant files** (`src/robot/`):
   - `RobotPins.h` — All Teensy 4.1 GPIO pin assignments and I2C addresses
   - `RobotConstants.h` — PCA9685 defaults (freq, channels)
-  - `RobotConfig.h` — Drive kinematics constants (placeholder values)
+  - `RobotConfig.h` — Drive kinematics, PID, motion profile, and trajectory constants
 - **Libraries**:
   - `lib/subsystems/`: Core subsystem abstractions (McuSubsystem lifecycle, UWBSubsystem, IMicroRosParticipant, TimedSubsystem)
   - `lib/robot/`: Hardware drivers (BNO085, TCA9555, PCA9685Driver/Manager, I2CMux, I2CPower, TOF, I2CBusLock, AnalogMux, AnalogRead)
   - `lib/drivers/`: Additional drivers (CD74HC4067 analog mux)
   - `lib/control/`: Control algorithms (PID, trapezoidal/S-curve motion profiles, trajectory controller, arm kinematics)
   - `lib/drive/`: Tank drive localization
+  - `lib/encoders/`: QTimerEncoder (hardware FG pulse counting on Teensy 4.1)
   - `lib/math/`: Vector2D, Pose2D, Pose3D
+  - `lib/mpu6050/`: MPU6050 IMU driver (alternative to BNO085)
   - `lib/uwb/`: UWB DW3000 driver
   - `lib/ir/`: IR NEC communication (ESP32 RMT-based)
   - `lib/field/`: Field element message definitions, ESP-NOW transport, shared protocol
@@ -70,6 +80,7 @@ The codebase is split into two workspaces:
 - `secbot_sim`: Gazebo Harmonic simulation with full MCU subsystem emulator (C++)
 - `secbot_health`: System health monitoring and MCU heartbeat watchdog (C++)
 - `secbot_bridge_i2c`: ROS ↔ Teensy I2C bridge with packet codec and fake Teensy for simulation (C++)
+- `secbot_deploy`: Deployment trigger bridge — MCU button press → deploy-orchestrator (C++)
 - `secbot_tf`: TF static transform configuration (launch files + YAML)
 - `secbot_msgs`: Custom messages (TaskStatus, DuckDetection) and actions (NavigatePath, ApproachTarget)
 - `mcu_msgs`: Shared MCU↔ROS2 messages (symlinked to `mcu_ws/extra_packages/mcu_msgs`)
@@ -159,12 +170,15 @@ ros2 launch secbot_fusion fusion.launch.py
 
 ### Deployment
 
+**In-container (manual):**
 ```bash
 python3 /home/ubuntu/scripts/deploy-all.py             # Full deployment
 python3 /home/ubuntu/scripts/deploy-all.py --skip-mcu   # Skip MCU flash
 python3 /home/ubuntu/scripts/deploy-all.py --skip-ros   # Skip ROS build
 /home/ubuntu/scripts/start_robot.sh                      # Build ROS2 only
 ```
+
+**On-robot (automated):** `deploy-orchestrator.py` runs as a systemd service on the Pi. It watches for triggers from MCU button press (via `secbot_deploy` ROS2 node) or Gitea CI, then auto-pulls prod branch, detects changes, OTA-flashes ESP32s, USB-flashes Teensy, and rebuilds ROS2.
 
 ## Testing
 
@@ -206,8 +220,10 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 |----------|-----------|------|-------|
 | 4 (highest) | micro-ROS Manager | — | 8192 |
 | 3 | IMU | 10ms (100 Hz) | 2048 |
+| 3 | Drive | 20ms (50 Hz) | 4096 |
 | 2 | Servo | 25ms (40 Hz) | 1024 |
 | 2 | Motor Manager | 1ms (1000 Hz) | 1024 |
+| 2 | Encoder | 20ms (50 Hz) | 1024 |
 | 2 | UWB | 50ms (20 Hz) | 2048 |
 | 2 | Arm, Intake | 20ms (50 Hz) | 1024 |
 | 1 | OLED | 25ms (40 Hz) | 2048 |
@@ -217,6 +233,9 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | 1 | Button | 20ms (50 Hz) | 1024 |
 | 1 | LED | 50ms (20 Hz) | 1024 |
 | 1 | Heartbeat | 200ms (5 Hz) | 1024 |
+| 1 | Deploy | 20ms (50 Hz) | 1024 |
+| 1 | Crank | 50ms (20 Hz) | 1024 |
+| 1 | Keypad | 50ms (20 Hz) | 1024 |
 | main loop | RC Receiver | 5ms delay | — |
 | dedicated | PCA9685 PWM flush | 20ms | 1024 |
 
@@ -224,7 +243,7 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 - **RC Receiver**: Must be polled from main `loop()`, not a TeensyThreads thread — IBusBM NOTIMER mode only works from the main thread context.
 - **Motor Manager**: Runs at 1000 Hz to handle NFPShop brushless motor reverse-pulse timing (~3ms pulse every ~103ms at low duty to prevent controller fault).
 - **OLED Display**: Uses hardware SPI1 (pins 26/27) — software SPI is unreliable under TeensyThreads preemption.
-- **UWB Init**: Must call `SPI.begin()` before `g_uwb.init()`. The DW3000 library has a hardcoded `RST_PIN 27` in `DW3000Constants.h` that conflicts with OLED SPI1 SCK — `UWBDriver.cpp` skips `hardReset()` when no reset pin is wired to avoid this.
+- **UWB Init**: Conditional on DIP switch 2 (ON = enabled). Must call `SPI.begin()` before `g_uwb.init()`. The DW3000 library has a hardcoded `RST_PIN 27` in `DW3000Constants.h` that conflicts with OLED SPI1 SCK — `UWBDriver.cpp` skips `hardReset()` when no reset pin is wired to avoid this.
 
 Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`) for ROS2 lifecycle.
 
@@ -241,7 +260,7 @@ I2C bus access is mutex-protected via `I2CBusLock` (RAII pattern: `I2CBus::Lock 
 ### Teensy 4.1 Pin Map
 
 See `src/robot/RobotPins.h` for full assignments. Key pins:
-- **Motors**: GPIO 2-9 (reserved for motor outputs)
+- **Motor FG Encoders**: GPIO 2-9 (QTimer3/QTimer4 pulse inputs; pin 8 disabled)
 - **UWB SPI**: CS=10, MOSI=11, MISO=12, CLK=13
 - **Display SPI1**: MOSI=26, SCK=27, CS=38, DC=37, RST=33 (hardware SPI1, not SPI0)
 - **Misc GPIO**: WS2812B=35, RC RX=34 (Serial8), Mux Reset=23, Button INT=36
@@ -261,10 +280,11 @@ All robot topics use `/mcu_robot/` prefix:
 - `/mcu_robot/mini_robot/state` (MiniRobotState), `/mcu_robot/lcd/append` (subscription: String)
 - `/mcu_robot/servo/state` (Float32MultiArray), `/mcu_robot/servo/set` (service: SetServo)
 - `/mcu_robot/motor/state` (Float32MultiArray), `/mcu_robot/motor/set` (service: SetMotor)
+- `/mcu_robot/encoders` (Float32MultiArray)
 - `/mcu_robot/buttons` (UInt8), `/mcu_robot/dip_switches` (UInt8)
 - `/mcu_robot/led/set_all` (subscription: LedColor)
 - UWB: `mcu_uwb/ranging` (from beacons/robot tag)
-- Drive: `drive_base/status`, `drive_base/command` (currently commented out in RobotLogic.h)
+- Drive: `drive_base/status` (DriveBase), `drive_base/command` (subscription: DriveCommand)
 
 Minibot topics use `/mcu_minibot/` prefix:
 - `/mcu_minibot/cmd_vel` (subscription: geometry_msgs/Twist — differential drive mix)
@@ -298,13 +318,14 @@ mcu_uwb/ranging ───WiFi UDP──► secbot_uwb ──► /uwb/robot_pose
 ### PlatformIO Configuration Inheritance
 
 ```
-[esp32_base]         [teensy_base]         [microros_base]       [native_test_base]
-     │                    │                      │                      │
-[esp32_microros]     [teensy_microros]           │               test-* envs
-     │                    │                      │
-[esp32_microros_wifi]  robot, teensy-test-*      │
-     │                                           │
-beacons, minibot ───────────────────────────────┘
+[esp32_base]              [teensy_base]         [microros_base]       [native_test_base]
+     │                         │                      │                      │
+     │                    [teensy_microros]            │               test-* envs
+     │                         │                      │
+[esp32_microros_wifi]     robot, teensy-test-*        │
+     │                                                │
+beacons, minibot, drone ─────────────────────────────┘
+field-* (extend esp32_base directly, no micro-ROS)
 ```
 
 Concrete environments use `build_src_filter` to select source files and `extends` to inherit bases. The `teensy_base` includes TeensyThreads and FastLED as default dependencies.
@@ -323,9 +344,9 @@ Field elements (ESP32) communicate via **ESP-NOW** broadcast (not micro-ROS):
 - Source of truth: `ros2_ws/src/mcu_msgs`
 - Symlinked to: `mcu_ws/extra_packages/mcu_msgs`
 
-**Current message inventory** (21 msgs, 5 srvs):
-- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeBridgeCommand, IntakeBridgeState, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
-- Services: ArmControl, LCDAppend, OLEDControl, SetServo, SetMotor
+**Current message inventory** (20 msgs, 6 srvs):
+- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeCommand, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
+- Services: ArmControl, LCDAppend, OLEDControl, Reset, SetServo, SetMotor
 
 **When you add/modify a `.msg` or `.srv` file**: you must clean and rebuild micro-ROS:
 ```bash
@@ -376,11 +397,12 @@ Hosted on **Gitea** (not GitHub). Workflows in `.gitea/workflows/`:
 | `test-mcu.yml` | PR touching mcu_ws or mcu_msgs | Runs all native PlatformIO unit tests |
 | `platformio-robot.yml` | PR touching mcu_ws or mcu_msgs | Builds ALL non-test PlatformIO environments |
 | `build-ws.yml` | PR/push to master touching ros2_ws | Docker image build + colcon build |
-| `pi-deploy.yml` | Push to `prod` or `CD-testing` | Full deployment to Raspberry Pi robot |
 | `prod-push.yml` | Push to `master` | Auto-syncs master → prod branch |
-| `auto-format.yml` | PR labeled `format` | Runs clang-format, auto-commits |
+| `auto-format.yml` | PR labeled `format` OR push to master | Runs clang-format, auto-commits |
 | `commit-linter.yml` | All PRs | Enforces Conventional Commits |
 | `test-multiarch.yml` | Manual dispatch only | Multi-architecture runner test |
+
+Pi deployment is handled by `scripts/deploy-orchestrator.py` running as a systemd service on the Pi host — not a Gitea workflow. It watches for trigger files (from button press or CI), pulls the `prod` branch, flashes MCUs, and rebuilds ROS2.
 
 Commits must follow **Conventional Commits** format (enforced by CI): `feat:`, `fix:`, `chore:`, `refactor:`, etc.
 
@@ -393,3 +415,4 @@ Commits must follow **Conventional Commits** format (enforced by CI): `feat:`, `
 - **ESP32 transport**: WiFi UDP to Pi agent
 - **Beacon IPs**: beacon1=192.168.4.20, beacon2=192.168.4.21, beacon3=192.168.4.22
 - **Minibot IP**: 192.168.4.24
+- **Drone IP**: 192.168.4.25

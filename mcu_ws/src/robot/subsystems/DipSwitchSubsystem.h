@@ -4,7 +4,8 @@
  * @date 2026-02-24
  *
  * Publishes an 8-bit bitmask where each bit represents one DIP switch
- * (bit 0 = switch 0, etc.).  Active HIGH = switch ON.
+ * (bit 0 = switch 0, etc.).  Hardware is active-low and bit-reversed;
+ * this subsystem corrects both so consumers see active-HIGH, bit 0 = switch 0.
  *
  * -- ROS2 interface (defaults) ---------------------------------------------
  *   /mcu_robot/dip_switches   topic   std_msgs/msg/UInt8   (1 Hz)
@@ -14,6 +15,7 @@
 
 #include <BaseSubsystem.h>
 #include <TCA9555Driver.h>
+#include "DebugLog.h"
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/u_int8.h>
 
@@ -40,12 +42,26 @@ class DipSwitchSubsystemSetup : public Classes::BaseSetup {
 class DipSwitchSubsystem : public IMicroRosParticipant,
                            public Classes::BaseSubsystem {
  public:
+  // Named DIP switch bit positions (bit 0 = physical switch 1)
+  static constexpr uint8_t DIP_RC_OVERRIDE     = 0;  // ON = RC drives motors
+  static constexpr uint8_t DIP_UWB_ENABLE      = 1;  // ON = DW3000 ranging active
+  static constexpr uint8_t DIP_VISION_ENABLE   = 2;  // ON = duck detection (ROS2)
+  static constexpr uint8_t DIP_SPEED_PROFILE   = 3;  // ON = half speed (ROS2)
+  static constexpr uint8_t DIP_AUTONOMY_ENABLE = 4;  // ON = mission FSM auto (ROS2)
+  static constexpr uint8_t DIP_OLED_DEBUG      = 5;  // ON = debug dashboard
+  static constexpr uint8_t DIP_FORCE_REFLASH   = 6;  // ON = force reflash
+  static constexpr uint8_t DIP_DEPLOY_TARGET   = 7;  // ON = deploy target
+
   explicit DipSwitchSubsystem(const DipSwitchSubsystemSetup& setup)
       : Classes::BaseSubsystem(setup), setup_(setup) {}
 
   bool init() override {
-    if (!setup_.driver_) return false;
+    if (!setup_.driver_) {
+      DEBUG_PRINTLN("[DIP] init FAIL: no driver");
+      return false;
+    }
     setup_.driver_->configurePort(0, 0xFF);
+    DEBUG_PRINTLN("[DIP] init OK (port 0, 8 switches)");
     return true;
   }
 
@@ -59,7 +75,7 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-      msg_.data = setup_.driver_->readPort(0);
+      msg_.data = fixGPIO(setup_.driver_->readPort(0));
 #ifdef USE_TEENSYTHREADS
       {
         Threads::Scope guard(g_microros_mutex);
@@ -81,9 +97,11 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     (void)executor;
     node_ = node;
-    return rclc_publisher_init_best_effort(
-               &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
-               setup_.topic_) == RCL_RET_OK;
+    bool ok = rclc_publisher_init_best_effort(
+                  &pub_, node_, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8),
+                  setup_.topic_) == RCL_RET_OK;
+    DEBUG_PRINTF("[DIP] onCreate %s\n", ok ? "OK" : "FAIL");
+    return ok;
   }
 
   void onDestroy() override {
@@ -92,8 +110,11 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
   }
 
   uint8_t getState() const {
-    return setup_.driver_ ? setup_.driver_->readPort(0) : 0;
+    return setup_.driver_ ? fixGPIO(setup_.driver_->readPort(0)) : 0;
   }
+
+  /** Check if a specific DIP switch bit is ON (active-high after fixGPIO). */
+  bool isSwitchOn(uint8_t bit) const { return (getState() >> bit) & 0x01; }
 
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
@@ -115,6 +136,15 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  // Hardware is active-low and bit-reversed (switch 0 appears at bit 7).
+  // Reverse bits and invert so bit 0 = switch 0, 1 = ON.
+  static uint8_t fixGPIO(uint8_t b) {
+    b = ((b & 0xF0) >> 4) | ((b & 0x0F) << 4);
+    b = ((b & 0xCC) >> 2) | ((b & 0x33) << 2);
+    b = ((b & 0xAA) >> 1) | ((b & 0x55) << 1);
+    return ~b;
+  }
+
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
   const DipSwitchSubsystemSetup setup_;
   rcl_publisher_t pub_{};

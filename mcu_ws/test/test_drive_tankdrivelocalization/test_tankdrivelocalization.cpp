@@ -38,7 +38,7 @@ void test_setup_derived_constants() {
   TEST_ASSERT_EQUAL_FLOAT(2.0f, setup.wheel_radius);
   TEST_ASSERT_TRUE(floatEqual(setup.wheel_circumference, 4.0f * M_PI));
   TEST_ASSERT_EQUAL_INT(2048, setup.ticks_per_revolution);
-  TEST_ASSERT_TRUE(floatEqual(setup.inches_per_tick,
+  TEST_ASSERT_TRUE(floatEqual(setup.dist_per_tick,
                               (4.0f * M_PI) / 2048.0f));
 }
 
@@ -50,7 +50,7 @@ void test_setup_with_gear_ratio() {
   TEST_ASSERT_EQUAL_FLOAT(3.0f, setup.wheel_radius);
   TEST_ASSERT_TRUE(floatEqual(setup.wheel_circumference, 6.0f * M_PI));
   TEST_ASSERT_EQUAL_INT(3072, setup.ticks_per_revolution); // 1024 * 3
-  TEST_ASSERT_TRUE(floatEqual(setup.inches_per_tick,
+  TEST_ASSERT_TRUE(floatEqual(setup.dist_per_tick,
                               (6.0f * M_PI) / 3072.0f));
 }
 

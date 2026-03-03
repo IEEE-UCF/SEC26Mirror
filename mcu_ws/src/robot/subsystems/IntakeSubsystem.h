@@ -1,3 +1,26 @@
+/**
+ * @file IntakeSubsystem.h
+ * @brief Combined linear rail + spinning intake motor subsystem.
+ * @date 2026-02-28
+ *
+ * Manages two mechanisms:
+ *   1. Linear rail — encoder-based P control with TCA9555 limit switch hard
+ *      stops and automatic calibration sequence.
+ *   2. Spinning intake motor — simple signed speed control.
+ *
+ * Both motors are driven via PCA9685 MotorManagerSubsystem.  The rail encoder
+ * is read via EncoderSubsystem (QTimerEncoder hardware).  Limit switches are
+ * read via ButtonSubsystem (TCA9555 GPIO expander).
+ *
+ * State machine (linear rail):
+ *   UNINITIALIZED -> CALIBRATING -> IDLE <-> MOVING
+ *   Any state may transition to FAULT on unrecoverable error.
+ *
+ * -- ROS2 interface (defaults) ------------------------------------------------
+ *   /mcu_robot/intake/state    publisher     mcu_msgs/msg/IntakeState   (20 Hz)
+ *   /mcu_robot/intake/command  subscription  mcu_msgs/msg/IntakeCommand
+ */
+
 #pragma once
 
 #include <BaseSubsystem.h>
@@ -8,69 +31,79 @@
 #endif
 
 #include "TimedSubsystem.h"
+#include "mcu_msgs/msg/intake_command.h"
 #include "mcu_msgs/msg/intake_state.h"
+#include "robot/subsystems/ButtonSubsystem.h"
+#include "robot/subsystems/EncoderSubsystem.h"
+#include "robot/subsystems/MotorManagerSubsystem.h"
 
 namespace Subsystem {
 
-/**
- * @brief Intake states: the state machine runs entirely on the Teensy, so no
- * ROS dependencies!!
- */
 enum class IntakeState : uint8_t {
-  IDLE = 0,      // Motor off, waiting for command
-  SPINNING = 1,  // Motor forward, actively intaking
-  CAPTURED = 2,  // Duck detected, motor off
-  JAMMED = 3,    // Timeout expired without capture
-  EJECTING = 4,  // Motor reversing to clear/eject
-  FAULT = 5      // Unrecoverable error
+  UNINITIALIZED = 0,
+  CALIBRATING = 1,
+  IDLE = 2,
+  MOVING = 3,
+  FAULT = 4
 };
 
-/**
- * @brief Commands that can be issued to the intake
- */
-enum class IntakeCommand : uint8_t { NONE = 0, START = 1, STOP = 2, EJECT = 3 };
-
-/**
- * @brief Setup configuration for IntakeSubsystem
- */
 class IntakeSubsystemSetup : public Classes::BaseSetup {
  public:
-  IntakeSubsystemSetup(const char* _id, uint8_t motor_pwm_pin,
-                       uint8_t motor_dir_pin, uint8_t ir_sensor_pin,
-                       uint32_t jam_timeout_ms = 3000,
-                       uint32_t eject_duration_ms = 500,
-                       uint8_t motor_speed = 200)
+  IntakeSubsystemSetup(const char* _id, MotorManagerSubsystem* motor_mgr,
+                       EncoderSubsystem* encoder_sub,
+                       ButtonSubsystem* btn_sub, uint8_t rail_motor_idx,
+                       uint8_t intake_motor_idx, uint8_t rail_encoder_idx,
+                       uint8_t retract_limit_btn, uint8_t extend_limit_btn,
+                       float kp = 2.0f, float max_speed = 0.8f,
+                       float calibration_speed = 0.3f,
+                       float position_tolerance = 0.02f,
+                       uint32_t stall_timeout_ms = 500,
+                       const char* state_topic = "/mcu_robot/intake/state",
+                       const char* cmd_topic = "/mcu_robot/intake/command")
       : Classes::BaseSetup(_id),
-        motor_pwm_pin_(motor_pwm_pin),
-        motor_dir_pin_(motor_dir_pin),
-        ir_sensor_pin_(ir_sensor_pin),
-        jam_timeout_ms_(jam_timeout_ms),
-        eject_duration_ms_(eject_duration_ms),
-        motor_speed_(motor_speed) {}
+        motor_mgr_(motor_mgr),
+        encoder_sub_(encoder_sub),
+        btn_sub_(btn_sub),
+        rail_motor_idx_(rail_motor_idx),
+        intake_motor_idx_(intake_motor_idx),
+        rail_encoder_idx_(rail_encoder_idx),
+        retract_limit_btn_(retract_limit_btn),
+        extend_limit_btn_(extend_limit_btn),
+        kp_(kp),
+        max_speed_(max_speed),
+        calibration_speed_(calibration_speed),
+        position_tolerance_(position_tolerance),
+        stall_timeout_ms_(stall_timeout_ms),
+        state_topic_(state_topic),
+        cmd_topic_(cmd_topic) {}
 
-  uint8_t motor_pwm_pin_;
-  uint8_t motor_dir_pin_;
-  uint8_t ir_sensor_pin_;
-  uint32_t jam_timeout_ms_;     // Time before declaring jam
-  uint32_t eject_duration_ms_;  // How long to run motor in reverse
-  uint8_t motor_speed_;         // 0-255 motor speed
+  MotorManagerSubsystem* motor_mgr_;
+  EncoderSubsystem* encoder_sub_;
+  ButtonSubsystem* btn_sub_;
+
+  uint8_t rail_motor_idx_;
+  uint8_t intake_motor_idx_;
+  uint8_t rail_encoder_idx_;
+  uint8_t retract_limit_btn_;
+  uint8_t extend_limit_btn_;
+
+  float kp_;
+  float max_speed_;
+  float calibration_speed_;
+  float position_tolerance_;
+  uint32_t stall_timeout_ms_;
+
+  const char* state_topic_;
+  const char* cmd_topic_;
 };
 
-/**
- * @brief Intake Subsystem - owns motor and IR breakbeam sensor
- *
- * This subsystem runs a fully autonomous state machine on the Teensy
- * ROS is only used for optional command input and state publishing
- * The intake will detect ducks, handle jams, and protect itself
- * whether or not ROS is connected!
- */
 class IntakeSubsystem : public IMicroRosParticipant,
                         public Subsystem::TimedSubsystem {
  public:
   explicit IntakeSubsystem(const IntakeSubsystemSetup& setup)
       : Subsystem::TimedSubsystem(setup), setup_(setup) {}
 
-  // Lifecycle Hooks (BaseSubsystem interface)
+  // ── Lifecycle ──────────────────────────────────────────────────────────
   bool init() override;
   void begin() override;
   void update() override;
@@ -78,23 +111,28 @@ class IntakeSubsystem : public IMicroRosParticipant,
   void reset() override;
   const char* getInfo() override;
 
-  // MicroROS Hooks (IMicroRosParticipant interface)
+  // ── IMicroRosParticipant ───────────────────────────────────────────────
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
 
-  // Public Commands
-  // These can be called from ROS callbacks or directly from other code
-  void startIntake();
-  void stopIntake();
-  void eject();
+  // ── Linear Rail API ────────────────────────────────────────────────────
+  void initialize();
+  void setPosition(float normalized);
+  void extend() { setPosition(1.0f); }
+  void retract() { setPosition(0.0f); }
+  void stopRail();
 
-  // State Queries
+  bool isCalibrated() const { return calibrated_; }
+  float getPosition() const;
+  float getSetpoint() const { return setpoint_; }
   IntakeState getState() const { return state_; }
-  bool isDuckDetected() const { return duck_detected_; }
-  bool isIntakeActive() const { return state_ == IntakeState::SPINNING; }
-  bool hasDuck() const { return state_ == IntakeState::CAPTURED; }
-  bool isJammed() const { return state_ == IntakeState::JAMMED; }
 
+  // ── Intake Motor API ──────────────────────────────────────────────────
+  void setIntakeSpeed(float speed);
+  float getIntakeSpeed() const { return intake_speed_; }
+  void stopIntake() { setIntakeSpeed(0.0f); }
+
+  // ── TeensyThreads ─────────────────────────────────────────────────────
 #ifdef USE_TEENSYTHREADS
   void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
                      uint32_t updateRateMs = 20) {
@@ -115,49 +153,48 @@ class IntakeSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
-  // Internal State Machine Logic
-  void updateStateMachine();
+  // State machine
   void transitionTo(IntakeState new_state);
+  void updateCalibration();
+  void updateMoving();
+  void enforceHardStops();
 
-  // Motor Control
-  void setMotorForward();
-  void setMotorReverse();
-  void setMotorOff();
-  void applyMotorState();
-
-  // Sensor Reading
-  void readSensor();
-
-  // ROS Publishing
+  // ROS
   void publishState();
+  static void cmdCallback(const void* msg, void* ctx);
 
-  // Configuration
   const IntakeSubsystemSetup setup_;
 
-  // State Machine
-  IntakeState state_ = IntakeState::IDLE;
-  IntakeCommand pending_command_ = IntakeCommand::NONE;
+  // Rail state
+  IntakeState state_ = IntakeState::UNINITIALIZED;
+  bool calibrated_ = false;
+  float setpoint_ = 0.0f;
+  int32_t min_ticks_ = 0;
+  int32_t max_ticks_ = 0;
+
+  // Calibration sub-state
+  enum class CalibPhase : uint8_t {
+    SEEK_RETRACT,
+    SEEK_EXTEND,
+    RETURN_HOME
+  };
+  CalibPhase calib_phase_ = CalibPhase::SEEK_RETRACT;
+  bool calib_tried_reverse_ = false;
+  int32_t calib_last_ticks_ = 0;
+  uint32_t calib_last_change_ms_ = 0;
+
+  // Intake motor
+  float intake_speed_ = 0.0f;
 
   // Timing
-  uint32_t state_entry_time_ms_ = 0;  // When we entered current state
+  uint32_t state_entry_ms_ = 0;
 
-  // Sensor State
-  bool duck_detected_ = false;
-  bool duck_detected_prev_ = false;
-
-  // Motor State
-  enum class MotorState : uint8_t { OFF = 0, FORWARD = 1, REVERSE = 2 };
-  MotorState motor_state_ = MotorState::OFF;
-
-  // ROS Entities
+  // ROS entities
   rcl_publisher_t state_pub_{};
   rcl_subscription_t cmd_sub_{};
   mcu_msgs__msg__IntakeState state_msg_{};
+  mcu_msgs__msg__IntakeCommand cmd_msg_{};
   rcl_node_t* node_ = nullptr;
-
-  // Debug/Diagnostics slop
-  uint32_t capture_count_ = 0;
-  uint32_t jam_count_ = 0;
 };
 
 }  // namespace Subsystem

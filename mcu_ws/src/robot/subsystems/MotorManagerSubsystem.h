@@ -4,9 +4,9 @@
  * @date 2026-02-26
  *
  * Each motor uses two consecutive PCA9685 channels:
- *   even channel = PWM (inverted: 4095 = stopped, 0 = full speed)
- *   odd  channel = DIR (digital HIGH/LOW)
- * Motor 0 -> ch 0,1;  Motor 1 -> ch 2,3;  ...  Motor 7 -> ch 14,15.
+ *   Motors 0-3: even channel = PWM, odd channel = DIR
+ *   Motors 4-7: even channel = DIR, odd channel = PWM (swapped)
+ * Motor 0 -> ch 0(PWM),1(DIR);  ...  Motor 4 -> ch 8(DIR),9(PWM); ...
  *
  * NFPShop brushless motor quirk: a brief reverse pulse (~3ms) is applied
  * every ~103ms to prevent the integrated controller from entering a fault
@@ -24,6 +24,8 @@
 
 #include <BaseSubsystem.h>
 #include <PCA9685Driver.h>
+#include <QTimerEncoder.h>
+#include "DebugLog.h"
 #include <mcu_msgs/srv/set_motor.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
@@ -46,18 +48,21 @@ class MotorManagerSubsystemSetup : public Classes::BaseSetup {
    */
   MotorManagerSubsystemSetup(const char* _id, Robot::PCA9685Driver* driver,
                              uint8_t oePin = 255, uint8_t numMotors = 8,
+                             Encoders::QTimerEncoder* encoder = nullptr,
                              const char* stateTopic = "/mcu_robot/motor/state",
                              const char* serviceName = "/mcu_robot/motor/set")
       : Classes::BaseSetup(_id),
         driver_(driver),
         oePin_(oePin),
         numMotors_(numMotors),
+        encoder_(encoder),
         stateTopic_(stateTopic),
         serviceName_(serviceName) {}
 
   Robot::PCA9685Driver* driver_ = nullptr;
   uint8_t oePin_ = 255;
   uint8_t numMotors_ = 8;
+  Encoders::QTimerEncoder* encoder_ = nullptr;
   const char* stateTopic_ = "/mcu_robot/motor/state";
   const char* serviceName_ = "/mcu_robot/motor/set";
 };
@@ -90,12 +95,14 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
       speeds_[i] = 0.0f;
       dirs_[i] = true;
       if (setup_.driver_) {
-        setup_.driver_->bufferPWM(i * 2, MAX_PWM);
-        setup_.driver_->bufferDigital(i * 2 + 1, true);
+        setup_.driver_->bufferPWM(pwmChannel(i), MAX_PWM);
+        setup_.driver_->bufferDigital(dirChannel(i), true);
       }
     }
     // Flush immediately so motors don't twitch on startup
     if (setup_.driver_) setup_.driver_->applyBuffered();
+    DEBUG_PRINTF("[MOTOR] init OK (%d motors, OE=%d)\n", setup_.numMotors_,
+                 setup_.oePin_);
     return true;
   }
 
@@ -114,8 +121,9 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
         // Enter reverse pulse window
         in_reverse_[i] = true;
         if (setup_.driver_) {
-          setup_.driver_->bufferDigital(i * 2 + 1, !dirs_[i]);
-          setup_.driver_->bufferPWM(i * 2, MAX_PWM - NFPSHOP_REVERSE_DUTY);
+          setup_.driver_->bufferDigital(dirChannel(i), !dirs_[i]);
+          setup_.driver_->bufferPWM(pwmChannel(i),
+                                    MAX_PWM - NFPSHOP_REVERSE_DUTY);
         }
       }
     }
@@ -163,9 +171,11 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     if (rclc_executor_add_service_with_context(
             executor, &srv_, &srv_req_, &srv_res_,
             &MotorManagerSubsystem::srvCallback, this) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[MOTOR] onCreate FAIL: service executor");
       return false;
     }
 
+    DEBUG_PRINTLN("[MOTOR] onCreate OK");
     return true;
   }
 
@@ -188,10 +198,27 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     dirs_[motor] = (speed >= 0.0f);
 
     applyMotorOutput(motor);
+
+    // Sync QTimer hardware counter direction immediately so the encoder
+    // register is always correct when PCA9685 flushes.
+    // dirs_[motor]=true (forward) → count up (dir=false)
+    if (setup_.encoder_) {
+      setup_.encoder_->changeDir(motor, !dirs_[motor]);
+    }
   }
 
   float getSpeed(uint8_t motor) const {
     return motor < setup_.numMotors_ ? speeds_[motor] : 0.0f;
+  }
+
+  /**
+   * @brief Get the intended direction for a motor (ignores NFPShop reverse
+   * pulses).  Safe to call from other threads (single-byte atomic read).
+   * @param motor Motor index (0-7).
+   * @return true = forward (speed >= 0), false = reverse (speed < 0).
+   */
+  bool getIntendedDirection(uint8_t motor) const {
+    return motor < setup_.numMotors_ ? dirs_[motor] : true;
   }
 
   void enable() {
@@ -222,16 +249,23 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 #endif
 
  private:
+  /** Get the PWM channel for a motor (swapped for motors 4-7). */
+  static uint8_t pwmChannel(uint8_t motor) {
+    return (motor < 4) ? (motor * 2) : (motor * 2 + 1);
+  }
+
+  /** Get the DIR channel for a motor (swapped for motors 4-7). */
+  static uint8_t dirChannel(uint8_t motor) {
+    return (motor < 4) ? (motor * 2 + 1) : (motor * 2);
+  }
+
   /** Write the normal (non-reverse-pulse) output for a motor. */
   void applyMotorOutput(uint8_t motor) {
-    uint8_t pwmCh = motor * 2;
-    uint8_t dirCh = motor * 2 + 1;
-
     // Inverted PWM: MAX_PWM = stopped, 0 = full speed
     uint16_t duty = MAX_PWM - (uint16_t)(fabsf(speeds_[motor]) * MAX_PWM);
 
-    setup_.driver_->bufferDigital(dirCh, dirs_[motor]);
-    setup_.driver_->bufferPWM(pwmCh, duty);
+    setup_.driver_->bufferDigital(dirChannel(motor), dirs_[motor]);
+    setup_.driver_->bufferPWM(pwmChannel(motor), duty);
     in_reverse_[motor] = false;
   }
 
@@ -255,8 +289,10 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     if (r->index < self->setup_.numMotors_) {
       self->setSpeed(r->index, r->speed);
       rsp->success = true;
+      DEBUG_PRINTF("[MOTOR] set m%d = %.2f\n", r->index, r->speed);
     } else {
       rsp->success = false;
+      DEBUG_PRINTF("[MOTOR] set FAIL: m%d out of range\n", r->index);
     }
   }
 

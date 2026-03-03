@@ -16,11 +16,14 @@
  */
 
 #include <Arduino.h>
+#include <ESP32WifiSubsystem.h>
 #include <WiFi.h>
 #include <micro_ros_utilities/string_utilities.h>
 #include <std_msgs/msg/string.h>
 
 #include "microros_manager_robot.h"
+
+using namespace Subsystem;
 
 // Inline heartbeat publisher — replaces ExampleMicrorosSubsystem dependency.
 static rcl_publisher_t g_pub;
@@ -41,8 +44,18 @@ class SimpleHeartbeat : public IMicroRosParticipant {
   }
 };
 
-Subsystem::MicrorosManagerSetup managerSetup("esp32_wifi_test");
-Subsystem::MicrorosManager manager(managerSetup);
+// --- WiFi subsystem (manages connection lifecycle + auto-reconnect) ---
+static IPAddress g_local_ip(LOCAL_IP);
+static ESP32WifiSubsystemSetup g_wifi_setup(
+    "wifi", WIFI_SSID, WIFI_PASSWORD, g_local_ip,
+    IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0),
+    /*connection_timeout_ms=*/10000,
+    /*reconnect_interval_ms=*/5000,
+    /*max_retries=*/0);
+static ESP32WifiSubsystem g_wifi(g_wifi_setup);
+
+MicrorosManagerSetup managerSetup("esp32_wifi_test");
+MicrorosManager manager(managerSetup);
 static SimpleHeartbeat heartbeat;
 
 void setup() {
@@ -57,16 +70,25 @@ void setup() {
   }
   Serial.printf("SSID:  %s\n", WIFI_SSID);
 
-  manager.init();
-  manager.begin();
-  manager.registerParticipant(&heartbeat);
+  // Connect WiFi first (managed by ESP32WifiSubsystem)
+  g_wifi.init();
+  g_wifi.begin();
+  Serial.println("Waiting for WiFi...");
+  while (!g_wifi.isConnected()) {
+    g_wifi.update();
+    delay(10);
+  }
+  Serial.printf("WiFi connected: %s\n", WiFi.localIP().toString().c_str());
 
-  Serial.printf("WiFi status: %d (3=connected)\n", WiFi.status());
-  Serial.printf("Local IP:  %s\n", WiFi.localIP().toString().c_str());
+  manager.init();
+  manager.registerParticipant(&heartbeat);
+  manager.begin();
+
   Serial.println("Setup complete. Waiting for agent...");
 }
 
 void loop() {
+  g_wifi.update();
   manager.update();
 
   static uint32_t last_ms = 0;

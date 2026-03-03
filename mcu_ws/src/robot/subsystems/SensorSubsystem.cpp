@@ -2,15 +2,20 @@
 
 #include <micro_ros_utilities/type_utilities.h>
 
+#include "DebugLog.h"
+
 namespace Subsystem {
 
 bool SensorSubsystem::init() {
   // Initialize all TOF drivers
-  for (auto* driver : setup_.drivers_) {
+  for (size_t i = 0; i < setup_.drivers_.size(); i++) {
+    auto* driver = setup_.drivers_[i];
     if (driver && !driver->init()) {
+      DEBUG_PRINTF("[TOF] init FAIL: sensor %d\n", (int)i);
       return false;
     }
   }
+  DEBUG_PRINTF("[TOF] init OK: %d sensors\n", (int)setup_.drivers_.size());
   return true;
 }
 
@@ -44,6 +49,7 @@ bool SensorSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   msg_.data.data = (float*)malloc(num_sensors * sizeof(float));
 
   if (!msg_.data.data) {
+    DEBUG_PRINTLN("[TOF] onCreate FAIL: malloc");
     return false;
   }
 
@@ -52,6 +58,7 @@ bool SensorSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
     msg_.data.data[i] = 0.0f;
   }
 
+  DEBUG_PRINTLN("[TOF] onCreate OK");
   return true;
 }
 

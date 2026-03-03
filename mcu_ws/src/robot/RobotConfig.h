@@ -57,9 +57,17 @@ constexpr uint8_t RIGHT_MOTOR_IDX = 0;
 constexpr uint8_t LEFT_ENCODER_IDX = 1;   // QTimer channel for left motor FG
 constexpr uint8_t RIGHT_ENCODER_IDX = 0;  // QTimer channel for right motor FG
 
-// Set to true if positive encoder ticks correspond to forward motion
-// for each side. Flip if a side reads backwards.
-constexpr bool LEFT_ENCODER_INVERTED = false;
+// Motor direction multipliers (1.0 = normal, -1.0 = reversed).
+// Left motor is mounted opposite to right on a tank-drive chassis,
+// so its command sign must be inverted for "forward" to mean "robot forward".
+constexpr float LEFT_MOTOR_MULTIPLIER = -1.0f;
+constexpr float RIGHT_MOTOR_MULTIPLIER = 1.0f;
+
+// Encoder inversion: set true when the motor multiplier is negative.
+// The encoder direction comes from MotorManager's intended direction (sign of
+// the speed command). When a motor multiplier flips the command sign, the
+// encoder counts in the opposite direction — this flag compensates.
+constexpr bool LEFT_ENCODER_INVERTED = true;
 constexpr bool RIGHT_ENCODER_INVERTED = false;
 
 // ═══════════════════════════════════════════════════════════════════════════

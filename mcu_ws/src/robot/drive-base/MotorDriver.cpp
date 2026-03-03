@@ -27,7 +27,7 @@ void MotorDriver::setPWM(int speed) {
 }
 
 void MotorDriver::update() {
-  if (prevReverseTime > 103000) {
+  if (prevReverseTime > 102000) {
     prevReverseTime = 0;
   }
 
@@ -35,7 +35,7 @@ void MotorDriver::update() {
     setup_.dir_pin->digitalWrite(!motorDirection
                                      ? HAL::DigitalState::STATE_HIGH
                                      : HAL::DigitalState::STATE_LOW);
-    setup_.pwm_pin->analogWrite(250);
+    setup_.pwm_pin->analogWrite(253);
   } else {
     setup_.dir_pin->digitalWrite(motorDirection ? HAL::DigitalState::STATE_HIGH
                                                 : HAL::DigitalState::STATE_LOW);

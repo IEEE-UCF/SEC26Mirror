@@ -407,10 +407,7 @@ class DriveSubsystem : public IMicroRosParticipant,
    */
   void manualDrive(float left, float right) {
     mode_ = DriveMode::MANUAL;
-    float l = secbot::utils::clamp(left * setup_.leftMotorMultiplier, -1.0f, 1.0f);
-    float r = secbot::utils::clamp(right * setup_.rightMotorMultiplier, -1.0f, 1.0f);
-    setup_.motorManager->setSpeed(setup_.leftMotorIdx, l);
-    setup_.motorManager->setSpeed(setup_.rightMotorIdx, r);
+    writeMotorSpeeds(left, right);
   }
 
   /**
@@ -447,20 +444,21 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   /** @brief Override the internal pose estimate (e.g., from Pi EKF). */
   void resetPose(float x, float y, float theta) {
-    Pose2D newPose(x, y, theta);
-    localization_.reset();
-    // After reset, localization returns to start pose from setup.
-    // We need to set it to the requested pose. Since reset() sets to
-    // start_{x,y,theta}, and we want arbitrary pose, we update directly.
-    // TankDriveLocalization doesn't have a setPose, so we reset and accept
-    // that the next update() will use the new encoder baseline.
-    // For now, reset is sufficient — the Pi corrects via EKF anyway.
-    prevLeftTicks_ = setup_.encoderSub->getAccumulatedTicks(
+    localization_.setPose(x, y, theta);
+
+    // Sync tick baselines to current values so the next update() computes
+    // zero delta (no position jump from stale encoder history).
+    int32_t leftTicks = setup_.encoderSub->getAccumulatedTicks(
         setup_.leftEncoderIdx);
-    prevRightTicks_ = setup_.encoderSub->getAccumulatedTicks(
+    int32_t rightTicks = setup_.encoderSub->getAccumulatedTicks(
         setup_.rightEncoderIdx);
-    if (setup_.leftEncoderInverted) prevLeftTicks_ = -prevLeftTicks_;
-    if (setup_.rightEncoderInverted) prevRightTicks_ = -prevRightTicks_;
+    if (setup_.leftEncoderInverted) leftTicks = -leftTicks;
+    if (setup_.rightEncoderInverted) rightTicks = -rightTicks;
+
+    prevLeftTicks_ = leftTicks;
+    prevRightTicks_ = rightTicks;
+    velPrevLeftTicks_ = leftTicks;
+    velPrevRightTicks_ = rightTicks;
   }
 
   // ── Accessors ──────────────────────────────────────────────────────────
@@ -656,10 +654,12 @@ class DriveSubsystem : public IMicroRosParticipant,
   // ── Motor output ───────────────────────────────────────────────────────
 
   void writeMotorSpeeds(float left, float right) {
-    setup_.motorManager->setSpeed(setup_.leftMotorIdx,
-                                  secbot::utils::clamp(left, -1.0f, 1.0f));
-    setup_.motorManager->setSpeed(setup_.rightMotorIdx,
-                                  secbot::utils::clamp(right, -1.0f, 1.0f));
+    float l = secbot::utils::clamp(
+        left * setup_.leftMotorMultiplier, -1.0f, 1.0f);
+    float r = secbot::utils::clamp(
+        right * setup_.rightMotorMultiplier, -1.0f, 1.0f);
+    setup_.motorManager->setSpeed(setup_.leftMotorIdx, l);
+    setup_.motorManager->setSpeed(setup_.rightMotorIdx, r);
   }
 
   void stopMotors() {

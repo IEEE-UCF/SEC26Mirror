@@ -1,6 +1,6 @@
 #include "DroneStateSubsystem.h"
 
-#include <micro_ros_utilities/string_utilities.h>
+#include <rosidl_runtime_c/string_functions.h>
 #include <math_utils.h>
 
 using secbot::utils::clamp;
@@ -100,6 +100,13 @@ bool DroneStateSubsystem::onCreate(rcl_node_t* node,
                                 &motors_res_, setMotorsCallback) != RCL_RET_OK)
     return false;
 
+  // Initialize response string fields so rosidl_runtime_c__String__assign
+  // can safely realloc on each service call without leaking.
+  rosidl_runtime_c__String__init(&arm_res_.message);
+  rosidl_runtime_c__String__init(&takeoff_res_.message);
+  rosidl_runtime_c__String__init(&land_res_.message);
+  rosidl_runtime_c__String__init(&motors_res_.message);
+
   return true;
 }
 
@@ -111,6 +118,12 @@ void DroneStateSubsystem::onDestroy() {
   land_srv_ = rcl_get_zero_initialized_service();
   set_anchors_srv_ = rcl_get_zero_initialized_service();
   set_motors_srv_ = rcl_get_zero_initialized_service();
+
+  // Free response string buffers allocated by rosidl_runtime_c__String__assign
+  rosidl_runtime_c__String__fini(&arm_res_.message);
+  rosidl_runtime_c__String__fini(&takeoff_res_.message);
+  rosidl_runtime_c__String__fini(&land_res_.message);
+  rosidl_runtime_c__String__fini(&motors_res_.message);
 }
 
 void DroneStateSubsystem::update() {
@@ -294,43 +307,39 @@ void DroneStateSubsystem::armCallback(const void* req_raw, void* res_raw) {
   if (req->arm) {
     if (self->state_ != DroneState::UNARMED) {
       res->success = false;
-      res->message =
-          micro_ros_string_utilities_set(res->message, "Not in UNARMED state");
+      rosidl_runtime_c__String__assign(&res->message, "Not in UNARMED state");
       return;
     }
     if (!self->gyro_.isInitialized()) {
       res->success = false;
-      res->message =
-          micro_ros_string_utilities_set(res->message, "IMU not ready");
+      rosidl_runtime_c__String__assign(&res->message, "IMU not ready");
       return;
     }
 #if DRONE_ENABLE_HEIGHT
     if (!self->height_.isInitialized()) {
       res->success = false;
-      res->message =
-          micro_ros_string_utilities_set(res->message, "Height sensor not ready");
+      rosidl_runtime_c__String__assign(&res->message, "Height sensor not ready");
       return;
     }
 #endif
     self->flight_.arm();
     self->state_ = DroneState::ARMED;
     res->success = true;
-    res->message = micro_ros_string_utilities_set(res->message, "Armed");
+    rosidl_runtime_c__String__assign(&res->message, "Armed");
   } else {
     // Disarm - only from ARMED (not flying)
     if (self->state_ == DroneState::ARMED) {
       self->flight_.disarm();
       self->state_ = DroneState::UNARMED;
       res->success = true;
-      res->message = micro_ros_string_utilities_set(res->message, "Disarmed");
+      rosidl_runtime_c__String__assign(&res->message, "Disarmed");
     } else if (self->isFlying()) {
       res->success = false;
-      res->message = micro_ros_string_utilities_set(
-          res->message, "Cannot disarm while flying, use land");
+      rosidl_runtime_c__String__assign(
+          &res->message, "Cannot disarm while flying, use land");
     } else {
       res->success = false;
-      res->message =
-          micro_ros_string_utilities_set(res->message, "Already disarmed");
+      rosidl_runtime_c__String__assign(&res->message, "Already disarmed");
     }
   }
 }
@@ -347,8 +356,7 @@ void DroneStateSubsystem::takeoffCallback(const void* req_raw,
 
   if (self->state_ != DroneState::ARMED) {
     res->success = false;
-    res->message =
-        micro_ros_string_utilities_set(res->message, "Not in ARMED state");
+    rosidl_runtime_c__String__assign(&res->message, "Not in ARMED state");
     return;
   }
 
@@ -358,7 +366,7 @@ void DroneStateSubsystem::takeoffCallback(const void* req_raw,
   self->flight_.clearOverride();
   self->state_ = DroneState::LAUNCHING;
   res->success = true;
-  res->message = micro_ros_string_utilities_set(res->message, "Launching");
+  rosidl_runtime_c__String__assign(&res->message, "Launching");
 }
 
 void DroneStateSubsystem::landCallback(const void* /*req_raw*/,
@@ -372,8 +380,7 @@ void DroneStateSubsystem::landCallback(const void* /*req_raw*/,
 
   if (!self->isFlying()) {
     res->success = false;
-    res->message =
-        micro_ros_string_utilities_set(res->message, "Not flying");
+    rosidl_runtime_c__String__assign(&res->message, "Not flying");
     return;
   }
 
@@ -384,7 +391,7 @@ void DroneStateSubsystem::landCallback(const void* /*req_raw*/,
 #endif
   self->state_ = DroneState::LANDING;
   res->success = true;
-  res->message = micro_ros_string_utilities_set(res->message, "Landing");
+  rosidl_runtime_c__String__assign(&res->message, "Landing");
 }
 
 void DroneStateSubsystem::setAnchorsCallback(const void* req_raw,
@@ -421,15 +428,14 @@ void DroneStateSubsystem::setMotorsCallback(const void* req_raw,
 
   if (self->state_ != DroneState::ARMED) {
     res->success = false;
-    res->message = micro_ros_string_utilities_set(
-        res->message, "Motor override only in ARMED (not flying)");
+    rosidl_runtime_c__String__assign(
+        &res->message, "Motor override only in ARMED (not flying)");
     return;
   }
 
   self->flight_.setMotorsOverride(req->motor_speeds);
   res->success = true;
-  res->message =
-      micro_ros_string_utilities_set(res->message, "Motors set");
+  rosidl_runtime_c__String__assign(&res->message, "Motors set");
 }
 
 }  // namespace Drone

@@ -1,0 +1,6 @@
+uint8[4] anchor_ids
+uint8 num_anchors
+float32[4] anchor_x
+float32[4] anchor_y
+---
+bool success

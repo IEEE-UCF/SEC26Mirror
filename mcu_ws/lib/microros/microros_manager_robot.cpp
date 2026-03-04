@@ -21,7 +21,7 @@ bool MicrorosManager::create_entities() {
     DEBUG_PRINTLN("[uROS] FAIL: rclc_support_init");
     return false;
   }
-  if (rclc_node_init_default(&node_, "robot_manager", "", &support_) !=
+  if (rclc_node_init_default(&node_, setup_.node_name, "", &support_) !=
       RCL_RET_OK) {
     DEBUG_PRINTLN("[uROS] FAIL: rclc_node_init_default");
     return false;
@@ -52,7 +52,7 @@ bool MicrorosManager::create_entities() {
   if (rclc_publisher_init_best_effort(
           &debug_pub_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
-          "/mcu_robot/debug") != RCL_RET_OK) {
+          setup_.debug_topic) != RCL_RET_OK) {
     DEBUG_PRINTLN("[uROS] FAIL: debug publisher init");
     return false;
   }

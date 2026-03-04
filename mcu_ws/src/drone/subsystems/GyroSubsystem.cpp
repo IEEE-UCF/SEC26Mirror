@@ -3,16 +3,20 @@
 namespace Drone {
 
 bool GyroSubsystem::init() {
-  if (cfg_.reset_pin != (uint8_t)-1) {
-    if (!bno_.begin_I2C(cfg_.i2c_addr)) {
-      initialized_ = false;
-      return false;
-    }
-  } else {
-    if (!bno_.begin_I2C(cfg_.i2c_addr)) {
-      initialized_ = false;
-      return false;
-    }
+  mutex_ = xSemaphoreCreateMutex();
+
+  // Hardware reset if pin configured
+  if (cfg_.reset_pin >= 0) {
+    pinMode(cfg_.reset_pin, OUTPUT);
+    digitalWrite(cfg_.reset_pin, LOW);
+    delay(10);
+    digitalWrite(cfg_.reset_pin, HIGH);
+    delay(100);
+  }
+
+  if (!bno_.begin_I2C(cfg_.i2c_addr, cfg_.wire)) {
+    initialized_ = false;
+    return false;
   }
 
   // Enable stabilized rotation vector for attitude (Euler angles)
@@ -25,6 +29,11 @@ bool GyroSubsystem::init() {
     return false;
   }
 
+  // Enable linear acceleration (gravity-free) for EKF
+  if (!bno_.enableReport(SH2_LINEAR_ACCELERATION, cfg_.accel_report_us)) {
+    return false;
+  }
+
   initialized_ = true;
   return true;
 }
@@ -34,9 +43,9 @@ void GyroSubsystem::update() {
 
   sh2_SensorValue_t val;
   while (bno_.getSensorEvent(&val)) {
+    if (mutex_) xSemaphoreTake(mutex_, portMAX_DELAY);
     switch (val.sensorId) {
       case SH2_ARVR_STABILIZED_RV: {
-        // Quaternion -> Euler angles (degrees)
         float qr = val.un.arvrStabilizedRV.real;
         float qi = val.un.arvrStabilizedRV.i;
         float qj = val.un.arvrStabilizedRV.j;
@@ -54,13 +63,19 @@ void GyroSubsystem::update() {
         break;
       }
       case SH2_GYROSCOPE_CALIBRATED: {
-        // Gyro in rad/s -> convert to deg/s
         data_.gyro_x = val.un.gyroscope.x * 57.29577951f;
         data_.gyro_y = val.un.gyroscope.y * 57.29577951f;
         data_.gyro_z = val.un.gyroscope.z * 57.29577951f;
         break;
       }
+      case SH2_LINEAR_ACCELERATION: {
+        data_.accel_x = val.un.linearAcceleration.x;
+        data_.accel_y = val.un.linearAcceleration.y;
+        data_.accel_z = val.un.linearAcceleration.z;
+        break;
+      }
     }
+    if (mutex_) xSemaphoreGive(mutex_);
   }
 }
 

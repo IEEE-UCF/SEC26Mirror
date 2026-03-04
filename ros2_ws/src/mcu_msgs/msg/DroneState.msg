@@ -1,20 +1,16 @@
-# Drone Control Message
 std_msgs/Header header
 
-# Drone states
-uint8 PRE_INIT=0
-uint8 INIT=1
-uint8 INIT_FAIL=2
-uint8 INIT_SUCCESS=3
-uint8 ARMED=4
-uint8 RUNNING=5
-uint8 STOPPED=6
-uint8 RESET=7
-uint8 EMERGENCY_STOP=8
-# Current drone state code (one of the constants above)
+# Flight states
+uint8 INIT=0
+uint8 UNARMED=1
+uint8 ARMED=2
+uint8 LAUNCHING=3
+uint8 VELOCITY_CONTROL=4
+uint8 LANDING=5
+uint8 EMERGENCY_LAND=6
 uint8 state
 
-# Task states (one of the constants below)
+# Task states
 uint8 TASK_NONE=0
 uint8 TASK_TAKEOFF=1
 uint8 TASK_MOVE_TO_EARTH=2
@@ -22,3 +18,11 @@ uint8 TASK_TRANSMIT_DATA=3
 uint8 TASK_LAND=4
 uint8 TASK_COMPLETE=5
 uint8 current_task
+
+# Position and attitude
+float32 altitude
+float32 pos_x
+float32 pos_y
+float32 roll
+float32 pitch
+float32 yaw

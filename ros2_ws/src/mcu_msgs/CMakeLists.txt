@@ -64,6 +64,12 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Reset.srv"
   "srv/SetServo.srv"
   "srv/SetMotor.srv"
+  "srv/DroneArm.srv"
+  "srv/DroneTakeoff.srv"
+  "srv/DroneLand.srv"
+  "srv/DroneTransmitIR.srv"
+  "srv/DroneSetAnchors.srv"
+  "srv/DroneSetMotors.srv"
   DEPENDENCIES std_msgs geometry_msgs nav_msgs
 )
 

@@ -12,7 +12,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-#include "DroneConfig.h"
+#include "../DroneConfig.h"
 
 namespace Drone {
 

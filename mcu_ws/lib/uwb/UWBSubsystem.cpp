@@ -254,7 +254,7 @@ void UWBSubsystem::publishPeerRanges() {
     msg.rx_timestamp = r.rx_timestamp;
     msg.valid = r.valid;
     msg.error_code = r.error_code;
-    (void)rcl_publish(&peer_pubs_[i], &msg, NULL);
+    [[maybe_unused]] auto rc = rcl_publish(&peer_pubs_[i], &msg, NULL);
   }
 }
 
@@ -264,7 +264,7 @@ void UWBSubsystem::publishRanging() {
   }
 
   updateRangingMessage();
-  (void)rcl_publish(&pub_, &msg_, NULL);
+  [[maybe_unused]] auto rc = rcl_publish(&pub_, &msg_, NULL);
 }
 
 }  // namespace Subsystem

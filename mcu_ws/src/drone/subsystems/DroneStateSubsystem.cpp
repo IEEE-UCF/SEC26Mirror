@@ -277,7 +277,7 @@ void DroneStateSubsystem::publishState() {
   state_msg_.pitch = imu.pitch;
   state_msg_.yaw = imu.yaw;
 
-  rcl_publish(&state_pub_, &state_msg_, NULL);
+  [[maybe_unused]] auto rc = rcl_publish(&state_pub_, &state_msg_, NULL);
 }
 
 // ── Service callbacks ────────────────────────────────────────

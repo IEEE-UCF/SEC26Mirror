@@ -146,6 +146,12 @@ static void flightControlTask(void* /*param*/) {
   uint32_t last_us = micros();
 
   for (;;) {
+    // Skip all work if IMU not initialized — no point running PID
+    if (!g_gyro.isInitialized()) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+      continue;
+    }
+
     uint32_t now_us = micros();
     float dt = (now_us - last_us) * 1e-6f;
     last_us = now_us;
@@ -259,9 +265,16 @@ void setup() {
   g_wifi.init();
   g_wifi.begin();
   Serial.println("[Drone] Waiting for WiFi...");
-  while (!g_wifi.isConnected()) {
-    g_wifi.update();
-    delay(10);
+  {
+    uint32_t wifi_start = millis();
+    while (!g_wifi.isConnected()) {
+      g_wifi.update();
+      delay(50);  // yield to watchdog
+      if (millis() - wifi_start > 15000) {
+        Serial.println("[Drone] WiFi timeout — continuing anyway");
+        break;
+      }
+    }
   }
   Serial.printf("[Drone] WiFi connected: %s\n",
                 WiFi.localIP().toString().c_str());
@@ -342,15 +355,39 @@ void setup() {
   xTaskCreatePinnedToCore(safetyTask, "safety", Config::SAFETY_TASK_STACK,
                           nullptr, Config::SAFETY_TASK_PRIORITY, nullptr, 1);
 
+  Serial.printf("[Drone] Free heap: %u bytes\n", ESP.getFreeHeap());
   Serial.println("[Drone] All tasks started. Ready!");
 }
 
+static uint32_t last_heap_print_ms_ = 0;
+static uint32_t last_mr_update_ms_ = 0;
+
 void loop() {
+  uint32_t now = millis();
+
   g_wifi.update();
   ArduinoOTA.handle();
-  g_mr.update();
+
+  // Rate-limit micro-ROS update to every 100ms to reduce leak surface
+  if (now - last_mr_update_ms_ >= 100) {
+    uint32_t before = ESP.getFreeHeap();
+    g_mr.update();
+    uint32_t after = ESP.getFreeHeap();
+    if (before - after > 100) {
+      Serial.printf("[LEAK] g_mr.update() lost %u bytes\n", before - after);
+    }
+    last_mr_update_ms_ = now;
+  }
+
   g_hb.update();
   g_state.update();
 
-  delay(1);
+  // Print heap every 5s for debugging
+  if (now - last_heap_print_ms_ > 5000) {
+    Serial.printf("[Drone] Free heap: %u, min: %u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    last_heap_print_ms_ = now;
+  }
+
+  delay(10);
 }

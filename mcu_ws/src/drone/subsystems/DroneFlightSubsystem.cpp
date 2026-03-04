@@ -9,11 +9,15 @@ namespace Drone {
 void DroneFlightSubsystem::init() {
   sp_mutex_ = xSemaphoreCreateMutex();
 
-  // Configure motor PWM (ESP32-S3 new LEDC API)
-  ledcAttach(pins_.fl, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
-  ledcAttach(pins_.fr, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
-  ledcAttach(pins_.br, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
-  ledcAttach(pins_.bl, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
+  // Configure motor PWM (ESP32 LEDC old API)
+  ledcSetup(0, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
+  ledcSetup(1, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
+  ledcSetup(2, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
+  ledcSetup(3, Config::MOTOR_PWM_FREQ, Config::MOTOR_PWM_RESOLUTION);
+  ledcAttachPin(pins_.fl, 0);
+  ledcAttachPin(pins_.fr, 1);
+  ledcAttachPin(pins_.br, 2);
+  ledcAttachPin(pins_.bl, 3);
 
   // Configure PID controllers
   roll_angle_pid_.configure(Config::rollAnglePID());
@@ -180,10 +184,10 @@ void DroneFlightSubsystem::writeMotors() {
     return (uint32_t)(clamp(val, 0.0f, 1.0f) * Config::MOTOR_PWM_MAX);
   };
 
-  ledcWrite(pins_.fl, duty(motors_[0]));
-  ledcWrite(pins_.fr, duty(motors_[1]));
-  ledcWrite(pins_.br, duty(motors_[2]));
-  ledcWrite(pins_.bl, duty(motors_[3]));
+  ledcWrite(0, duty(motors_[0]));  // FL
+  ledcWrite(1, duty(motors_[1]));  // FR
+  ledcWrite(2, duty(motors_[2]));  // BR
+  ledcWrite(3, duty(motors_[3]));  // BL
 }
 
 void DroneFlightSubsystem::setMotorsOverride(const float speeds[4]) {

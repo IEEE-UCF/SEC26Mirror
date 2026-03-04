@@ -98,10 +98,10 @@ constexpr int SAFETY_TASK_PRIORITY = 4;
 constexpr int HEIGHT_TASK_PRIORITY = 3;
 constexpr int UWB_TASK_PRIORITY = 3;
 
-constexpr uint32_t FLIGHT_TASK_STACK = 4096;
-constexpr uint32_t SAFETY_TASK_STACK = 2048;
-constexpr uint32_t HEIGHT_TASK_STACK = 2048;
-constexpr uint32_t UWB_TASK_STACK = 4096;
+constexpr uint32_t FLIGHT_TASK_STACK = 2048;
+constexpr uint32_t SAFETY_TASK_STACK = 1024;
+constexpr uint32_t HEIGHT_TASK_STACK = 1536;
+constexpr uint32_t UWB_TASK_STACK = 2048;
 
 constexpr uint32_t FLIGHT_RATE_HZ = 250;
 constexpr uint32_t HEIGHT_RATE_HZ = 50;

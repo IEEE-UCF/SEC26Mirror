@@ -8,7 +8,7 @@
 #include <Arduino.h>
 #include <microros_manager_robot.h>
 
-#include "DroneConfig.h"
+#include "../DroneConfig.h"
 #include "DroneFlightSubsystem.h"
 #include "DroneStateSubsystem.h"
 #include "GyroSubsystem.h"

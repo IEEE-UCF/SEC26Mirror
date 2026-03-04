@@ -16,7 +16,7 @@
 #include <pid_controller.h>
 #include <filters.h>
 
-#include "DroneConfig.h"
+#include "../DroneConfig.h"
 #include "GyroSubsystem.h"
 
 namespace Drone {

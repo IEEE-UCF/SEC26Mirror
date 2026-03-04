@@ -18,7 +18,7 @@
 #include <mcu_msgs/srv/drone_set_motors.h>
 #include <mcu_msgs/srv/drone_takeoff.h>
 
-#include "DroneConfig.h"
+#include "../DroneConfig.h"
 #include "DroneEKFSubsystem.h"
 #include "DroneFlightSubsystem.h"
 #include "GyroSubsystem.h"

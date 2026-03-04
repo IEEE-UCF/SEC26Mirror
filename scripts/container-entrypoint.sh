@@ -4,6 +4,11 @@
 
 set -e
 
+# ROS2 network — expose on all interfaces (eth0 + wlan0 AP)
+export ROS_LOCALHOST_ONLY=0
+export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+export FASTRTPS_DEFAULT_PROFILES_FILE=/home/ubuntu/config/dds/fastdds_robot.xml
+
 source /opt/ros/jazzy/setup.bash
 
 # Source workspace install if it exists (may not on first boot before colcon build)

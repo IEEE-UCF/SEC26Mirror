@@ -54,7 +54,7 @@ The codebase is split into two workspaces:
   - `RobotConstants.h` — PCA9685 defaults (freq, channels)
   - `RobotConfig.h` — Drive kinematics, PID, motion profile, and trajectory constants
 - **Libraries**:
-  - `lib/subsystems/`: Core subsystem abstractions (McuSubsystem lifecycle, UWBSubsystem, IMicroRosParticipant, TimedSubsystem)
+  - `lib/subsystems/`: Core subsystem abstractions (McuSubsystem lifecycle, ESP32WifiSubsystem, RobotManager, TimedSubsystem)
   - `lib/robot/`: Hardware drivers (BNO085, TCA9555, PCA9685Driver/Manager, I2CMux, I2CPower, TOF, I2CBusLock, AnalogMux, AnalogRead)
   - `lib/drivers/`: Additional drivers (CD74HC4067 analog mux)
   - `lib/control/`: Control algorithms (PID, trapezoidal/S-curve motion profiles, trajectory controller, arm kinematics)
@@ -66,7 +66,7 @@ The codebase is split into two workspaces:
   - `lib/ir/`: IR NEC communication (ESP32 RMT-based)
   - `lib/field/`: Field element message definitions, ESP-NOW transport, shared protocol
   - `lib/hal/`: Hardware abstraction layer (NativeGPIO, PCA9685GPIO, MCP23017GPIO, CD74HC4067GPIO)
-  - `lib/utils/`: Signal filters, unit conversions, duck tracker, math helpers
+  - `lib/utils/`: Signal filters, unit conversions, duck tracker, math helpers, DebugLog
   - `lib/sensors/`: Photodiode signal conditioning
   - `lib/microros/`: MicrorosManager (agent lifecycle, participant registry, executor)
 
@@ -82,7 +82,7 @@ The codebase is split into two workspaces:
 - `secbot_bridge_i2c`: ROS ↔ Teensy I2C bridge with packet codec and fake Teensy for simulation (C++)
 - `secbot_deploy`: Deployment trigger bridge — MCU button press → deploy-orchestrator (C++)
 - `secbot_tf`: TF static transform configuration (launch files + YAML)
-- `secbot_msgs`: Custom messages (TaskStatus, DuckDetection) and actions (NavigatePath, ApproachTarget)
+- `secbot_msgs`: Custom messages (TaskStatus, DuckDetection, DuckDetections), actions (NavigatePath, ApproachTarget), services (SetTask, StartStop)
 - `mcu_msgs`: Shared MCU↔ROS2 messages (symlinked to `mcu_ws/extra_packages/mcu_msgs`)
 - `my_robot_description`: URDF robot description for visualization
 
@@ -270,21 +270,28 @@ See `src/robot/RobotPins.h` for full assignments. Key pins:
 
 All MCU subsystems inherit from `Classes::BaseSubsystem` with lifecycle: `init()` → `begin()` → `update()` (loop) / `pause()` → `reset()`. Subsystems that need ROS2 also implement `IMicroRosParticipant` and register with `MicrorosManager::registerParticipant()`.
 
-The MicrorosManager supports up to 16 registered participants and initializes 10 executor handles (for subscriptions, services, and timers — publishers do not consume handles).
+The MicrorosManager supports up to 32 registered participants (20 currently used) and initializes 24 executor handles (for subscriptions, services, and timers — publishers do not consume handles). micro-ROS entity limits (in `custom_microros.meta`): 22 publishers, 14 subscriptions, 6 services.
 
 ### micro-ROS Topic Namespace
 
 All robot topics use `/mcu_robot/` prefix:
 - `/mcu_robot/heartbeat` (String), `/mcu_robot/battery_health` (BatteryHealth), `/mcu_robot/imu/data` (Imu)
-- `/mcu_robot/tof_distances` (Float32MultiArray), `/mcu_robot/rc` (RC), `/mcu_robot/intake/state` (IntakeState)
-- `/mcu_robot/mini_robot/state` (MiniRobotState), `/mcu_robot/lcd/append` (subscription: String)
+- `/mcu_robot/tof_distances` (Float32MultiArray), `/mcu_robot/rc` (RC)
+- `/mcu_robot/intake/state` (IntakeState), `/mcu_robot/intake/command` (subscription: IntakeCommand)
+- `/mcu_robot/mini_robot/state` (MiniRobotState)
+- `/mcu_robot/lcd/append` (subscription: String), `/mcu_robot/lcd/scroll` (subscription: String)
 - `/mcu_robot/servo/state` (Float32MultiArray), `/mcu_robot/servo/set` (service: SetServo)
 - `/mcu_robot/motor/state` (Float32MultiArray), `/mcu_robot/motor/set` (service: SetMotor)
 - `/mcu_robot/encoders` (Float32MultiArray)
 - `/mcu_robot/buttons` (UInt8), `/mcu_robot/dip_switches` (UInt8)
 - `/mcu_robot/led/set_all` (subscription: LedColor)
-- UWB: `mcu_uwb/ranging` (from beacons/robot tag)
-- Drive: `drive_base/status` (DriveBase), `drive_base/command` (subscription: DriveCommand)
+- `/mcu_robot/crank/state` (pub), `/mcu_robot/crank/command` (subscription)
+- `/mcu_robot/keypad/state` (pub), `/mcu_robot/keypad/command` (subscription)
+- `/mcu_robot/deploy/trigger` (pub), `/mcu_robot/deploy/status` (pub)
+- `/mcu_robot/reset` (service: Reset)
+- `/mcu_robot/debug` (String — manager-owned debug publisher)
+- `/mcu_robot/uwb/ranging` (UWBRanging — robot tag ranging)
+- Drive: `drive_base/status` (DriveBase), `drive_base/command` (subscription: DriveCommand), `drive_base/reset_pose` (subscription)
 
 Minibot topics use `/mcu_minibot/` prefix:
 - `/mcu_minibot/cmd_vel` (subscription: geometry_msgs/Twist — differential drive mix)
@@ -304,13 +311,14 @@ drive_base/status ──serial──► secbot_fusion ──► /odom/unfiltered
 
 ESP32 Beacons (×3)
 ──────────────────
-mcu_uwb/ranging ───WiFi UDP──► secbot_uwb ──► /uwb/robot_pose
+mcu_uwb/ranging ──WiFi UDP──► secbot_uwb ──► /uwb/robot_pose
+Robot UWB tag: /mcu_robot/uwb/ranging ──serial──► secbot_uwb
 ```
 
 ### UWB Positioning System
 
 - **Beacons** (anchors): ID=10, ID=11, ID=12 deployed at field corners (ESP32 + DW3000)
-- **Tag**: ID=13 on main robot (reserved), ranges to all anchors via DW3000 TWR
+- **Tag**: ID=13 on main robot, ID=14 minibot, ID=15 drone (reserved). Ranges to all anchors via DW3000 TWR
 - **Transport**: ESP32 micro-ROS WiFi UDP to Pi, then `secbot_uwb` trilaterates position
 - **Rate**: ~20Hz ranging initiation, 10Hz publish to ROS2
 - **Trilateration**: Min 3 beacons (2D), outlier rejection at 2.0σ, max residual 0.5m

@@ -1,41 +1,32 @@
-#pragma once
+#include "PCA9685Manager.h"
 
-#include <Arduino.h>
-#include <BaseDriver.h>
+using namespace Robot;
 
-#include <vector>
+PCA9685Manager::PCA9685Manager(const PCA9685ManagerSetup& setup)
+    : Classes::BaseDriver(setup) {}
 
-#include "PCA9685Driver.h"
+PCA9685Manager::~PCA9685Manager() {
+  for (auto d : drivers_) delete d;
+  drivers_.clear();
+}
 
-namespace Robot {
-
-class PCA9685ManagerSetup : public Classes::BaseSetup {
- public:
-  PCA9685ManagerSetup(const char* _id) : Classes::BaseSetup(_id) {}
-};
-
-class PCA9685Manager : public Classes::BaseDriver {
- public:
-  explicit PCA9685Manager(const PCA9685ManagerSetup& setup);
-  ~PCA9685Manager() override;
-
-  bool init() override;
-  void update() override;  // apply buffered updates
-  const char* getInfo() override {
-    static const char info[] = "PCA9685Manager";
-    return info;
+bool PCA9685Manager::init() {
+  bool ok = true;
+  for (auto d : drivers_) {
+    ok = d->init() && ok;
   }
+  initSuccess_ = ok;
+  return ok;
+}
 
-  // Manager API
-  PCA9685Driver* createDriver(const PCA9685DriverSetup& setup);
-  size_t count() const { return drivers_.size(); }
-  PCA9685Driver* get(size_t i) {
-    return i < drivers_.size() ? drivers_[i] : nullptr;
+void PCA9685Manager::update() {
+  for (auto d : drivers_) {
+    d->applyBuffered();
   }
+}
 
- private:
-  std::vector<PCA9685Driver*> drivers_;
-};
-
-}  // namespace Robot
-
+PCA9685Driver* PCA9685Manager::createDriver(const PCA9685DriverSetup& setup) {
+  PCA9685Driver* d = new PCA9685Driver(setup);
+  drivers_.push_back(d);
+  return d;
+}

@@ -7,10 +7,8 @@
  * states, intake rail replaces bridge abstraction for pressure plate.
  *
  * Drives robot via drive_base/command (DriveBase msg) — no Nav2.
- * Reads pose from drive_base/status (best_effort QoS to match micro-ROS).
- * MCU auto-stops after 500ms without a command, so refreshDriveCommand()
- * sends a no-op keepalive every tick that resets the watchdog without
- * resetting PID (uses drive_mode=3 which hits MCU's default: break).
+ * Reads pose from drive_base/status.  MCU auto-stops after 500ms without
+ * a command, so refreshDriveCommand() re-publishes every tick (100ms).
  */
 
 #include "secbot_autonomy/mission_node.hpp"
@@ -43,7 +41,7 @@ MissionNode::MissionNode() : Node("mission_node") {
 
   // Subscribers
   drive_status_sub_ = this->create_subscription<mcu_msgs::msg::DriveBase>(
-      "drive_base/status", rclcpp::SensorDataQoS(),
+      "drive_base/status", 10,
       std::bind(&MissionNode::onDriveStatus, this, _1));
   task_status_sub_ = this->create_subscription<secbot_msgs::msg::TaskStatus>(
       "/autonomy/task_status", 10,
@@ -57,7 +55,7 @@ MissionNode::MissionNode() : Node("mission_node") {
       "/mcu_robot/inputs", 10,
       std::bind(&MissionNode::onRobotInputs, this, _1));
   intake_state_sub_ = this->create_subscription<mcu_msgs::msg::IntakeState>(
-      "/mcu_robot/intake/state", rclcpp::SensorDataQoS(),
+      "/mcu_robot/intake/state", 10,
       std::bind(&MissionNode::onIntakeState, this, _1));
   duck_detect_sub_ =
       this->create_subscription<secbot_msgs::msg::DuckDetections>(
@@ -269,21 +267,14 @@ void MissionNode::sendVelocity(double vx, double omega) {
   msg.goal_velocity.angular.z = omega;
   last_drive_cmd_ = msg;
   drive_cmd_pub_->publish(msg);
-  RCLCPP_DEBUG(this->get_logger(), "Sent velocity: vx=%.3f omega=%.3f", vx,
-               omega);
 }
 
 void MissionNode::stopRobot() { sendVelocity(0.0, 0.0); }
 
 void MissionNode::refreshDriveCommand() {
-  // Send a no-op keepalive to prevent MCU 500ms command timeout.
-  // drive_mode=3 is not a valid mode, so the MCU callback does:
-  //   lastCommandMs_ = millis();   (refreshes watchdog)
-  //   switch(3) → default: break;  (no PID reset, no mode change)
-  auto msg = mcu_msgs::msg::DriveBase();
-  msg.header.stamp = this->now();
-  msg.drive_mode = 3;  // no-op keepalive
-  drive_cmd_pub_->publish(msg);
+  // Re-publish the last drive command every tick to prevent MCU 500ms timeout
+  last_drive_cmd_.header.stamp = this->now();
+  drive_cmd_pub_->publish(last_drive_cmd_);
 }
 
 // Task helpers
@@ -402,25 +393,6 @@ const char* MissionNode::phaseName(MissionPhase phase) const {
 // Main State Machine
 
 void MissionNode::stepMission() {
-  // ── 1Hz debug log ──
-  debug_tick_++;
-  if (debug_tick_ >= 10) {
-    debug_tick_ = 0;
-    double dx = robot_x_ - nav_target_.x;
-    double dy = robot_y_ - nav_target_.y;
-    double dist = std::sqrt(dx * dx + dy * dy);
-    const char* mode_str = (last_drive_mode_ == 0)   ? "VEC"
-                           : (last_drive_mode_ == 1) ? "GOAL"
-                           : (last_drive_mode_ == 2) ? "TRAJ"
-                                                     : "???";
-    RCLCPP_WARN(this->get_logger(),
-                "[DBG] phase=%s | pose=(%.3f,%.3f) | target=(%.3f,%.3f) | "
-                "dist=%.3f | mcu_mode=%s | goal_reached=%d | cmd_mode=%d",
-                phaseName(phase_), robot_x_, robot_y_, nav_target_.x,
-                nav_target_.y, dist, mode_str, goal_reached_ ? 1 : 0,
-                last_drive_cmd_.drive_mode);
-  }
-
   // Duck interrupt check (active after COLLECT_KNOWN_DUCKS)
   if (duck_interrupt_enabled_ && pending_duck_interrupt_) {
     bool in_nav_phase = (phase_ == MissionPhase::NAV_TO_KEYPAD ||

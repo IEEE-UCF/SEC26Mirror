@@ -39,8 +39,6 @@ class PCA9685DriverSetup : public Classes::BaseSetup {
 };
 
 class PCA9685Driver : public Classes::BaseDriver {
-  friend class PCA9685DMAManager;
-
  public:
   explicit PCA9685Driver(const PCA9685DriverSetup& setup);
   ~PCA9685Driver() override = default;

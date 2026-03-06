@@ -5,6 +5,7 @@ namespace Drivers {
 bool BNO085Driver::init() {
   I2CBus::Lock lock(setup_.wire_);
   setup_.wire_.begin();
+  setup_.wire_.setClock(400000);
 
   initSuccess_ = true;
 
@@ -13,10 +14,7 @@ bool BNO085Driver::init() {
     return initSuccess_;
   }
 
-  // Request reports at 10ms (100Hz) to match IMU thread rate
-  if (!imu_.enableReport(SH2_ACCELEROMETER, 10000) ||
-      !imu_.enableReport(SH2_GYROSCOPE_CALIBRATED, 10000) ||
-      !imu_.enableReport(SH2_ROTATION_VECTOR, 10000)) {
+  if (!enableReports()) {
     initSuccess_ = false;
   }
 

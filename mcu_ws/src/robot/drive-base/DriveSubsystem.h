@@ -726,7 +726,13 @@ class DriveSubsystem : public IMicroRosParticipant,
         float qw = static_cast<float>(
             msg->goal_transform.transform.rotation.w);
         float theta = 2.0f * atan2f(qz, qw);
-        self->setGoal(x, y, theta);
+        // Only reset PID/profile if goal actually changed
+        if (self->mode_ != DriveMode::GOAL ||
+            fabsf(x - self->targetPose_.getX()) > 0.001f ||
+            fabsf(y - self->targetPose_.getY()) > 0.001f ||
+            fabsf(theta - self->targetPose_.getTheta()) > 0.01f) {
+          self->setGoal(x, y, theta);
+        }
         break;
       }
       case mcu_msgs__msg__DriveBase__DRIVE_TRAJ: {

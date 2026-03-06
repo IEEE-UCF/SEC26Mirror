@@ -218,6 +218,9 @@ class MissionNode : public rclcpp::Node {
   std::array<uint8_t, 5> antenna_colors_ = {};  // indexed by antenna_id (1-4)
   uint8_t antennas_read_ = 0;
 
+  // Debug logging
+  uint8_t debug_tick_ = 0;
+
   // Arena positions — real field coordinates (inches -> meters, 1" = 0.0254m)
   static constexpr ArenaPosition POS_START_ZONE = {0.1524, 0.1524};
   static constexpr ArenaPosition POS_UWB_CORNER = {1.1176, 0.0762};

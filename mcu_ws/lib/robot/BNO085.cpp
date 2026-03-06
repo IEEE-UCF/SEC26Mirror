@@ -1,5 +1,7 @@
 #include "BNO085.h"
 
+#include "DebugLog.h"
+
 namespace Drivers {
 
 bool BNO085Driver::init() {
@@ -34,7 +36,12 @@ void BNO085Driver::update() {
 
   // BNO085 can spontaneously reset — re-enable reports when it does
   if (imu_.wasReset()) {
-    enableReports();
+    delay(10);  // give BNO085 time to be ready after reset
+    if (!enableReports()) {
+      DEBUG_PRINTLN("[BNO085] WARNING: enableReports failed after reset");
+    } else {
+      DEBUG_PRINTLN("[BNO085] Re-enabled reports after reset");
+    }
   }
 
   while (imu_.getSensorEvent(&sensorValue_)) {

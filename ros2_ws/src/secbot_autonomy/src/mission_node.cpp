@@ -477,8 +477,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(POS_UWB_CORNER);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::PLACE_UWB_BEACON);
@@ -511,8 +509,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(POS_BUTTON_APPROACH);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_BUTTON);
@@ -568,8 +564,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(POS_CRANK_FLAG);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::PLACE_UWB_FLAG);
@@ -602,8 +596,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(POS_CRANK_APPROACH);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_CRANK);
@@ -681,7 +673,6 @@ void MissionNode::stepMission() {
           break;
         }
         case DuckCollectStep::INTAKE_ON: {
-          refreshDriveCommand();
           if (goal_reached_) {
             sendIntakeCommand(
                 mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, 1.0f);
@@ -704,7 +695,6 @@ void MissionNode::stepMission() {
           break;
         }
         case DuckCollectStep::EJECT: {
-          refreshDriveCommand();
           if (goal_reached_) {
             sendIntakeCommand(
                 mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, -1.0f);
@@ -749,8 +739,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDrivePath({{1.04, 1.14}, {0.20, 0.98}});
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_KEYPAD);
@@ -807,8 +795,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDrivePath({{0.13, 1.40}, POS_PRESSURE_APPROACH});
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_PRESSURE);
@@ -920,7 +906,6 @@ void MissionNode::stepMission() {
 
       switch (deposit_step_) {
         case DepositStep::NAV_TO_ZONE: {
-          refreshDriveCommand();
           if (goal_reached_) {
             sendIntakeCommand(
                 mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, -1.0f);
@@ -1012,8 +997,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(POS_LAUNCH_POINT);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::LAUNCH_DRONE);
@@ -1060,8 +1043,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(POS_FINISH);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         // Signal minibot to return
@@ -1106,8 +1087,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(interrupt_duck_pos_);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::DUCK_INTERRUPT_CAPTURE);
@@ -1138,8 +1117,6 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         sendDriveGoal(POS_DUCK_DEPOSIT);
         phase_entry_ = false;
-      } else {
-        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::DUCK_INTERRUPT_DEPOSIT);

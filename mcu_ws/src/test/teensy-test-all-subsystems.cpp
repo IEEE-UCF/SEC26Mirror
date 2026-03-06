@@ -464,8 +464,11 @@ static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;
 void loop() {
   g_rc.update();
 
-  // RC manual drive — DIP 1 ON = RC override
-  if (g_dip.isSwitchOn(DipSwitchSubsystem::DIP_RC_OVERRIDE)) {
+  // RC manual drive — DIP 1 ON = RC override, DIP 5 ON = autonomy (blocks RC)
+  bool rc_allowed = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_RC_OVERRIDE) &&
+                    !g_dip.isSwitchOn(DipSwitchSubsystem::DIP_AUTONOMY_ENABLE);
+
+  if (rc_allowed) {
     const auto& rc = g_rc.getData();
     bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
 
@@ -474,12 +477,13 @@ void loop() {
       float steering = static_cast<float>(rc.channels[3]) / 255.0f;
       g_drive.rcDrive(throttle, steering);
     } else {
+      // SWA off — stop if we were in manual mode
       if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
         g_drive.stop();
       }
     }
   } else {
-    // DIP 1 OFF — not in RC mode; stop if we were in manual
+    // RC not allowed — stop if we were in manual mode
     if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
       g_drive.stop();
     }

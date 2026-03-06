@@ -98,6 +98,12 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   static constexpr int kCalibrationSamples = 40;
   static constexpr int kCalibrationDelayMs = 50;
+
+ public:
+  // Diagnostic counters (for external monitoring / debug)
+  volatile uint32_t diag_update_count_ = 0;
+  volatile uint32_t diag_pub_count_ = 0;
+  volatile uint32_t diag_last_update_ms_ = 0;
 };
 
 }  // namespace Subsystem

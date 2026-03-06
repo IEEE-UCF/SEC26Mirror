@@ -4,6 +4,18 @@
  *        can be observed via `ros2 topic echo` / `ros2 service call`.
  * @date 2026-02-24
  *
+ * === DEBUG STAGE BRING-UP ===
+ * Set DEBUG_STAGE to incrementally enable subsystems for IMU rate debugging.
+ *   1 = micro-ROS + Heartbeat only
+ *   2 = + IMU
+ *   3 = + Wire2 (PCA servo/motor, encoder)
+ *   4 = + Wire0 (mux, GPIO, battery, TOF, DIP, buttons)
+ *   5 = + no-bus peripherals (LED, OLED, deploy, crank, keypad)
+ *   6 = + Drive + RC (full system minus UWB)
+ *   7 = + UWB (full system)
+ *
+ * Workflow: change DEBUG_STAGE, flash, measure `ros2 topic hz /mcu_robot/imu/data`
+ *
  * Hardware expected (see RobotPins.h for pin map):
  *   Wire0  — TCA9548A mux, TCA9555 GPIO, INA219 (mux ch0)
  *   Wire1  — BNO085 IMU
@@ -48,6 +60,20 @@
 #include <Arduino.h>
 
 #include "../robot/ultrareset.h"
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  DEBUG STAGE — change this value to control which subsystems are active
+//  Stage 1: micro-ROS + Heartbeat
+//  Stage 2: + IMU
+//  Stage 3: + Wire2 (PCA servo/motor, encoder)
+//  Stage 4: + Wire0 (mux, GPIO, battery, TOF, DIP, buttons)
+//  Stage 5: + no-bus peripherals (LED, OLED, deploy, crank, keypad)
+//  Stage 6: + Drive + RC
+//  Stage 7: + UWB (full system)
+// ═══════════════════════════════════════════════════════════════════════════
+#ifndef DEBUG_STAGE
+#define DEBUG_STAGE 2
+#endif
 
 #include <SPI.h>
 #include <TeensyThreads.h>
@@ -97,22 +123,53 @@ using namespace Subsystem;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Global driver / subsystem instances
+//  (declarations are unconditional — zero-cost if unused)
 // ═══════════════════════════════════════════════════════════════════════════
 
 // --- micro-ROS manager ---
 static MicrorosManagerSetup g_mr_setup("microros_manager");
 static MicrorosManager g_mr(g_mr_setup);
 
-// --- OLED display (SSD1306 128x64, hardware SPI1) ---
-static OLEDSubsystemSetup g_oled_setup("oled_subsystem", &SPI1,
-                                       /*dc*/ PIN_DISP_DC,
-                                       /*rst*/ PIN_DISP_RST,
-                                       /*cs*/ PIN_DISP_CS);
-static OLEDSubsystem g_oled(g_oled_setup);
-
 // --- Heartbeat ---
 static HeartbeatSubsystemSetup g_hb_setup("heartbeat_subsystem");
 static HeartbeatSubsystem g_hb(g_hb_setup);
+
+// --- Wire1: IMU (BNO085) ---
+static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", PIN_GYRO_RST,
+                                                     Wire1);
+static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
+static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
+static ImuSubsystem g_imu(g_imu_setup);
+
+// --- Wire2: PCA9685 manager (servo + motor boards) ---
+static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
+static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
+
+static Robot::PCA9685Driver* g_pca_servo =
+    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
+        "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2));
+static Robot::PCA9685Driver* g_pca_motor =
+    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
+        "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2));
+
+// --- Servo subsystem (PCA9685 #0, OE = pin 20) ---
+static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
+                                         PIN_SERVO_OE, NUM_SERVOS);
+static ServoSubsystem g_servo(g_servo_setup);
+
+// --- QTimer encoder hardware driver (pins 2-9, must precede motor manager) ---
+static Encoders::QTimerEncoder g_qtimer_encoder;
+
+// --- Motor manager subsystem (PCA9685 #1, OE = pin 21) ---
+static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
+                                                PIN_MOTOR_OE, NUM_MOTORS,
+                                                &g_qtimer_encoder);
+static MotorManagerSubsystem g_motor(g_motor_setup);
+
+// --- Encoder subsystem (QTimer FG pulse rate publisher) ---
+static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
+                                                  &g_qtimer_encoder, &g_motor);
+static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
 
 // --- Wire0: I2C mux (TCA9548A) ---
 static Drivers::I2CMuxDriverSetup g_mux_setup("i2c_mux", I2C_ADDR_MUX, Wire);
@@ -140,28 +197,6 @@ static std::vector<Drivers::TOFDriver*> g_tof_drivers = {&g_tof_driver};
 static SensorSubsystemSetup g_sensor_setup("sensor_subsystem", g_tof_drivers);
 static SensorSubsystem g_sensor(g_sensor_setup);
 
-// --- Wire1: IMU (BNO085) ---
-static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", PIN_GYRO_RST,
-                                                     Wire1);
-static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
-static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
-static ImuSubsystem g_imu(g_imu_setup);
-
-// --- Wire2: PCA9685 manager (servo + motor boards) ---
-static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
-static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
-
-static Robot::PCA9685Driver* g_pca_servo =
-    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2));
-static Robot::PCA9685Driver* g_pca_motor =
-    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
-        "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2));
-
-// --- RC subsystem (FlySky, Serial8 RX = pin 34) ---
-static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial8);
-static RCSubsystem g_rc(g_rc_setup);
-
 // --- DIP switch subsystem (TCA9555 port 0) ---
 static DipSwitchSubsystemSetup g_dip_setup("dip_switch_subsystem", &g_gpio);
 static DipSwitchSubsystem g_dip(g_dip_setup);
@@ -170,20 +205,31 @@ static DipSwitchSubsystem g_dip(g_dip_setup);
 static ButtonSubsystemSetup g_btn_setup("button_subsystem", &g_gpio);
 static ButtonSubsystem g_btn(g_btn_setup);
 
+// --- OLED display (SSD1306 128x64, hardware SPI1) ---
+static OLEDSubsystemSetup g_oled_setup("oled_subsystem", &SPI1,
+                                       /*dc*/ PIN_DISP_DC,
+                                       /*rst*/ PIN_DISP_RST,
+                                       /*cs*/ PIN_DISP_CS);
+static OLEDSubsystem g_oled(g_oled_setup);
+
 // --- LED subsystem (WS2812B) ---
 static LEDSubsystemSetup g_led_setup("led_subsystem", PIN_RGB_LEDS,
                                      NUM_RGB_LEDS);
 static LEDSubsystem g_led(g_led_setup);
 
-// --- Servo subsystem (PCA9685 #0, OE = pin 20) ---
-static ServoSubsystemSetup g_servo_setup("servo_subsystem", g_pca_servo,
-                                         PIN_SERVO_OE, NUM_SERVOS);
-static ServoSubsystem g_servo(g_servo_setup);
-
 // --- Crank subsystem (servo on PCA9685 #0, channel 0) ---
 static CrankSubsystemSetup g_crank_setup("crank_subsystem", &g_servo,
                                           CRANK_SERVO_IDX);
 static CrankSubsystem g_crank(g_crank_setup);
+
+// --- Deploy subsystem (button-triggered deployment) ---
+static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
+                                           &g_led, &g_oled);
+static DeploySubsystem g_deploy(g_deploy_setup);
+
+// --- RC subsystem (FlySky, Serial8 RX = pin 34) ---
+static RCSubsystemSetup g_rc_setup("rc_subsystem", &Serial8);
+static RCSubsystem g_rc(g_rc_setup);
 
 // --- UWB subsystem (DW3000 tag, SPI0) ---
 static Drivers::UWBDriverSetup g_uwb_driver_setup("uwb_driver",
@@ -193,25 +239,6 @@ static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
 static UWBSubsystem g_uwb(g_uwb_setup);
-
-// --- QTimer encoder hardware driver (pins 2-9, must precede motor manager) ---
-static Encoders::QTimerEncoder g_qtimer_encoder;
-
-// --- Motor manager subsystem (PCA9685 #1, OE = pin 21) ---
-static MotorManagerSubsystemSetup g_motor_setup("motor_subsystem", g_pca_motor,
-                                                PIN_MOTOR_OE, NUM_MOTORS,
-                                                &g_qtimer_encoder);
-static MotorManagerSubsystem g_motor(g_motor_setup);
-
-// --- Encoder subsystem (QTimer FG pulse rate publisher) ---
-static EncoderSubsystemSetup g_encoder_sub_setup("encoder_subsystem",
-                                                  &g_qtimer_encoder, &g_motor);
-static EncoderSubsystem g_encoder_sub(g_encoder_sub_setup);
-
-// --- Deploy subsystem (button-triggered deployment) ---
-static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
-                                           &g_led, &g_oled);
-static DeploySubsystem g_deploy(g_deploy_setup);
 
 // --- Reset subsystem (micro-ROS service to reset all subsystems) ---
 static ResetSubsystemSetup g_reset_setup("reset_subsystem");
@@ -336,6 +363,7 @@ void setup() {
   Serial.println(
       PSTR("\r\nSEC26 Robot — All Subsystems Test (TeensyThreads)\r\n"));
   DEBUG_PRINTLN("\r\n=== SEC26 All-Subsystems Test — Debug Console (SerialUSB1) ===\r\n");
+  DEBUG_PRINTF("[CONFIG] DEBUG_STAGE = %d\n", DEBUG_STAGE);
 
   // 0. I2C bus mutexes
   I2CBus::initLocks();
@@ -345,85 +373,96 @@ void setup() {
   pinMode(PIN_MUX_RESET, OUTPUT);
   digitalWrite(PIN_MUX_RESET, HIGH);  // active-LOW reset — release
 
-  // 2. Init subsystems
-  DEBUG_PRINTLN("[INIT] --- Subsystem initialization ---");
+  // ─── Stage 1: micro-ROS + Heartbeat ───────────────────────────────────
+  DEBUG_PRINTLN("[INIT] --- Stage 1: micro-ROS + Heartbeat ---");
   g_mr.init();       DEBUG_PRINTLN("[INIT] MicrorosManager OK");
-  g_oled.init();     DEBUG_PRINTLN("[INIT] OLED OK");
   g_hb.init();       DEBUG_PRINTLN("[INIT] Heartbeat OK");
-  g_mux.init();      DEBUG_PRINTLN("[INIT] I2C Mux OK");
-  g_gpio.init();     DEBUG_PRINTLN("[INIT] GPIO Expander OK");
-  g_battery.init();  DEBUG_PRINTLN("[INIT] Battery OK");
-  g_sensor.init();   DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
+
+  g_mr.registerParticipant(&g_hb);
+
+  // ─── Stage 2: + IMU ───────────────────────────────────────────────────
+#if DEBUG_STAGE >= 2
+  DEBUG_PRINTLN("[INIT] --- Stage 2: + IMU ---");
   g_imu.init();      DEBUG_PRINTLN("[INIT] IMU OK");
-  g_pca_mgr.init();  DEBUG_PRINTLN("[INIT] PCA9685 Manager OK");
-  g_rc.init();       DEBUG_PRINTLN("[INIT] RC Receiver OK");
-  g_dip.init();      DEBUG_PRINTLN("[INIT] DIP Switch OK");
-  g_btn.init();      DEBUG_PRINTLN("[INIT] Buttons OK");
-  g_led.init();      DEBUG_PRINTLN("[INIT] LEDs OK");
-  g_servo.init();    DEBUG_PRINTLN("[INIT] Servo OK");
-  g_crank.init();        DEBUG_PRINTLN("[INIT] Crank OK");
-  g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
-  g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
-  g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
 
-  // Conditional UWB init — DIP 2 ON = UWB enabled
-  s_uwb_enabled = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_UWB_ENABLE);
-  bool uwb_enabled = s_uwb_enabled;
-  if (uwb_enabled) {
-    SPI.begin();
-    g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
-    g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
-  } else {
-    DEBUG_PRINTLN("[INIT] UWB SKIPPED (DIP 2 OFF)");
-  }
+  g_mr.registerParticipant(&g_imu);
+#endif
 
-  configureDriveSetup();
-  g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
-  g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
+  // ─── Stage 3: + Wire2 (PCA servo/motor, encoder) ─────────────────────
+#if DEBUG_STAGE >= 3
+  DEBUG_PRINTLN("[INIT] --- Stage 3: + Wire2 (PCA, servo, motor, encoder) ---");
+  g_pca_mgr.init();      DEBUG_PRINTLN("[INIT] PCA9685 Manager OK");
+  g_servo.init();         DEBUG_PRINTLN("[INIT] Servo OK");
+  g_motor.init();         DEBUG_PRINTLN("[INIT] Motor Manager OK");
+  g_encoder_sub.init();   DEBUG_PRINTLN("[INIT] Encoder OK");
+
+  g_mr.registerParticipant(&g_servo);
+  g_mr.registerParticipant(&g_motor);
+  g_mr.registerParticipant(&g_encoder_sub);
+#endif
+
+  // ─── Stage 4: + Wire0 (mux, GPIO, battery, TOF, DIP, buttons) ────────
+#if DEBUG_STAGE >= 4
+  DEBUG_PRINTLN("[INIT] --- Stage 4: + Wire0 (mux, GPIO, battery, TOF, DIP, buttons) ---");
+  g_mux.init();       DEBUG_PRINTLN("[INIT] I2C Mux OK");
+  g_gpio.init();      DEBUG_PRINTLN("[INIT] GPIO Expander OK");
+  g_battery.init();   DEBUG_PRINTLN("[INIT] Battery OK");
+  g_sensor.init();    DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
+  g_dip.init();       DEBUG_PRINTLN("[INIT] DIP Switch OK");
+  g_btn.init();       DEBUG_PRINTLN("[INIT] Buttons OK");
+
+  g_mr.registerParticipant(&g_battery);
+  g_mr.registerParticipant(&g_sensor);
+  g_mr.registerParticipant(&g_dip);
+  g_mr.registerParticipant(&g_btn);
+#endif
+
+  // ─── Stage 5: + no-bus peripherals (LED, OLED, deploy, crank, keypad) ─
+#if DEBUG_STAGE >= 5
+  DEBUG_PRINTLN("[INIT] --- Stage 5: + LED, OLED, deploy, crank, keypad ---");
+  g_led.init();       DEBUG_PRINTLN("[INIT] LEDs OK");
+  g_oled.init();      DEBUG_PRINTLN("[INIT] OLED OK");
+  g_crank.init();     DEBUG_PRINTLN("[INIT] Crank OK");
+  g_deploy.init();    DEBUG_PRINTLN("[INIT] Deploy OK");
+
+  g_mr.registerParticipant(&g_led);
+  g_mr.registerParticipant(&g_oled);
+  g_mr.registerParticipant(&g_crank);
+  g_mr.registerParticipant(&g_deploy);
 
   // 2a. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
   FastLED.show();
 
-  // 2b. OLED startup debug info
+  // OLED startup info
   g_oled.appendText("SEC26 Test v1.0");
-  g_oled.appendText("Subsystems OK");
+  char stage_buf[32];
+  snprintf(stage_buf, sizeof(stage_buf), "DEBUG_STAGE=%d", DEBUG_STAGE);
+  g_oled.appendText(stage_buf);
   g_oled.appendText("Waiting for uROS...");
 
-  // 2b2. Update OLED when micro-ROS connects/disconnects
   g_mr.setStateCallback([](bool connected) {
     g_oled.appendText(connected ? "uROS CONNECTED" : "uROS DISCONNECTED");
   });
 
-  // 2c. Wire battery → OLED status line
+  // Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
+#endif
 
-  // 2d. Wire OLED dashboard data sources (DIP 6 = debug dashboard)
-  g_oled.setDashboardSources(&g_dip, &g_battery, &g_imu,
-                             uwb_enabled ? &g_uwb : nullptr);
+  // ─── Stage 6: + Drive + RC ────────────────────────────────────────────
+#if DEBUG_STAGE >= 6
+  DEBUG_PRINTLN("[INIT] --- Stage 6: + Drive + RC ---");
+  g_rc.init();         DEBUG_PRINTLN("[INIT] RC Receiver OK");
+  configureDriveSetup();
+  g_drive.init();      DEBUG_PRINTLN("[INIT] Drive OK");
+  g_keypad.init();     DEBUG_PRINTLN("[INIT] Keypad OK");
 
-  // 3. Register micro-ROS participants
-  DEBUG_PRINTLN("[INIT] --- Registering micro-ROS participants ---");
-  g_mr.registerParticipant(&g_oled);
-  g_mr.registerParticipant(&g_hb);
-  g_mr.registerParticipant(&g_battery);
-  g_mr.registerParticipant(&g_sensor);
-  g_mr.registerParticipant(&g_imu);
   g_mr.registerParticipant(&g_rc);
-  g_mr.registerParticipant(&g_dip);
-  g_mr.registerParticipant(&g_btn);
-  g_mr.registerParticipant(&g_led);
-  g_mr.registerParticipant(&g_servo);
-  g_mr.registerParticipant(&g_crank);
-  g_mr.registerParticipant(&g_motor);
-  g_mr.registerParticipant(&g_encoder_sub);
-  if (uwb_enabled) g_mr.registerParticipant(&g_uwb);
-  g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
   g_mr.registerParticipant(&g_drive);
   g_mr.registerParticipant(&g_keypad);
 
-  // 3a. Register subsystems as reset targets
+  // Register subsystems as reset targets
   g_reset.addTarget(&g_motor);
   g_reset.addTarget(&g_servo);
   g_reset.addTarget(&g_encoder_sub);
@@ -431,37 +470,90 @@ void setup() {
   g_reset.addTarget(&g_drive);
   g_reset.addTarget(&g_crank);
   g_reset.addTarget(&g_keypad);
-  DEBUG_PRINTF("[INIT] Registered %d participants\n", 18);
+#endif
 
-  // 4. Start threaded tasks
+  // ─── Stage 7: + UWB ──────────────────────────────────────────────────
+#if DEBUG_STAGE >= 7
+  DEBUG_PRINTLN("[INIT] --- Stage 7: + UWB ---");
+  // Conditional UWB init — DIP 2 ON = UWB enabled
+#if DEBUG_STAGE >= 4
+  s_uwb_enabled = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_UWB_ENABLE);
+#endif
+  if (s_uwb_enabled) {
+    SPI.begin();
+    g_uwb.init();          DEBUG_PRINTLN("[INIT] UWB OK");
+    g_uwb_driver.setTargetAnchors(ROBOT_UWB_ANCHOR_IDS, ROBOT_UWB_NUM_ANCHORS);
+    g_mr.registerParticipant(&g_uwb);
+  } else {
+    DEBUG_PRINTLN("[INIT] UWB SKIPPED (DIP 2 OFF or stage < 4)");
+  }
+#endif
+
+  // ─── Wire OLED dashboard (needs subsystems from multiple stages) ──────
+#if DEBUG_STAGE >= 5
+  g_oled.setDashboardSources(
+#if DEBUG_STAGE >= 4
+      &g_dip, &g_battery, &g_imu,
+#else
+      nullptr, nullptr, &g_imu,
+#endif
+#if DEBUG_STAGE >= 7
+      s_uwb_enabled ? &g_uwb : nullptr
+#else
+      nullptr
+#endif
+  );
+#endif
+
+  // ─── Start threaded tasks ─────────────────────────────────────────────
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
   g_mr.beginThreaded(8192, 4);       // ROS agent
-  g_imu.beginThreaded(2048, 3, 10);  // 50 Hz
-  // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 25);  // 20 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);  // 1000 Hz — NFPShop reverse-pulse timing
-  g_encoder_sub.beginThreaded(1024, 2, 20);  // 50 Hz encoder reading
-  g_oled.beginThreaded(2048, 1, 25);           // 20 Hz display
-  g_battery.beginThreaded(1024, 1, 100);       // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);        // 10 Hz TOF
-  g_dip.beginThreaded(1024, 1, 20);            // 2 Hz
-  g_btn.beginThreaded(1024, 1, 20);            // 50 Hz
-  g_led.beginThreaded(1024, 1, 50);            // 20 Hz
-  g_hb.beginThreaded(1024, 1, 200);            // 5 Hz
-  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 50);  // 20 Hz UWB ranging
-  g_deploy.beginThreaded(1024, 1, 20);         // 50 Hz deploy button
-  g_crank.beginThreaded(1024, 1, 50);          // 20 Hz crank
-  g_keypad.beginThreaded(1024, 1, 50);         // 20 Hz keypad
-  g_drive.beginThreaded(4096, 3, 20);          // 50 Hz drive control
-  threads.addThread(pca_task, nullptr, 1024);  // PWM flush
+  g_hb.beginThreaded(1024, 1, 1000); // 1 Hz
+
+#if DEBUG_STAGE >= 2
+  g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (50ms was ~14Hz due to I2C overhead)
+#endif
+
+#if DEBUG_STAGE >= 3
+  g_servo.beginThreaded(1024, 2, 100);       // 10 Hz state pub
+  g_motor.beginThreaded(1024, 2, 1);         // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(1024, 2, 50);  // 20 Hz encoder reading
+  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
+#endif
+
+#if DEBUG_STAGE >= 4
+  g_battery.beginThreaded(1024, 1, 2000);  // 0.5 Hz
+  g_sensor.beginThreaded(1024, 1, 500);    // 2 Hz TOF
+  g_dip.beginThreaded(1024, 1, 2000);      // 0.5 Hz
+  g_btn.beginThreaded(1024, 1, 100);       // 10 Hz
+#endif
+
+#if DEBUG_STAGE >= 5
+  g_led.beginThreaded(1024, 1, 200);       // 5 Hz
+  g_oled.beginThreaded(2048, 1, 100);      // 10 Hz display
+  g_deploy.beginThreaded(1024, 1, 100);    // 10 Hz deploy button
+  g_crank.beginThreaded(1024, 1, 200);     // 5 Hz crank
+  g_keypad.beginThreaded(1024, 1, 200);    // 5 Hz keypad
+#endif
+
+#if DEBUG_STAGE >= 6
+  g_drive.beginThreaded(4096, 3, 20);      // 50 Hz drive control
+#endif
+
+#if DEBUG_STAGE >= 7
+  if (s_uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
+#endif
+
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 
 static uint32_t s_last_debug_ms = 0;
-static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;
+static constexpr uint32_t DEBUG_INTERVAL_MS = 200;
 
 void loop() {
+  // RC polling — must be in main loop (IBusBM NOTIMER mode)
+#if DEBUG_STAGE >= 6
   g_rc.update();
 
   // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
@@ -491,25 +583,36 @@ void loop() {
     g_motor.setSpeed(2, knob1);
     g_motor.setSpeed(3, knob2);
   }
+#endif
 
   // Periodic debug output
   uint32_t now = millis();
   if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
     s_last_debug_ms = now;
 
-    auto imu_data = g_imu_driver.getData();
-
-    DEBUG_PRINTF("[%lu] === Periodic Status ===\n", now);
+    DEBUG_PRINTF("[%lu] === Periodic Status (Stage %d) ===\n", now, DEBUG_STAGE);
     DEBUG_PRINTF("  uROS state : %s\n", g_mr.isConnected() ? "CONNECTED" : "WAITING");
+
+#if DEBUG_STAGE >= 2
+    {
+      auto imu_data = g_imu_driver.getData();
+      DEBUG_PRINTF("  IMU quat   : w=%.2f x=%.2f y=%.2f z=%.2f  yaw=%.1f\n",
+                   imu_data.qw, imu_data.qx, imu_data.qy, imu_data.qz,
+                   imu_data.yaw);
+      DEBUG_PRINTF("  IMU diag   : updates=%lu pubs=%lu\n",
+                   g_imu.diag_update_count_, g_imu.diag_pub_count_);
+    }
+#endif
+
+#if DEBUG_STAGE >= 4
     DEBUG_PRINTF("  Battery    : %.2fV  %.0fmA  %.0fmW\n",
                  g_power_driver.getVoltage(), g_power_driver.getCurrentmA(),
                  g_power_driver.getPowermW());
-    DEBUG_PRINTF("  IMU quat   : w=%.2f x=%.2f y=%.2f z=%.2f  yaw=%.1f\n",
-                 imu_data.qw, imu_data.qx, imu_data.qy, imu_data.qz,
-                 imu_data.yaw);
     DEBUG_PRINTF("  DIP        : 0x%02X\n", g_dip.getState());
     DEBUG_PRINTF("  Buttons    : 0x%02X\n", g_btn.getState());
+#endif
 
+#if DEBUG_STAGE >= 6
     // --- Encoder-based odometry (wheel odometry, NOT UWB) ---
     {
       Pose2D pose = g_drive.getPose();
@@ -536,13 +639,16 @@ void loop() {
                    g_encoder_sub.getTickRate(RobotConfig::LEFT_ENCODER_IDX),
                    g_encoder_sub.getTickRate(RobotConfig::RIGHT_ENCODER_IDX));
     }
+#endif
 
+#if DEBUG_STAGE >= 7
     // --- UWB status (separate positioning system) ---
     if (s_uwb_enabled) {
       DEBUG_PRINTF("  UWB        : ENABLED (triangulation — separate from odom)\n");
     } else {
       DEBUG_PRINTF("  UWB        : OFF (encoder odom only)\n");
     }
+#endif
 
     DEBUG_PRINTF("  Uptime     : %lus\n", now / 1000);
   }

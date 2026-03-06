@@ -418,24 +418,24 @@ void setup() {
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
   g_mr.beginThreaded(8192, 4);       // ROS agent
-  g_imu.beginThreaded(2048, 3, 10);  // 100 Hz
+  g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (I2C + mutex overhead adds ~20ms per cycle)
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 25);     // 40 Hz state pub
+  g_servo.beginThreaded(1024, 2, 100);    // 10 Hz state pub
   g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(1024, 2, 20);  // 50 Hz encoder reading
-  g_oled.beginThreaded(2048, 1, 25);      // 40 Hz display
-  g_battery.beginThreaded(1024, 1, 100);  // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
-  g_dip.beginThreaded(1024, 1, 500);      // 2 Hz
-  g_btn.beginThreaded(1024, 1, 20);       // 50 Hz
-  g_led.beginThreaded(1024, 1, 50);       // 20 Hz
-  g_hb.beginThreaded(1024, 1, 200);       // 5 Hz
-  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 50);  // 20 Hz UWB ranging
-  g_arm.beginThreaded(1024, 2, 20);       // 50 Hz arm
-  g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
-  g_deploy.beginThreaded(1024, 1, 20);    // 50 Hz deploy button
-  g_crank.beginThreaded(1024, 1, 50);     // 20 Hz crank
-  g_keypad.beginThreaded(1024, 1, 50);   // 20 Hz keypad
+  g_encoder_sub.beginThreaded(1024, 2, 50);  // 20 Hz encoder reading
+  g_oled.beginThreaded(2048, 1, 100);     // 10 Hz display
+  g_battery.beginThreaded(1024, 1, 2000); // 0.5 Hz
+  g_sensor.beginThreaded(1024, 1, 500);   // 2 Hz TOF
+  g_dip.beginThreaded(1024, 1, 2000);     // 0.5 Hz
+  g_btn.beginThreaded(1024, 1, 100);      // 10 Hz
+  g_led.beginThreaded(1024, 1, 200);      // 5 Hz
+  g_hb.beginThreaded(1024, 1, 1000);      // 1 Hz
+  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
+  g_arm.beginThreaded(1024, 2, 50);       // 20 Hz arm
+  g_intake.beginThreaded(1024, 2, 50);    // 20 Hz intake
+  g_deploy.beginThreaded(1024, 1, 100);   // 10 Hz deploy button
+  g_crank.beginThreaded(1024, 1, 200);    // 5 Hz crank
+  g_keypad.beginThreaded(1024, 1, 200);   // 5 Hz keypad
   g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");

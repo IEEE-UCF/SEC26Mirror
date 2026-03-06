@@ -254,7 +254,15 @@ void UWBSubsystem::publishPeerRanges() {
     msg.rx_timestamp = r.rx_timestamp;
     msg.valid = r.valid;
     msg.error_code = r.error_code;
+
+#ifdef USE_TEENSYTHREADS
+    {
+      Threads::Scope guard(g_microros_mutex);
+      (void)rcl_publish(&peer_pubs_[i], &msg, NULL);
+    }
+#else
     (void)rcl_publish(&peer_pubs_[i], &msg, NULL);
+#endif
   }
 }
 
@@ -264,7 +272,14 @@ void UWBSubsystem::publishRanging() {
   }
 
   updateRangingMessage();
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope guard(g_microros_mutex);
+    (void)rcl_publish(&pub_, &msg_, NULL);
+  }
+#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
 }
 
 }  // namespace Subsystem

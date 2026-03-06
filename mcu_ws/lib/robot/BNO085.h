@@ -69,6 +69,7 @@ class BNO085Driver : public Classes::BaseDriver {
   BNO085DriverData getData() const { return data_; }
 
   float calculateYaw(float qx, float qy, float qz, float qw);
+  bool enableReports();
 
  private:
   const BNO085DriverSetup setup_;

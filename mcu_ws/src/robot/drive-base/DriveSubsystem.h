@@ -159,6 +159,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     rcThrottleFilter_.configureTauDtFast(0.15f, 0.005f);
     rcSteeringFilter_.configureTauDtFast(0.15f, 0.005f);
 
+    // cmd_vel input smoothing: same tau/dt as RC for consistent feel
+    cmdVelLinearFilter_.configureTauDtFast(0.15f, 0.005f);
+    cmdVelAngularFilter_.configureTauDtFast(0.15f, 0.005f);
+
     // Ensure motors are off at startup
     stopMotors();
     last_update_us_ = micros();
@@ -218,8 +222,8 @@ class DriveSubsystem : public IMicroRosParticipant,
           (rightVel - leftVel) / setup_.locSetup.track_width;
     }
 
-    // ── Command timeout check ──
-    if (mode_ != DriveMode::IDLE && mode_ != DriveMode::MANUAL) {
+    // ── Command timeout check (applies to all active modes including MANUAL) ──
+    if (mode_ != DriveMode::IDLE) {
       uint32_t now_ms = millis();
       if (now_ms - lastCommandMs_ > setup_.commandTimeoutMs) {
         mode_ = DriveMode::IDLE;
@@ -427,6 +431,32 @@ class DriveSubsystem : public IMicroRosParticipant,
 
     float left = secbot::utils::clamp(throttle + steering, -1.0f, 1.0f);
     float right = secbot::utils::clamp(throttle - steering, -1.0f, 1.0f);
+    lastCommandMs_ = millis();
+    manualDrive(left, right);
+  }
+
+  /**
+   * @brief Drive from ROS2 cmd_vel (normalized [-1.0, 1.0]).
+   * @param linear  Forward/backward (-1.0 to 1.0), positive = forward
+   * @param angular Turn rate (-1.0 to 1.0), positive = turn left (CCW)
+   * Same smoothing as RC, with command timeout for safety.
+   */
+  void cmdVelDrive(float linear, float angular) {
+    linear = secbot::utils::clamp(linear, -1.0f, 1.0f);
+    angular = secbot::utils::clamp(angular, -1.0f, 1.0f);
+
+    static constexpr float DEADZONE = 0.05f;
+    if (linear > -DEADZONE && linear < DEADZONE) linear = 0.0f;
+    if (angular > -DEADZONE && angular < DEADZONE) angular = 0.0f;
+
+    // Smooth cmd_vel inputs with same low-pass filter as RC
+    linear = cmdVelLinearFilter_.update(linear);
+    angular = cmdVelAngularFilter_.update(angular);
+
+    // Differential drive mix: positive angular = CCW = left slower, right faster
+    float left = secbot::utils::clamp(linear - angular, -1.0f, 1.0f);
+    float right = secbot::utils::clamp(linear + angular, -1.0f, 1.0f);
+    lastCommandMs_ = millis();
     manualDrive(left, right);
   }
 
@@ -440,6 +470,8 @@ class DriveSubsystem : public IMicroRosParticipant,
     angularProfile_.reset();
     rcThrottleFilter_.reset(0.0f, false);
     rcSteeringFilter_.reset(0.0f, false);
+    cmdVelLinearFilter_.reset(0.0f, false);
+    cmdVelAngularFilter_.reset(0.0f, false);
   }
 
   /** @brief Override the internal pose estimate (e.g., from Pi EKF). */
@@ -678,9 +710,9 @@ class DriveSubsystem : public IMicroRosParticipant,
 
     switch (msg->drive_mode) {
       case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
-        float vx = static_cast<float>(msg->goal_velocity.linear.x);
-        float omega = static_cast<float>(msg->goal_velocity.angular.z);
-        self->setVelocity(vx, omega);
+        float linear = static_cast<float>(msg->goal_velocity.linear.x);
+        float angular = static_cast<float>(msg->goal_velocity.angular.z);
+        self->cmdVelDrive(linear, angular);
         break;
       }
       case mcu_msgs__msg__DriveBase__DRIVE_GOAL: {
@@ -825,6 +857,10 @@ class DriveSubsystem : public IMicroRosParticipant,
   // RC input smoothing
   secbot::utils::LowPass1P rcThrottleFilter_;
   secbot::utils::LowPass1P rcSteeringFilter_;
+
+  // cmd_vel input smoothing (same filter type as RC)
+  secbot::utils::LowPass1P cmdVelLinearFilter_;
+  secbot::utils::LowPass1P cmdVelAngularFilter_;
 
   // Timing
   uint32_t last_update_us_ = 0;

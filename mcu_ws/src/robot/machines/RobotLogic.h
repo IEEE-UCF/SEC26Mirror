@@ -445,11 +445,9 @@ void setup() {
 void loop() {
   g_rc.update();
 
-  // RC manual drive — DIP 1 ON = RC override, DIP 5 ON = autonomy (blocks RC)
-  bool rc_allowed = g_dip.isSwitchOn(DipSwitchSubsystem::DIP_RC_OVERRIDE) &&
-                    !g_dip.isSwitchOn(DipSwitchSubsystem::DIP_AUTONOMY_ENABLE);
-
-  if (rc_allowed) {
+  // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
+  if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
+    // MCU/RC mode — RC stick drives motors
     const auto& rc = g_rc.getData();
     bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
 
@@ -458,17 +456,12 @@ void loop() {
       float steering = static_cast<float>(rc.channels[3]) / 255.0f;
       g_drive.rcDrive(throttle, steering);
     } else {
-      // SWA off — stop if we were in manual mode
       if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
         g_drive.stop();
       }
     }
-  } else {
-    // RC not allowed — stop if we were in manual mode
-    if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
-      g_drive.stop();
-    }
   }
+  // DIP 1 ON — ROS2 controls drive via drive_base/command subscription
 
   delay(5);
 }

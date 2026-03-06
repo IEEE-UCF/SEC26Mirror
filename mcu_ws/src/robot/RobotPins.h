@@ -104,11 +104,11 @@ constexpr uint8_t MUX_CH_BATTERY = 0;  // INA219 power sensor
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Port 0 (pins 0-7): DIP switches (active HIGH = ON)
-//   DIP 1 (bit 0): RC override — ON = RC transmitter drives motors
+//   DIP 1 (bit 0): ROS2 enable — ON = ROS2 control, OFF = MCU/RC control
 //   DIP 2 (bit 1): UWB enable — ON = DW3000 ranging active
 //   DIP 3 (bit 2): Vision enable — ON = duck detection (ROS2)
 //   DIP 4 (bit 3): Speed profile — ON = half speed (ROS2)
-//   DIP 5 (bit 4): Autonomy enable — ON = mission FSM auto (ROS2)
+//   DIP 5 (bit 4): (unused)
 //   DIP 6 (bit 5): OLED debug — ON = debug dashboard mode
 //   DIP 7 (bit 6): Force reflash — ON = force OTA reflash
 //   DIP 8 (bit 7): Deploy target — ON = selects deploy target

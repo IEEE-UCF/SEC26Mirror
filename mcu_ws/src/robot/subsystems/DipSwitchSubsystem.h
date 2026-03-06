@@ -43,11 +43,11 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
                            public Classes::BaseSubsystem {
  public:
   // Named DIP switch bit positions (bit 0 = physical switch 1)
-  static constexpr uint8_t DIP_RC_OVERRIDE     = 0;  // ON = RC drives motors
+  static constexpr uint8_t DIP_ROS2_ENABLE     = 0;  // ON = ROS2 control, OFF = MCU/RC control
   static constexpr uint8_t DIP_UWB_ENABLE      = 1;  // ON = DW3000 ranging active
   static constexpr uint8_t DIP_VISION_ENABLE   = 2;  // ON = duck detection (ROS2)
   static constexpr uint8_t DIP_SPEED_PROFILE   = 3;  // ON = half speed (ROS2)
-  static constexpr uint8_t DIP_AUTONOMY_ENABLE = 4;  // ON = mission FSM auto (ROS2)
+  static constexpr uint8_t DIP_RESERVED_4      = 4;  // (unused)
   static constexpr uint8_t DIP_OLED_DEBUG      = 5;  // ON = debug dashboard
   static constexpr uint8_t DIP_FORCE_REFLASH   = 6;  // ON = force reflash
   static constexpr uint8_t DIP_DEPLOY_TARGET   = 7;  // ON = deploy target

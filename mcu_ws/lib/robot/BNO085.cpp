@@ -13,9 +13,10 @@ bool BNO085Driver::init() {
     return initSuccess_;
   }
 
-  if (!imu_.enableReport(SH2_ACCELEROMETER) ||
-      !imu_.enableReport(SH2_GYROSCOPE_CALIBRATED) ||
-      !imu_.enableReport(SH2_ROTATION_VECTOR)) {
+  // Request reports at 10ms (100Hz) to match IMU thread rate
+  if (!imu_.enableReport(SH2_ACCELEROMETER, 10000) ||
+      !imu_.enableReport(SH2_GYROSCOPE_CALIBRATED, 10000) ||
+      !imu_.enableReport(SH2_ROTATION_VECTOR, 10000)) {
     initSuccess_ = false;
   }
 

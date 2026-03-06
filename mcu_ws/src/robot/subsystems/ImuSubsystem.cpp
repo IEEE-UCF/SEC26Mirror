@@ -158,7 +158,12 @@ void ImuSubsystem::publishData() {
 
 #ifdef USE_TEENSYTHREADS
   {
+    uint32_t wait_start = micros();
     Threads::Scope guard(g_microros_mutex);
+    uint32_t wait_us = micros() - wait_start;
+    if (wait_us > 100) {
+      DEBUG_PRINTF("[IMU] mutex wait: %lu us\n", (unsigned long)wait_us);
+    }
     (void)rcl_publish(&pub_, &msg_, NULL);
   }
 #else

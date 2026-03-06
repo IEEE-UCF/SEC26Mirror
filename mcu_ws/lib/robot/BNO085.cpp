@@ -2,6 +2,7 @@
 
 #include "DebugLog.h"
 
+
 namespace Drivers {
 
 bool BNO085Driver::init() {
@@ -27,7 +28,7 @@ bool BNO085Driver::enableReports() {
   // 10000us = 10ms = 100Hz per report
   return imu_.enableReport(SH2_ACCELEROMETER, 10000) &&
          imu_.enableReport(SH2_GYROSCOPE_CALIBRATED, 10000) &&
-         imu_.enableReport(SH2_ROTATION_VECTOR, 10000);
+         imu_.enableReport(SH2_GAME_ROTATION_VECTOR, 10000);
 }
 
 void BNO085Driver::update() {
@@ -58,11 +59,11 @@ void BNO085Driver::update() {
         data_.gyro_z = sensorValue_.un.gyroscope.z;
         break;
 
-      case SH2_ROTATION_VECTOR:
-        data_.qx = sensorValue_.un.rotationVector.i;
-        data_.qy = sensorValue_.un.rotationVector.j;
-        data_.qz = sensorValue_.un.rotationVector.k;
-        data_.qw = sensorValue_.un.rotationVector.real;
+      case SH2_GAME_ROTATION_VECTOR:
+        data_.qx = sensorValue_.un.gameRotationVector.i;
+        data_.qy = sensorValue_.un.gameRotationVector.j;
+        data_.qz = sensorValue_.un.gameRotationVector.k;
+        data_.qw = sensorValue_.un.gameRotationVector.real;
 
         data_.yaw = calculateYaw(data_.qx, data_.qy, data_.qz, data_.qw);
         break;
@@ -71,6 +72,7 @@ void BNO085Driver::update() {
         break;
     }
   }
+
 }
 
 // yaw in radians

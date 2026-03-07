@@ -84,16 +84,16 @@ void DroneFlightSubsystem::update(const IMUData& imu, float altitude_m,
   // 1. Altitude hold (modifies throttle_)
   throttle_ = sp.throttle;
   if (sp.altitude_hold) {
-    controlAltitude(altitude_m, dt);
+    controlAltitude(sp, altitude_m, dt);
   }
 
-  // Clamp desired angles to setpoint
+  // Clamp desired angles
   sp.roll_des = clamp(sp.roll_des, -Config::MAX_ROLL_DEG, Config::MAX_ROLL_DEG);
   sp.pitch_des =
       clamp(sp.pitch_des, -Config::MAX_PITCH_DEG, Config::MAX_PITCH_DEG);
 
-  // 2. Cascaded angle → rate PID
-  controlAngle(imu, dt);
+  // 2. Cascaded angle → rate PID (using clamped sp)
+  controlAngle(imu, sp, dt);
 
   // 3. Motor mixing
   controlMixer();
@@ -102,12 +102,8 @@ void DroneFlightSubsystem::update(const IMUData& imu, float altitude_m,
   writeMotors();
 }
 
-void DroneFlightSubsystem::controlAngle(const IMUData& imu, float dt) {
-  FlightSetpoint sp;
-  xSemaphoreTake(sp_mutex_, portMAX_DELAY);
-  sp = sp_;
-  xSemaphoreGive(sp_mutex_);
-
+void DroneFlightSubsystem::controlAngle(const IMUData& imu,
+                                        const FlightSetpoint& sp, float dt) {
   // Outer loop: angle → desired rate
   float desired_roll_rate =
       roll_angle_pid_.update(sp.roll_des, imu.roll, dt);
@@ -134,12 +130,8 @@ void DroneFlightSubsystem::controlAngle(const IMUData& imu, float dt) {
   }
 }
 
-void DroneFlightSubsystem::controlAltitude(float altitude_m, float dt) {
-  FlightSetpoint sp;
-  xSemaphoreTake(sp_mutex_, portMAX_DELAY);
-  sp = sp_;
-  xSemaphoreGive(sp_mutex_);
-
+void DroneFlightSubsystem::controlAltitude(const FlightSetpoint& sp,
+                                           float altitude_m, float dt) {
   // Estimate vertical velocity
   if (!alt_initialized_) {
     alt_prev_ = altitude_m;

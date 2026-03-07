@@ -78,7 +78,7 @@ class DroneStateSubsystem : public Subsystem::IMicroRosParticipant {
 
  private:
   void publishState();
-  void updateCmdVel();
+  void updateCmdVel(float dt);
 
   // Service callbacks
   static void armCallback(const void* req, void* res);
@@ -133,6 +133,7 @@ class DroneStateSubsystem : public Subsystem::IMicroRosParticipant {
   mcu_msgs__srv__DroneSetMotors_Response motors_res_{};
 
   uint32_t last_state_pub_ms_ = 0;
+  uint32_t last_update_ms_ = 0;
 
   // Static instance for service callbacks
   static DroneStateSubsystem* s_instance_;

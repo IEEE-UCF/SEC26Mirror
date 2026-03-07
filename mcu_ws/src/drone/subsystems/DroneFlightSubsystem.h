@@ -69,8 +69,8 @@ class DroneFlightSubsystem {
   float getMotor(uint8_t idx) const { return (idx < 4) ? motors_[idx] : 0.0f; }
 
  private:
-  void controlAngle(const IMUData& imu, float dt);
-  void controlAltitude(float altitude_m, float dt);
+  void controlAngle(const IMUData& imu, const FlightSetpoint& sp, float dt);
+  void controlAltitude(const FlightSetpoint& sp, float altitude_m, float dt);
   void controlMixer();
   void writeMotors();
   void resetPIDs();

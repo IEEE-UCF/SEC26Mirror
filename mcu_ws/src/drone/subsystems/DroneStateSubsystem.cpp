@@ -128,6 +128,8 @@ void DroneStateSubsystem::onDestroy() {
 
 void DroneStateSubsystem::update() {
   uint32_t now = millis();
+  float dt = (last_update_ms_ > 0) ? (now - last_update_ms_) * 0.001f : 0.0f;
+  last_update_ms_ = now;
 
 #if DRONE_ENABLE_HEIGHT
   float alt = height_.getAltitudeM();
@@ -169,13 +171,13 @@ void DroneStateSubsystem::update() {
 
     case DroneState::VELOCITY_CONTROL: {
       // cmd_vel timeout → hover
-      updateCmdVel();
+      updateCmdVel(dt);
       break;
     }
 
     case DroneState::LANDING: {
       // Descend at fixed rate
-      hold_altitude_ -= Config::LANDING_DESCENT_RATE * 0.1f;  // ~10Hz update
+      hold_altitude_ -= Config::LANDING_DESCENT_RATE * dt;
       if (hold_altitude_ < 0.0f) hold_altitude_ = 0.0f;
 
       FlightSetpoint sp;
@@ -202,7 +204,7 @@ void DroneStateSubsystem::update() {
 #if DRONE_ENABLE_HEIGHT
       if (height_.isValid()) {
         // Controlled descent with height sensor
-        hold_altitude_ -= Config::LANDING_DESCENT_RATE * 0.1f;
+        hold_altitude_ -= Config::LANDING_DESCENT_RATE * dt;
         if (hold_altitude_ < 0.0f) hold_altitude_ = 0.0f;
         sp.altitude_hold = true;
         sp.altitude_des = hold_altitude_;
@@ -244,7 +246,7 @@ void DroneStateSubsystem::update() {
   }
 }
 
-void DroneStateSubsystem::updateCmdVel() {
+void DroneStateSubsystem::updateCmdVel(float dt) {
   uint32_t now = millis();
   bool timed_out =
       (now - last_cmd_vel_ms_ > Config::CMD_VEL_TIMEOUT_MS) &&
@@ -264,7 +266,7 @@ void DroneStateSubsystem::updateCmdVel() {
     sp.pitch_des = cmd_pitch_;
     sp.yaw_rate_des = cmd_yaw_rate_;
     // Adjust hold altitude by cmd_vel z rate
-    hold_altitude_ += cmd_alt_rate_ * 0.1f;  // ~10Hz
+    hold_altitude_ += cmd_alt_rate_ * dt;
     hold_altitude_ = clamp(hold_altitude_, 0.0f, Config::ALTITUDE_CEILING_M);
     sp.altitude_des = hold_altitude_;
   }

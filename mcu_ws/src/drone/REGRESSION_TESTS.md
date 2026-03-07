@@ -1,25 +1,34 @@
 # SEC26 Drone Regression Tests
 
-Manual hardware regression tests for the `drone` firmware target.
+Manual hardware regression tests for the `drone` and `esp32-test-all-drone-subsystems` firmware targets.
 
 ## Overview
 
-The drone runs on an ESP32 with WiFi micro-ROS (UDP transport). Currently it only
-publishes a heartbeat — flight controller, IMU, height, IR, and UWB subsystems are
-planned but not yet wired in.
+The drone runs on a Seeed XIAO ESP32-S3 with FreeRTOS multi-tasking and WiFi micro-ROS (UDP transport).
 
-- **MCU:** ESP32
+- **MCU:** ESP32-S3 (Seeed XIAO)
 - **Transport:** WiFi UDP micro-ROS to Pi agent (port 8888)
 - **Static IP:** 192.168.4.25
-- **OTA hostname:** `sec26-drone`
-- **Participants:** 1 (HeartbeatSubsystem)
-- **Entry point:** `src/drone/main.cpp`
+- **OTA hostname:** `sec26-drone` (production), `sec26-drone-test` (test)
+- **Participants:** 3-4 (Heartbeat, DroneState, DroneIR, DroneUWB)
+- **Entry point:** `src/drone/main.cpp` (production), `src/test/esp32-test-all-drone-subsystems.cpp` (test)
+
+### Test Environment Differences
+
+| Aspect | `drone` | `esp32-test-all-drone-subsystems` |
+|--------|---------|-----------------------------------|
+| Entry point | `src/drone/main.cpp` | `src/test/esp32-test-all-drone-subsystems.cpp` |
+| DEBUG_STAGE | N/A (full system) | Configurable 1-7 (default 7) |
+| UWB | Build flag (default 0) | Always enabled (flag=1) |
+| Height | Build flag (default 0) | Always enabled (flag=1) |
+| Serial debug | Basic heap/status | Rich per-subsystem status every 2s |
+| OTA hostname | `sec26-drone` | `sec26-drone-test` |
 
 ## Prerequisites
 
 - ESP32 drone board powered on
 - Pi WiFi AP running (SSID: `UCFIEEEBot`)
-- Docker container running with UDP micro-ROS agent (auto-started by entrypoint)
+- Docker container running with UDP micro-ROS agent
 - All commands run inside the container
 
 ## Quick Reference
@@ -28,120 +37,316 @@ planned but not yet wired in.
 # Inside Docker container
 cd /home/ubuntu/mcu_workspaces/sec26mcu
 
-# Build drone firmware
+# Build production drone
 pio run -e drone
 
-# Flash via USB (if connected)
-pio run -e drone --target upload
+# Build test-all-subsystems
+pio run -e esp32-test-all-drone-subsystems
 
-# Flash via OTA (if drone is on WiFi)
-pio run -e drone --target upload --upload-port 192.168.4.25
+# Flash via USB
+pio run -e esp32-test-all-drone-subsystems --target upload
 
-# Monitor serial (USB)
-pio device monitor -e drone
+# Flash via OTA
+pio run -e esp32-test-all-drone-subsystems --target upload --upload-port 192.168.4.25
+
+# Monitor serial (USB, 921600 baud)
+pio device monitor -e esp32-test-all-drone-subsystems
 ```
+
+## Topic Publish Rates
+
+| Topic | Expected Hz | Acceptable Range | Source |
+|-------|------------|-----------------|--------|
+| `/mcu_drone/heartbeat` | 1 | 0.9 - 1.1 | HeartbeatSubsystem (main loop) |
+| `/mcu_drone/state` | 10 | 8 - 12 | DroneStateSubsystem (main loop) |
+| `/mcu_drone/uwb/ranging` | 20 | 15 - 25 | UWB FreeRTOS task |
+
+## FreeRTOS Task Rates
+
+| Task | Expected Hz | Core | Priority | Stack |
+|------|------------|------|----------|-------|
+| `flight` (IMU+PID+EKF) | 250 | 1 | 5 | 2048 |
+| `safety` | 10 | 1 | 4 | 1024 |
+| `height` | 50 | 1 | 3 | 1536 |
+| `uwb` | 20 | 0 | 3 | 2048 |
+| Arduino `loop()` | ~100 | any | 1 | - |
 
 ## Test Procedure
 
 ### 1. Flash and Boot
 
 ```bash
-pio run -e drone --target upload
+pio run -e esp32-test-all-drone-subsystems --target upload
+pio device monitor -e esp32-test-all-drone-subsystems
 ```
 
 **Verify on serial monitor:**
-- [ ] `Drone starting...` message appears
-- [ ] `WiFi connected: 192.168.4.25` prints (correct IP)
-- [ ] `[OTA] Ready as sec26-drone` appears
-- [ ] `Drone initialized!` prints
+- [ ] `SEC26 Drone — All Subsystems Test` banner appears
+- [ ] `DEBUG_STAGE = 7` confirmed
+- [ ] WiFi connected with correct IP (192.168.4.25)
+- [ ] OTA ready message
 - [ ] No crash or reboot loop
 
-### 2. WiFi Connection
+### 2. IMU Validation (BNO085)
+
+**Verify initialization:**
+- [ ] `IMU (BNO085 @ 0x4A): OK` prints
+- [ ] Rotation/gyro/accel report rates print correctly
+
+**Verify data (read serial debug output):**
+- [ ] Euler angles (roll/pitch/yaw) update at ~200Hz+ (check "IMU rate" line)
+- [ ] With drone flat: roll ~ 0, pitch ~ 0 (within +/- 3 deg)
+- [ ] Rotate drone 90 degrees: yaw changes ~90 degrees
+- [ ] Tilt drone: roll/pitch respond correctly
+- [ ] Gyro rates near zero when stationary (< 1 deg/s)
+- [ ] Accel near zero when stationary (gravity-free linear accel)
+- [ ] Heading direction label matches physical orientation
+
+**Orientation check — determine BNO085 facing direction:**
+- [ ] Power on drone flat, note yaw reading (this is the "forward" reference, ~0 deg)
+- [ ] Rotate drone 90 CW → yaw should increase to ~90
+- [ ] Record which physical direction corresponds to yaw=0 (this is the BNO's X-axis forward)
+- [ ] Record BNO mounting orientation: _____________________
+
+```bash
+# Monitor IMU from ROS2 (state includes roll/pitch/yaw)
+ros2 topic echo /mcu_drone/state --field roll --field pitch --field yaw
+```
+
+### 3. Height Sensor (VL53L0X)
+
+**Verify initialization:**
+- [ ] `Height sensor: OK` prints
+
+**Verify data:**
+- [ ] Altitude reads ~0.0m when on desk/ground
+- [ ] Altitude increases when lifting drone up
+- [ ] Valid flag is `YES` for readings in range (0.01m - 4.0m)
+- [ ] Valid flag is `NO` for readings out of range (too close or too far)
+- [ ] Height rate shows ~50 Hz
+- [ ] `last_valid` timestamp is recent (not stale)
+
+### 4. Flight Controller (PID + Motor Mixer)
+
+**Verify initialization:**
+- [ ] `Flight controller: OK` prints
+- [ ] PWM freq and resolution correct (20kHz, 10-bit)
+
+**Verify default state:**
+- [ ] Motors show 0.000 when unarmed
+- [ ] Armed flag is `NO`
+- [ ] Override flag is `NO`
+
+**Verify arm/motor override via ROS2 service:**
+```bash
+# Arm the drone (keep props off or secured!)
+ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: true}"
+# Verify: State changes to ARMED, arm flag YES
+
+# Test individual motors (ONLY with props removed)
+ros2 service call /mcu_drone/set_motors mcu_msgs/srv/DroneSetMotors \
+  "{motor_speeds: [0.1, 0.0, 0.0, 0.0]}"
+# Verify: FL motor spins, others off
+
+ros2 service call /mcu_drone/set_motors mcu_msgs/srv/DroneSetMotors \
+  "{motor_speeds: [0.0, 0.1, 0.0, 0.0]}"
+# Verify: FR motor spins, others off
+
+ros2 service call /mcu_drone/set_motors mcu_msgs/srv/DroneSetMotors \
+  "{motor_speeds: [0.0, 0.0, 0.1, 0.0]}"
+# Verify: BR motor spins, others off
+
+ros2 service call /mcu_drone/set_motors mcu_msgs/srv/DroneSetMotors \
+  "{motor_speeds: [0.0, 0.0, 0.0, 0.1]}"
+# Verify: BL motor spins, others off
+
+# Stop all motors
+ros2 service call /mcu_drone/set_motors mcu_msgs/srv/DroneSetMotors \
+  "{motor_speeds: [0.0, 0.0, 0.0, 0.0]}"
+
+# Disarm
+ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: false}"
+```
+
+- [ ] Arm service succeeds from UNARMED state
+- [ ] Arm service fails if IMU not ready
+- [ ] Each motor spins when individually commanded (props removed!)
+- [ ] Motor direction matches expected (FL=CCW, FR=CW, BR=CCW, BL=CW)
+- [ ] Disarm service succeeds from ARMED state
+- [ ] Cannot disarm while flying ("use land" message)
+- [ ] Motors go to zero on disarm
+
+### 5. EKF
+
+**Verify initialization:**
+- [ ] `EKF: OK` prints
+
+**Verify operation:**
+- [ ] Position (x, y) values shown in debug output
+- [ ] Velocity (vx, vy) near zero when stationary
+- [ ] Anchor count shows configured value when set_anchors is called
+
+```bash
+# Configure UWB anchors
+ros2 service call /mcu_drone/set_anchors mcu_msgs/srv/DroneSetAnchors \
+  "{num_anchors: 3, anchor_ids: [10, 11, 12], anchor_x: [0.0, 3.66, 0.0], anchor_y: [0.0, 0.0, 3.66]}"
+```
+
+- [ ] Anchor count updates to 3
+
+### 6. IR Transmitter
+
+**Verify initialization:**
+- [ ] `IR LED: OK` prints
+
+**Verify transmission (requires IR receiver for full test):**
+```bash
+# Must be in VELOCITY_CONTROL state to transmit
+# (arm → takeoff → wait → then transmit)
+# For bench test, verify service exists:
+ros2 service list | grep transmit_ir
+```
+- [ ] `/mcu_drone/transmit_ir` service exists
+- [ ] Service rejects calls when not in VELOCITY_CONTROL state
+
+### 7. UWB
+
+**Verify initialization:**
+- [ ] `UWB DW3000: OK` prints (if hardware connected)
+- [ ] Target anchors set to 10, 11, 12
+
+**Verify operation (requires beacons):**
+- [ ] UWB rate shows ~20 Hz
+- [ ] Valid ranges appear for each beacon
+- [ ] Range values are reasonable (in cm)
+
+```bash
+ros2 topic echo /mcu_drone/uwb/ranging
+ros2 topic hz /mcu_drone/uwb/ranging
+```
+- [ ] `/mcu_drone/uwb/ranging` publishes at ~20 Hz
+- [ ] Range data includes peer_id matching beacon IDs
+
+### 8. State Machine Transitions
+
+```bash
+# 1. Check initial state
+ros2 topic echo /mcu_drone/state --field state --once
+# Should be 0 (INIT) or 1 (UNARMED)
+
+# 2. Arm
+ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: true}"
+# State → 2 (ARMED)
+
+# 3. Takeoff (HEIGHT SENSOR REQUIRED)
+ros2 service call /mcu_drone/takeoff mcu_msgs/srv/DroneTakeoff "{target_altitude: 0.5}"
+# State → 3 (LAUNCHING) → 4 (VELOCITY_CONTROL) when alt ≥ 95% target
+
+# 4. Land
+ros2 service call /mcu_drone/land mcu_msgs/srv/DroneLand "{}"
+# State → 5 (LANDING) → 1 (UNARMED) when alt < 0.05m
+```
+
+- [ ] INIT → UNARMED on sensor ready
+- [ ] UNARMED → ARMED on arm service
+- [ ] ARMED → LAUNCHING on takeoff service
+- [ ] LAUNCHING → VELOCITY_CONTROL at 95% target altitude
+- [ ] VELOCITY_CONTROL → LANDING on land service
+- [ ] LANDING → UNARMED when altitude < 0.05m
+- [ ] cmd_vel timeout (500ms) → auto-hover (zero attitude, hold altitude)
+
+### 9. Safety Monitor
+
+**Verify safety triggers:**
+- [ ] IMU failure → EMERGENCY_LAND (hard to test without disconnecting hardware)
+- [ ] micro-ROS disconnect > 3s → EMERGENCY_LAND
+
+```bash
+# Kill UDP agent to test disconnect
+pkill -9 -f "micro_ros_agent udp4"
+# Wait 3+ seconds
+# Verify: state transitions to EMERGENCY_LAND (if flying)
+```
+
+- [ ] Safety task count increases at ~10 Hz
+- [ ] Sensor readiness correctly reflects hardware state
+
+### 10. WiFi & Reconnection
 
 - [ ] Drone connects to `UCFIEEEBot` AP
-- [ ] Ping from Pi: `ping 192.168.4.25` responds
+- [ ] Ping from Pi: `ping 192.168.4.25`
 - [ ] WiFi auto-reconnects after AP reboot (wait ~15s)
+- [ ] micro-ROS reconnects after agent restart
+- [ ] Heartbeat resumes after reconnection
 
-### 3. micro-ROS Connection
-
-The UDP agent should already be running (started by container entrypoint).
-
-```bash
-# Verify agent is running
-pgrep -f "micro_ros_agent udp4" && echo "Agent running"
-
-# Check for drone's heartbeat topic
-ros2 topic list | grep drone
-```
-
-**Verify:**
-- [ ] Agent log shows session established for drone
-- [ ] Heartbeat topic appears (uses default namespace — check `ros2 topic list`)
-
-### 4. Topic Validation
+### 11. OTA Update
 
 ```bash
-ros2 topic hz /heartbeat    # or whatever namespace the drone uses
-ros2 topic echo /heartbeat --once
-```
-
-| Topic | Expected Hz | Acceptable Range |
-|-------|------------|-----------------|
-| Heartbeat | 1 | 0.9 - 1.1 |
-
-- [ ] Heartbeat publishes at ~1 Hz
-- [ ] `data` field is `"HEARTBEAT"`
-
-### 5. OTA Update
-
-```bash
-pio run -e drone --target upload --upload-port 192.168.4.25
+pio run -e esp32-test-all-drone-subsystems --target upload --upload-port 192.168.4.25
 ```
 
 - [ ] OTA flash completes without error
-- [ ] Drone reboots and reconnects to WiFi
-- [ ] Heartbeat resumes publishing after OTA
+- [ ] Drone reboots and reconnects
+- [ ] All subsystems re-initialize correctly
 
-### 6. Reconnection
-
-```bash
-# Kill UDP agent
-pkill -9 -f "micro_ros_agent udp4"
-sleep 5
-
-# Agent auto-restarts via entrypoint (wait ~5s)
-# Or manually:
-ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
-```
-
-- [ ] Drone reconnects to agent after agent restart
-- [ ] Heartbeat resumes at correct rate
-- [ ] No crash or hang on ESP32
-
-### 7. Stability
-
-Run for 60+ seconds:
+### 12. Stability (60s+ run)
 
 - [ ] No serial error messages
 - [ ] WiFi stays connected
 - [ ] Heartbeat continues publishing
 - [ ] No watchdog resets
+- [ ] Heap not decreasing (check "Heap" line in debug output)
+- [ ] IMU rate stays stable (~250 Hz)
+- [ ] Flight task rate stays stable (~250 Hz)
+
+### 13. Staged Debug Bring-up
+
+If issues are found, rebuild with lower DEBUG_STAGE to isolate:
+
+```bash
+# Stage 1: WiFi + micro-ROS + Heartbeat only
+pio run -e esp32-test-all-drone-subsystems -DDEBUG_STAGE=1 --target upload
+
+# Stage 2: + IMU
+pio run -e esp32-test-all-drone-subsystems -DDEBUG_STAGE=2 --target upload
+
+# ... etc up to stage 7
+```
+
+At each stage, verify:
+- [ ] No crash on boot
+- [ ] Heap is stable
+- [ ] Previous-stage subsystems still work
+- [ ] New subsystem initializes correctly
 
 ## Common Failures and Causes
 
-| Symptom | Likely Cause |
-|---------|-------------|
-| WiFi won't connect | AP not running, wrong SSID/password, IP conflict |
-| No heartbeat topic | UDP agent not running, firewall blocking port 8888 |
-| OTA fails | Drone not on WiFi, wrong IP, mDNS not resolving |
-| Reboot loop | Power supply issue, flash corruption (re-flash via USB) |
-| Agent won't connect | Wrong port, zombie agent process (kill and restart) |
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| WiFi won't connect | AP not running, wrong SSID/password, IP conflict | Check AP, verify credentials |
+| No heartbeat topic | UDP agent not running, firewall on port 8888 | Start agent, check port |
+| OTA fails | Drone not on WiFi, wrong IP | Verify WiFi, use USB |
+| Reboot loop | Power supply issue, flash corruption, I2C hang | Re-flash USB, check voltage |
+| IMU FAIL | BNO085 not found on I2C (0x4A), bad wiring, no reset pulse | Check wiring, verify I2C with scanner |
+| IMU yaw drifts | BNO085 not calibrated, magnetic interference | Calibrate (figure-8 motion), move away from motors |
+| IMU rate low | I2C mutex contention, bus speed too slow | Check 400kHz, verify no other I2C devices |
+| Height FAIL | VL53L0X not found on I2C (0x29), bad wiring | Check wiring, verify I2C with scanner |
+| Height reads 0 | Surface too close/far, reflective surface | Aim at non-reflective surface 1-200cm away |
+| Motors don't spin | ESC not powered, wrong GPIO pin, PWM config | Check ESC power, verify pin assignments |
+| Motor wrong direction | ESC wiring swapped, motor phase | Swap any 2 motor wires |
+| UWB FAIL | DW3000 not found on SPI, wrong CS pin | Check SPI wiring, verify CS=GPIO21 |
+| UWB no ranges | Beacons not running, too far away | Start beacons, move closer |
+| EKF position wrong | Anchors not configured, bad trilateration geometry | Call set_anchors, ensure non-collinear placement |
+| Agent won't connect | Wrong port, zombie agent | Kill and restart agent |
+| Heap decreasing | micro-ROS leak, malloc without free | Monitor with debug output, check g_mr.update() |
+| Emergency land unexpectedly | Height timeout, micro-ROS timeout | Check sensor wiring, agent connection |
 
 ## Checklist Template
 
 ```
 Date: _______________
 Git commit: _______________
+Firmware target: [ ] drone  [ ] esp32-test-all-drone-subsystems
 Tester: _______________
 
 Boot:
@@ -149,12 +354,44 @@ Boot:
   [ ] WiFi connected (192.168.4.25)
   [ ] OTA ready
 
+Subsystem Init:
+  [ ] IMU: OK / FAIL  (yaw at power-on: _____ deg)
+  [ ] Height: OK / FAIL / DISABLED
+  [ ] Flight: OK / FAIL
+  [ ] EKF: OK / FAIL
+  [ ] IR: OK / FAIL
+  [ ] UWB: OK / FAIL / DISABLED
+
 micro-ROS:
   [ ] Agent connects
   [ ] Heartbeat topic visible
 
 Rates:
-  heartbeat: _____ Hz (expect 1)
+  heartbeat:    _____ Hz (expect 1)
+  state:        _____ Hz (expect 10)
+  uwb/ranging:  _____ Hz (expect 20)
+  flight task:  _____ Hz (expect 250)
+  height task:  _____ Hz (expect 50)
+  IMU updates:  _____ Hz (expect 200+)
+
+IMU Orientation:
+  [ ] Flat: roll~0, pitch~0
+  [ ] 90 CW rotation: yaw changes ~90
+  [ ] BNO X-axis forward direction: _______________
+
+Motor Test (props removed!):
+  [ ] FL spins (pin D0, CCW)
+  [ ] FR spins (pin D1, CW)
+  [ ] BR spins (pin D2, CCW)
+  [ ] BL spins (pin D3, CW)
+
+State Machine:
+  [ ] INIT → UNARMED
+  [ ] UNARMED → ARMED
+  [ ] Disarm works
+
+Safety:
+  [ ] Sensor readiness correct
 
 OTA:
   [ ] OTA flash works
@@ -163,8 +400,33 @@ OTA:
 Stability (60s+):
   [ ] No crashes
   [ ] WiFi stable
-  [ ] Heartbeat steady
+  [ ] Heap stable
+  [ ] Rates stable
 
 Issues Found:
   _______________________________________________
+  _______________________________________________
 ```
+
+## Native Algorithm Tests
+
+The drone control algorithms have native test suites that run without hardware:
+
+```bash
+# Motor mixer (X-quad mixing formula)
+pio test -e test-drone-motor-mixer
+
+# EKF (predict, trilateration, update, outlier rejection)
+pio test -e test-drone-ekf
+
+# IMU math (quaternion→Euler, world-frame rotation)
+pio test -e test-drone-imu-math
+
+# PID controller (shared with robot)
+pio test -e test-control-pid
+
+# Filters (LowPass1P used by altitude velocity)
+pio test -e test-utils-filters
+```
+
+Run all native tests to verify algorithm correctness before flashing hardware.

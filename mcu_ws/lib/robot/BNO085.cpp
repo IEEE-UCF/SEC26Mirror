@@ -83,12 +83,21 @@ bool BNO085Driver::enableReports() {
 
 void BNO085Driver::update() {
   if (!initSuccess_) return;
+  uint32_t t0 = micros();
+
   I2CBus::Lock lock(setup_.wire_);
+  uint32_t t_lock = micros();
+  DEBUG_PRINTF("[BNO085] lock took %lu us\n", t_lock - t0);
 
   // BNO085 can spontaneously reset — re-enable reports when it does.
   // Release the I2C lock during the 300ms boot delay so other threads
   // aren't blocked.
-  if (imu_.wasReset()) {
+  uint32_t t_reset0 = micros();
+  bool wasRst = imu_.wasReset();
+  uint32_t t_reset1 = micros();
+  DEBUG_PRINTF("[BNO085] wasReset()=%d took %lu us\n", wasRst, t_reset1 - t_reset0);
+
+  if (wasRst) {
     ++resetCount_;
     DEBUG_PRINTF("[BNO085] Reset detected (#%lu) — waiting 300ms\n", resetCount_);
     lock.unlock();
@@ -104,7 +113,12 @@ void BNO085Driver::update() {
   // Drain available sensor events.  Cap iterations to prevent infinite loop
   // if the chip produces data faster than we consume (or I2C returns garbage).
   int eventsRead = 0;
-  while (eventsRead < kMaxEventsPerUpdate && imu_.getSensorEvent(&sensorValue_)) {
+  while (eventsRead < kMaxEventsPerUpdate) {
+    uint32_t t_ev0 = micros();
+    bool got = imu_.getSensorEvent(&sensorValue_);
+    uint32_t t_ev1 = micros();
+    DEBUG_PRINTF("[BNO085] getSensorEvent[%d]=%d took %lu us\n", eventsRead, got, t_ev1 - t_ev0);
+    if (!got) break;
     ++eventsRead;
     switch (sensorValue_.sensorId) {
       case SH2_ACCELEROMETER:
@@ -135,6 +149,9 @@ void BNO085Driver::update() {
   if (eventsRead >= kMaxEventsPerUpdate) {
     DEBUG_PRINTLN("[BNO085] WARNING: hit max events per update — possible I2C issue");
   }
+
+  uint32_t t_end = micros();
+  DEBUG_PRINTF("[BNO085] update done: %d events, total %lu us\n", eventsRead, t_end - t0);
 }
 
 // yaw in radians

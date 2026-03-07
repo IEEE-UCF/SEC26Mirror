@@ -134,6 +134,12 @@ void MicrorosManager::update() {
                                       : AGENT_DISCONNECTED;);
       if (state_ == AGENT_CONNECTED) {
         rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(1));
+        // Publish all participant data under the same g_microros_mutex hold.
+        // Each participant's publishAll() acquires its own data_mutex_ (inner
+        // lock) and calls rcl_publish if new data is ready.
+        for (size_t i = 0; i < participants_count_; ++i) {
+          if (participants_[i]) participants_[i]->publishAll();
+        }
       }
       break;
     case AGENT_DISCONNECTED:

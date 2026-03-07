@@ -57,14 +57,30 @@ void UWBSubsystem::update() {
   // Publish ranging data if in tag mode
   if (is_tag_mode_ && pub_.impl) {
     if (everyMs(PUBLISH_INTERVAL_MS)) {
+#ifdef USE_TEENSYTHREADS
+      {
+        Threads::Scope lock(data_mutex_);
+        updateRangingMessage();
+        data_ready_ = true;
+      }
+#else
       publishRanging();
+#endif
     }
   }
 
   // Publish inter-beacon peer ranges at 2 Hz
   if (has_peer_ranging_) {
     if (everyMs(PEER_PUBLISH_INTERVAL_MS, 1)) {
+#ifdef USE_TEENSYTHREADS
+      {
+        Threads::Scope lock(data_mutex_);
+        updatePeerMessages();
+        data_ready_ = true;
+      }
+#else
       publishPeerRanges();
+#endif
     }
   }
 }
@@ -223,14 +239,8 @@ void UWBSubsystem::updateRangingMessage() {
   msg_.num_anchors = msg_.ranges.size;
 }
 
-void UWBSubsystem::publishPeerRanges() {
-  static uint16_t dbg_count = 0;
-  if (dbg_count++ % 10 == 0) {
-    DEBUG_PRINTF("[UWB] publishPeerRanges: num_pubs=%d\n", num_peer_pubs_);
-  }
-  if (num_peer_pubs_ == 0) {
-    return;
-  }
+void UWBSubsystem::updatePeerMessages() {
+  if (num_peer_pubs_ == 0) return;
 
   const auto& driver_data = setup_.driver->getData();
   const auto* peer_ranges = setup_.driver->getPeerRanges();
@@ -238,9 +248,6 @@ void UWBSubsystem::publishPeerRanges() {
   uint32_t now_nsec = (uint32_t)((millis() % 1000) * 1000000);
 
   for (uint8_t i = 0; i < num_peer_pubs_; i++) {
-    if (!peer_pubs_[i].impl) {
-      continue;
-    }
     auto& msg = peer_msgs_[i];
     const auto& r = peer_ranges[i];
     msg.header.stamp.sec = (int32_t)now_sec;
@@ -254,31 +261,43 @@ void UWBSubsystem::publishPeerRanges() {
     msg.rx_timestamp = r.rx_timestamp;
     msg.valid = r.valid;
     msg.error_code = r.error_code;
+  }
+}
 
-#ifdef USE_TEENSYTHREADS
-    {
-      Threads::Scope guard(g_microros_mutex);
-      (void)rcl_publish(&peer_pubs_[i], &msg, NULL);
-    }
-#else
-    (void)rcl_publish(&peer_pubs_[i], &msg, NULL);
-#endif
+void UWBSubsystem::publishPeerRanges() {
+  if (num_peer_pubs_ == 0) return;
+
+  updatePeerMessages();
+  for (uint8_t i = 0; i < num_peer_pubs_; i++) {
+    if (!peer_pubs_[i].impl) continue;
+    (void)rcl_publish(&peer_pubs_[i], &peer_msgs_[i], NULL);
   }
 }
 
 void UWBSubsystem::publishRanging() {
-  if (!pub_.impl || !is_tag_mode_) {
-    return;
-  }
-
+  if (!pub_.impl || !is_tag_mode_) return;
   updateRangingMessage();
+  (void)rcl_publish(&pub_, &msg_, NULL);
+}
+
+void UWBSubsystem::publishAll() {
 #ifdef USE_TEENSYTHREADS
-  {
-    Threads::Scope guard(g_microros_mutex);
+  Threads::Scope lock(data_mutex_);
+  if (!data_ready_) return;
+
+  // Publish tag ranging if applicable
+  if (is_tag_mode_ && pub_.impl) {
     (void)rcl_publish(&pub_, &msg_, NULL);
   }
-#else
-  (void)rcl_publish(&pub_, &msg_, NULL);
+
+  // Publish peer ranges if applicable
+  for (uint8_t i = 0; i < num_peer_pubs_; i++) {
+    if (peer_pubs_[i].impl) {
+      (void)rcl_publish(&peer_pubs_[i], &peer_msgs_[i], NULL);
+    }
+  }
+
+  data_ready_ = false;
 #endif
 }
 

@@ -25,21 +25,21 @@
  *   GPIO   — WS2812B LEDs, FlySky RC (Serial8), reset button
  *
  * micro-ROS topics published:
- *   /mcu_robot/heartbeat          std_msgs/String          5 Hz
- *   /mcu_robot/battery_health     mcu_msgs/BatteryHealth   1 Hz
- *   /mcu_robot/imu/data           sensor_msgs/Imu         50 Hz
+ *   /mcu_robot/heartbeat          std_msgs/String          1 Hz
+ *   /mcu_robot/battery_health     mcu_msgs/BatteryHealth   0.5 Hz
+ *   /mcu_robot/imu/data           sensor_msgs/Imu         ~25 Hz
  *   /mcu_robot/rc                 mcu_msgs/RC             20 Hz
- *   /mcu_robot/tof_distances      std_msgs/Float32Multi.. 10 Hz
- *   /mcu_robot/dip_switches       std_msgs/UInt8           1 Hz
+ *   /mcu_robot/tof_distances      std_msgs/Float32Multi..  2 Hz
+ *   /mcu_robot/dip_switches       std_msgs/UInt8           0.5 Hz
  *   /mcu_robot/buttons            std_msgs/UInt8          10 Hz
  *   /mcu_robot/servo/state        std_msgs/Float32Multi..  5 Hz
  *   /mcu_robot/motor/state        std_msgs/Float32Multi..  5 Hz
- *   /mcu_robot/encoders           std_msgs/Float32Multi.. 50 Hz
+ *   /mcu_robot/encoders           std_msgs/Float32Multi.. 20 Hz
  *   /mcu_robot/uwb/ranging        mcu_msgs/UWBRanging     10 Hz
  *   /mcu_robot/crank/state        std_msgs/UInt8           5 Hz
  *   /mcu_robot/keypad/state       std_msgs/UInt8           5 Hz
  *   /mcu_robot/deploy/trigger     std_msgs/String          on event
- *   drive_base/status             mcu_msgs/DriveBase      20 Hz
+ *   drive_base/status             mcu_msgs/DriveBase      50 Hz
  *
  * micro-ROS services:
  *   /mcu_robot/servo/set          mcu_msgs/srv/SetServo
@@ -72,7 +72,7 @@
 //  Stage 7: + UWB (full system)
 // ═══════════════════════════════════════════════════════════════════════════
 #ifndef DEBUG_STAGE
-#define DEBUG_STAGE 2
+#define DEBUG_STAGE 7
 #endif
 
 #include <SPI.h>

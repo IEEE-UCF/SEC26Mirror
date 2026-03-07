@@ -43,6 +43,7 @@ class SensorSubsystem : public IMicroRosParticipant,
 
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   void publishData();
 
@@ -70,6 +71,10 @@ class SensorSubsystem : public IMicroRosParticipant,
   rcl_publisher_t pub_{};
   std_msgs__msg__Float32MultiArray msg_{};
   rcl_node_t* node_ = nullptr;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 }  // namespace Subsystem
 

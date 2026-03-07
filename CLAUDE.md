@@ -208,6 +208,14 @@ Hardware test environments: `teensy-test-battery-subsystem`, `teensy-test-sensor
 
 See `mcu_ws/test/README.md` for detailed test documentation.
 
+### Hardware Regression Tests (manual, per-target checklists)
+
+Each default firmware target has a `REGRESSION_TESTS.md` in its source directory:
+- `mcu_ws/src/robot/REGRESSION_TESTS.md` — Robot + teensy-test-all-subsystems (topic rates, data validation, services, drive, reconnection, staged debug)
+- `mcu_ws/src/beacon/REGRESSION_TESTS.md` — Beacons 1-3 (WiFi, UWB anchor, inter-beacon ranging, OTA)
+- `mcu_ws/src/drone/REGRESSION_TESTS.md` — Drone (WiFi, heartbeat, OTA)
+- `mcu_ws/src/minibot/REGRESSION_TESTS.md` — Minibot (WiFi, UWB tag, drive, IMU, OTA)
+
 ## Architecture
 
 ### Robot Firmware (Teensy41) — Threading Model
@@ -219,7 +227,7 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | Priority | Subsystem | Rate | Stack |
 |----------|-----------|------|-------|
 | 4 (highest) | micro-ROS Manager | — | 8192 |
-| 3 | IMU | 10ms (100 Hz) | 2048 |
+| 3 | IMU | 30ms (~33 Hz) | 8192 |
 | 3 | Drive | 20ms (50 Hz) | 4096 |
 | 2 | Servo | 25ms (40 Hz) | 1024 |
 | 2 | Motor Manager | 1ms (1000 Hz) | 1024 |
@@ -232,7 +240,7 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | 1 | DIP Switch | 500ms (2 Hz) | 1024 |
 | 1 | Button | 20ms (50 Hz) | 1024 |
 | 1 | LED | 50ms (20 Hz) | 1024 |
-| 1 | Heartbeat | 200ms (5 Hz) | 1024 |
+| 1 | Heartbeat | 1000ms (1 Hz) | 1024 |
 | 1 | Deploy | 20ms (50 Hz) | 1024 |
 | 1 | Crank | 50ms (20 Hz) | 1024 |
 | 1 | Keypad | 50ms (20 Hz) | 1024 |
@@ -245,7 +253,9 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 - **OLED Display**: Uses hardware SPI1 (pins 26/27) — software SPI is unreliable under TeensyThreads preemption.
 - **UWB Init**: Conditional on DIP switch 2 (ON = enabled). Must call `SPI.begin()` before `g_uwb.init()`. The DW3000 library has a hardcoded `RST_PIN 27` in `DW3000Constants.h` that conflicts with OLED SPI1 SCK — `UWBDriver.cpp` skips `hardReset()` when no reset pin is wired to avoid this.
 
-Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`) for ROS2 lifecycle.
+Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`/`publishAll`) for ROS2 lifecycle.
+
+**Deferred publishing architecture**: Sensor threads no longer acquire `g_microros_mutex` to call `rcl_publish()`. Instead, each subsystem caches its message under a per-subsystem `data_mutex_` and sets `data_ready_ = true`. The MicrorosManager thread calls `publishAll()` on each participant inside the existing `g_microros_mutex` scope, which acquires the subsystem's `data_mutex_` and publishes if data is ready. Lock ordering: `g_microros_mutex` (outer, manager only) > `data_mutex_` (inner, per-subsystem).
 
 ### I2C Bus Layout
 

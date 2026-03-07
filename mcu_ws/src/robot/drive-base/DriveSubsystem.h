@@ -253,7 +253,15 @@ class DriveSubsystem : public IMicroRosParticipant,
     publishCounter_++;
     if (publishCounter_ >= setup_.publishDivider) {
       publishCounter_ = 0;
+#ifdef USE_TEENSYTHREADS
+      {
+        Threads::Scope lock(data_mutex_);
+        publishStatus();
+        data_ready_ = true;
+      }
+#else
       publishStatus();
+#endif
     }
   }
 
@@ -822,15 +830,22 @@ class DriveSubsystem : public IMicroRosParticipant,
     // Clear path in status (we don't echo it back)
     status_msg_.goal_path.poses.size = 0;
 
-#ifdef USE_TEENSYTHREADS
-    {
-      Threads::Scope guard(g_microros_mutex);
-      (void)rcl_publish(&status_pub_, &status_msg_, NULL);
-    }
-#else
+#ifndef USE_TEENSYTHREADS
     (void)rcl_publish(&status_pub_, &status_msg_, NULL);
 #endif
   }
+
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !status_pub_.impl) return;
+    (void)rcl_publish(&status_pub_, &status_msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
+ private:
 
   // ── State ──────────────────────────────────────────────────────────────
 
@@ -883,6 +898,11 @@ class DriveSubsystem : public IMicroRosParticipant,
   geometry_msgs__msg__Pose pose_msg_{};
   micro_ros_utilities_memory_conf_t status_mem_conf_{};
   micro_ros_utilities_memory_conf_t cmd_mem_conf_{};
+
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

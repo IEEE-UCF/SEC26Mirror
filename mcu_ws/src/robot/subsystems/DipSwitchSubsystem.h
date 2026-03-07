@@ -75,13 +75,14 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-      msg_.data = fixGPIO(setup_.driver_->readPort(0));
 #ifdef USE_TEENSYTHREADS
       {
-        Threads::Scope guard(g_microros_mutex);
-        (void)rcl_publish(&pub_, &msg_, NULL);
+        Threads::Scope lock(data_mutex_);
+        msg_.data = fixGPIO(setup_.driver_->readPort(0));
+        data_ready_ = true;
       }
 #else
+      msg_.data = fixGPIO(setup_.driver_->readPort(0));
       (void)rcl_publish(&pub_, &msg_, NULL);
 #endif
     }
@@ -145,12 +146,27 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     return ~b;
   }
 
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
+ private:
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
   const DipSwitchSubsystemSetup setup_;
   rcl_publisher_t pub_{};
   std_msgs__msg__UInt8 msg_{};
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

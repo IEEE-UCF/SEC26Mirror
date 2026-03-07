@@ -42,6 +42,7 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   void publishData();
 
@@ -98,6 +99,11 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   static constexpr int kCalibrationSamples = 40;
   static constexpr int kCalibrationDelayMs = 50;
+
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 
  public:
   // Diagnostic counters (for external monitoring / debug)

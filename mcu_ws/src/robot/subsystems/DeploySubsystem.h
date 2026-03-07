@@ -241,29 +241,28 @@ class DeploySubsystem : public IMicroRosParticipant,
   void publishTrigger(bool cancel) {
     if (!pub_.impl) return;
 
-    char buf[64];
     if (cancel) {
-      snprintf(buf, sizeof(buf), "cancel");
+      snprintf(trigger_buf_, sizeof(trigger_buf_), "cancel");
     } else {
       bool dip_target = readDipTarget();
       bool dip_force = readDipForce();
       const char* target =
           dip_target ? "start:robot" : "start:teensy-test-all-subsystems";
       if (dip_force) {
-        snprintf(buf, sizeof(buf), "%s:force", target);
+        snprintf(trigger_buf_, sizeof(trigger_buf_), "%s:force", target);
       } else {
-        snprintf(buf, sizeof(buf), "%s", target);
+        snprintf(trigger_buf_, sizeof(trigger_buf_), "%s", target);
       }
     }
 
-    trigger_msg_.data.data = buf;
-    trigger_msg_.data.size = strlen(buf);
-    trigger_msg_.data.capacity = sizeof(buf);
+    trigger_msg_.data.data = trigger_buf_;
+    trigger_msg_.data.size = strlen(trigger_buf_);
+    trigger_msg_.data.capacity = sizeof(trigger_buf_);
 
 #ifdef USE_TEENSYTHREADS
     {
-      Threads::Scope guard(g_microros_mutex);
-      (void)rcl_publish(&pub_, &trigger_msg_, NULL);
+      Threads::Scope lock(data_mutex_);
+      data_ready_ = true;
     }
 #else
     (void)rcl_publish(&pub_, &trigger_msg_, NULL);
@@ -418,12 +417,28 @@ class DeploySubsystem : public IMicroRosParticipant,
   uint8_t ota_skip_ = 0;
   uint8_t ota_fail_ = 0;
 
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &trigger_msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
+ private:
   rcl_publisher_t pub_{};
   rcl_subscription_t sub_{};
   std_msgs__msg__String trigger_msg_{};
   std_msgs__msg__String status_msg_{};
   char status_buf_[128] = {};
+  char trigger_buf_[64] = {};
   rcl_node_t* node_ = nullptr;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

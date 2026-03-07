@@ -35,7 +35,15 @@ void RCSubsystem::update() {
   uint32_t now = millis();
   if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
     last_publish_ms_ = now;
+#ifdef USE_TEENSYTHREADS
+    {
+      Threads::Scope lock(data_mutex_);
+      updateRCMessage();
+      data_ready_ = true;
+    }
+#else
     publishRC();
+#endif
   }
 }
 
@@ -130,15 +138,16 @@ void RCSubsystem::updateRCMessage() {
 
 void RCSubsystem::publishRC() {
   if (!pub_.impl) return;
-
   updateRCMessage();
-#ifdef USE_TEENSYTHREADS
-  {
-    Threads::Scope guard(g_microros_mutex);
-    (void)rcl_publish(&pub_, &msg_, NULL);
-  }
-#else
   (void)rcl_publish(&pub_, &msg_, NULL);
+}
+
+void RCSubsystem::publishAll() {
+#ifdef USE_TEENSYTHREADS
+  Threads::Scope lock(data_mutex_);
+  if (!data_ready_ || !pub_.impl) return;
+  (void)rcl_publish(&pub_, &msg_, NULL);
+  data_ready_ = false;
 #endif
 }
 

@@ -65,6 +65,7 @@ class UWBSubsystem : public IMicroRosParticipant,
   // IMicroRosParticipant interface
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   /** Access UWB driver data (range count, status, etc.). */
   const Drivers::UWBDriverData& getDriverData() const { return setup_.driver->getData(); }
@@ -91,6 +92,7 @@ class UWBSubsystem : public IMicroRosParticipant,
  private:
   void publishRanging();
   void updateRangingMessage();
+  void updatePeerMessages();
   void publishPeerRanges();
 
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;  // 10 Hz (TAG mode)
@@ -115,6 +117,11 @@ class UWBSubsystem : public IMicroRosParticipant,
   mcu_msgs__msg__UWBRange peer_msgs_[MAX_PEER_PUBS] = {};
   char peer_topic_names_[MAX_PEER_PUBS][32] = {};
   uint8_t num_peer_pubs_ = 0;
+
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

@@ -50,6 +50,17 @@ size_t platformio_transport_read(struct uxrCustomTransport* transport,
 
 extern "C" void set_microros_transports() {
   Serial.begin(921600);
+
+#if defined(MICRO_ROS_TRANSPORT_ARDUINO_SERIAL)
+  // Wait for USB CDC serial to be ready (up to 3s)
+  uint32_t start = millis();
+  while (!Serial && (millis() - start < 3000)) { delay(10); }
+
+  // Flush any stale data from USB enumeration
+  delay(100);
+  while (Serial.available()) Serial.read();
+#endif
+
 #if defined(MICRO_ROS_TRANSPORT_ARDUINO_SERIAL)
   set_microros_serial_transports(Serial);
 #elif defined(MICRO_ROS_TRANSPORT_ARDUINO_NATIVE_ETHERNET)

@@ -61,9 +61,12 @@ add_executable(mission_node
   src/mission_node.cpp
 )
 
+find_package(std_srvs REQUIRED)
+
 ament_target_dependencies(mission_node
   rclcpp
   std_msgs
+  std_srvs
   geometry_msgs
   nav_msgs
   secbot_msgs

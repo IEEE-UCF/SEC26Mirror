@@ -58,6 +58,7 @@ class BatterySubsystem : public IMicroRosParticipant,
   // ── IMicroRosParticipant ──────────────────────────────────────────────────
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   void publishData();
 
@@ -85,6 +86,10 @@ class BatterySubsystem : public IMicroRosParticipant,
   mcu_msgs__msg__BatteryHealth msg_{};
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 
 #ifdef USE_TEENSYTHREADS
   static void taskFunction(void* pvParams) {

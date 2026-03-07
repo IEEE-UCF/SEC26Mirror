@@ -83,6 +83,13 @@ void MicrorosManager::destroy_entities() {
   for (size_t i = 0; i < participants_count_; ++i) {
     if (participants_[i]) participants_[i]->onDestroy();
   }
+
+  // Flush serial to clear any corrupt XRCE-DDS data before reconnect
+#ifdef MICRO_ROS_TRANSPORT_ARDUINO_SERIAL
+  Serial.flush();
+  while (Serial.available()) Serial.read();
+  delay(100);
+#endif
 }
 
 // No manager-owned timer; executor spin is driven from update()
@@ -121,12 +128,18 @@ void MicrorosManager::update() {
       }
       break;
     case AGENT_CONNECTED:
-      EXECUTE_EVERY_N_MS(500,
-                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 3))
+      EXECUTE_EVERY_N_MS(2000,
+                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(30, 1))
                                       ? AGENT_CONNECTED
                                       : AGENT_DISCONNECTED;);
       if (state_ == AGENT_CONNECTED) {
-        rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(10));
+        rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(1));
+        // Publish all participant data under the same g_microros_mutex hold.
+        // Each participant's publishAll() acquires its own data_mutex_ (inner
+        // lock) and calls rcl_publish if new data is ready.
+        for (size_t i = 0; i < participants_count_; ++i) {
+          if (participants_[i]) participants_[i]->publishAll();
+        }
       }
       break;
     case AGENT_DISCONNECTED:

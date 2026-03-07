@@ -17,8 +17,6 @@
 #include <mcu_msgs/msg/arm_command.hpp>
 #include <mcu_msgs/msg/battery_health.hpp>
 #include <mcu_msgs/msg/drive_base.hpp>
-#include <mcu_msgs/msg/intake_bridge_command.hpp>
-#include <mcu_msgs/msg/intake_bridge_state.hpp>
 #include <mcu_msgs/msg/intake_state.hpp>
 #include <mcu_msgs/msg/mcu_state.hpp>
 #include <mcu_msgs/msg/mini_robot_state.hpp>
@@ -108,7 +106,6 @@ class McuSubsystemSimulator : public rclcpp::Node {
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr tof_pub_;
   rclcpp::Publisher<mcu_msgs::msg::RC>::SharedPtr rc_pub_;
   rclcpp::Publisher<mcu_msgs::msg::IntakeState>::SharedPtr intake_pub_;
-  rclcpp::Publisher<mcu_msgs::msg::IntakeBridgeState>::SharedPtr bridge_pub_;
   rclcpp::Publisher<mcu_msgs::msg::MiniRobotState>::SharedPtr mini_robot_pub_;
   rclcpp::Publisher<mcu_msgs::msg::McuState>::SharedPtr mcu_state_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
@@ -119,8 +116,6 @@ class McuSubsystemSimulator : public rclcpp::Node {
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr trajectory_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr gz_odom_sub_;
-  rclcpp::Subscription<mcu_msgs::msg::IntakeBridgeCommand>::SharedPtr
-      bridge_cmd_sub_;
   rclcpp::Subscription<mcu_msgs::msg::ArmCommand>::SharedPtr arm_cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr intake_speed_sub_;
 
@@ -145,7 +140,6 @@ class McuSubsystemSimulator : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr tof_publish_timer_;
   rclcpp::TimerBase::SharedPtr rc_publish_timer_;
   rclcpp::TimerBase::SharedPtr intake_publish_timer_;
-  rclcpp::TimerBase::SharedPtr bridge_publish_timer_;
   rclcpp::TimerBase::SharedPtr mini_robot_publish_timer_;
   rclcpp::TimerBase::SharedPtr mcu_state_publish_timer_;
 
@@ -167,9 +161,6 @@ class McuSubsystemSimulator : public rclcpp::Node {
   void tofPublishCallback();
   void rcPublishCallback();
   void intakePublishCallback();
-  void bridgePublishCallback();
-  void bridgeCommandCallback(
-      const mcu_msgs::msg::IntakeBridgeCommand::SharedPtr msg);
   void armCommandCallback(const mcu_msgs::msg::ArmCommand::SharedPtr msg);
   void intakeSpeedCallback(const std_msgs::msg::Int16::SharedPtr msg);
   void miniRobotPublishCallback();
@@ -177,14 +168,8 @@ class McuSubsystemSimulator : public rclcpp::Node {
   void trajectoryCallback(const nav_msgs::msg::Path::SharedPtr msg);
   void gzOdomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
-  // -- Simulated bridge state --
-  uint8_t sim_bridge_state_ = 0;  // STATE_STOWED
-  std::chrono::steady_clock::time_point bridge_cmd_time_;
-  uint8_t bridge_target_state_ = 0;
-
   // -- Simulated intake state (improved) --
   uint8_t sim_intake_state_ = 0;  // STATE_IDLE
-  bool sim_duck_detected_ = false;
   int16_t sim_intake_speed_ = 0;
   std::chrono::steady_clock::time_point intake_state_time_;
 };

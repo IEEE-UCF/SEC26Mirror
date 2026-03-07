@@ -43,7 +43,15 @@ void BatterySubsystem::update() {
   uint32_t now = millis();
   if (now - last_publish_ms_ >= 1000) {
     last_publish_ms_ = now;
+#ifdef USE_TEENSYTHREADS
+    {
+      Threads::Scope lock(data_mutex_);
+      publishData();
+      data_ready_ = true;
+    }
+#else
     publishData();
+#endif
   }
 }
 
@@ -90,14 +98,14 @@ void BatterySubsystem::publishData() {
   msg_.temperature = 0.0f;
   msg_.energy = 0.0f;
   msg_.charge_use = 0.0f;
+}
 
+void BatterySubsystem::publishAll() {
 #ifdef USE_TEENSYTHREADS
-  {
-    Threads::Scope guard(g_microros_mutex);
-    (void)rcl_publish(&pub_, &msg_, NULL);
-  }
-#else
+  Threads::Scope lock(data_mutex_);
+  if (!data_ready_ || !pub_.impl) return;
   (void)rcl_publish(&pub_, &msg_, NULL);
+  data_ready_ = false;
 #endif
 }
 

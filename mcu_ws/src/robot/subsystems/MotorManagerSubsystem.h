@@ -129,10 +129,20 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     }
 
     if (!pub_.impl) return;
-    uint32_t now = millis();
-    if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
-      last_publish_ms_ = now;
+    uint32_t now_ms = millis();
+    if (now_ms - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
+      last_publish_ms_ = now_ms;
+#ifdef USE_TEENSYTHREADS
+      {
+        Threads::Scope lock(data_mutex_);
+        for (uint8_t i = 0; i < setup_.numMotors_; i++)
+          pub_data_[i] = speeds_[i];
+        pub_msg_.data.size = setup_.numMotors_;
+        data_ready_ = true;
+      }
+#else
       publishState();
+#endif
     }
   }
 
@@ -269,17 +279,21 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     in_reverse_[motor] = false;
   }
 
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &pub_msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
+ private:
   void publishState() {
     for (uint8_t i = 0; i < setup_.numMotors_; i++) pub_data_[i] = speeds_[i];
     pub_msg_.data.size = setup_.numMotors_;
-#ifdef USE_TEENSYTHREADS
-    {
-      Threads::Scope guard(g_microros_mutex);
-      (void)rcl_publish(&pub_, &pub_msg_, NULL);
-    }
-#else
     (void)rcl_publish(&pub_, &pub_msg_, NULL);
-#endif
   }
 
   static void srvCallback(const void* req, void* res, void* ctx) {
@@ -314,6 +328,10 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

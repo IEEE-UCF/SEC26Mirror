@@ -159,6 +159,15 @@ class DriveSubsystem : public IMicroRosParticipant,
     rcThrottleFilter_.configureTauDtFast(0.15f, 0.005f);
     rcSteeringFilter_.configureTauDtFast(0.15f, 0.005f);
 
+    // cmd_vel input smoothing: same tau/dt as RC for consistent feel
+    cmdVelLinearFilter_.configureTauDtFast(0.15f, 0.005f);
+    cmdVelAngularFilter_.configureTauDtFast(0.15f, 0.005f);
+
+    // Motor output smoothing: tau=0.05s at drive loop dt=0.02s (50 Hz)
+    // Snappier than RC (tau=0.15s) — settles in ~3 time constants (~150ms)
+    motorLeftFilter_.configureTauDtFast(0.05f, 0.02f);
+    motorRightFilter_.configureTauDtFast(0.05f, 0.02f);
+
     // Ensure motors are off at startup
     stopMotors();
     last_update_us_ = micros();
@@ -218,8 +227,8 @@ class DriveSubsystem : public IMicroRosParticipant,
           (rightVel - leftVel) / setup_.locSetup.track_width;
     }
 
-    // ── Command timeout check ──
-    if (mode_ != DriveMode::IDLE && mode_ != DriveMode::MANUAL) {
+    // ── Command timeout check (applies to all active modes including MANUAL) ──
+    if (mode_ != DriveMode::IDLE) {
       uint32_t now_ms = millis();
       if (now_ms - lastCommandMs_ > setup_.commandTimeoutMs) {
         mode_ = DriveMode::IDLE;
@@ -249,7 +258,15 @@ class DriveSubsystem : public IMicroRosParticipant,
     publishCounter_++;
     if (publishCounter_ >= setup_.publishDivider) {
       publishCounter_ = 0;
+#ifdef USE_TEENSYTHREADS
+      {
+        Threads::Scope lock(data_mutex_);
+        publishStatus();
+        data_ready_ = true;
+      }
+#else
       publishStatus();
+#endif
     }
   }
 
@@ -427,6 +444,33 @@ class DriveSubsystem : public IMicroRosParticipant,
 
     float left = secbot::utils::clamp(throttle + steering, -1.0f, 1.0f);
     float right = secbot::utils::clamp(throttle - steering, -1.0f, 1.0f);
+    lastCommandMs_ = millis();
+    manualDrive(left, right);
+  }
+
+  /**
+   * @brief Normalized arcade drive (for MCU-side callers, NOT ROS2 commands).
+   * @param linear  Forward/backward (-1.0 to 1.0), positive = forward
+   * @param angular Turn rate (-1.0 to 1.0), positive = turn left (CCW)
+   * Uses low-pass filter smoothing. For ROS2 DRIVE_VECTOR commands (m/s),
+   * use setVelocity() instead — the command callback handles this.
+   */
+  void cmdVelDrive(float linear, float angular) {
+    linear = secbot::utils::clamp(linear, -1.0f, 1.0f);
+    angular = secbot::utils::clamp(angular, -1.0f, 1.0f);
+
+    static constexpr float DEADZONE = 0.05f;
+    if (linear > -DEADZONE && linear < DEADZONE) linear = 0.0f;
+    if (angular > -DEADZONE && angular < DEADZONE) angular = 0.0f;
+
+    // Smooth cmd_vel inputs with same low-pass filter as RC
+    linear = cmdVelLinearFilter_.update(linear);
+    angular = cmdVelAngularFilter_.update(angular);
+
+    // Differential drive mix: positive angular = CCW = left slower, right faster
+    float left = secbot::utils::clamp(linear - angular, -1.0f, 1.0f);
+    float right = secbot::utils::clamp(linear + angular, -1.0f, 1.0f);
+    lastCommandMs_ = millis();
     manualDrive(left, right);
   }
 
@@ -440,6 +484,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     angularProfile_.reset();
     rcThrottleFilter_.reset(0.0f, false);
     rcSteeringFilter_.reset(0.0f, false);
+    cmdVelLinearFilter_.reset(0.0f, false);
+    cmdVelAngularFilter_.reset(0.0f, false);
+    motorLeftFilter_.reset(0.0f, false);
+    motorRightFilter_.reset(0.0f, false);
   }
 
   /** @brief Override the internal pose estimate (e.g., from Pi EKF). */
@@ -658,12 +706,18 @@ class DriveSubsystem : public IMicroRosParticipant,
         left * setup_.leftMotorMultiplier, -1.0f, 1.0f);
     float r = secbot::utils::clamp(
         right * setup_.rightMotorMultiplier, -1.0f, 1.0f);
+    // Smooth motor output to prevent jerky transitions from PID spikes
+    l = motorLeftFilter_.update(l);
+    r = motorRightFilter_.update(r);
     setup_.motorManager->setSpeed(setup_.leftMotorIdx, l);
     setup_.motorManager->setSpeed(setup_.rightMotorIdx, r);
   }
 
   void stopMotors() {
     if (!setup_.motorManager) return;
+    // Snap filters to zero (don't ramp — safety stop)
+    motorLeftFilter_.reset(0.0f);
+    motorRightFilter_.reset(0.0f);
     setup_.motorManager->setSpeed(setup_.leftMotorIdx, 0.0f);
     setup_.motorManager->setSpeed(setup_.rightMotorIdx, 0.0f);
   }
@@ -678,9 +732,22 @@ class DriveSubsystem : public IMicroRosParticipant,
 
     switch (msg->drive_mode) {
       case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
+        // goal_velocity is in SI units: m/s (linear.x) and rad/s (angular.z)
         float vx = static_cast<float>(msg->goal_velocity.linear.x);
         float omega = static_cast<float>(msg->goal_velocity.angular.z);
-        self->setVelocity(vx, omega);
+        // Clamp to physical limits
+        vx = secbot::utils::clamp(
+            vx, -self->setup_.maxLinearVel, self->setup_.maxLinearVel);
+        omega = secbot::utils::clamp(
+            omega, -self->setup_.maxAngularVel, self->setup_.maxAngularVel);
+        // Only reset profiles/PID if target actually changed
+        if (self->mode_ != DriveMode::VELOCITY ||
+            fabsf(vx - self->targetLinearVel_) > 0.01f ||
+            fabsf(omega - self->targetAngularVel_) > 0.01f) {
+          self->setVelocity(vx, omega);
+        } else {
+          self->lastCommandMs_ = millis();  // refresh timeout
+        }
         break;
       }
       case mcu_msgs__msg__DriveBase__DRIVE_GOAL: {
@@ -694,7 +761,13 @@ class DriveSubsystem : public IMicroRosParticipant,
         float qw = static_cast<float>(
             msg->goal_transform.transform.rotation.w);
         float theta = 2.0f * atan2f(qz, qw);
-        self->setGoal(x, y, theta);
+        // Only reset PID/profile if goal actually changed
+        if (self->mode_ != DriveMode::GOAL ||
+            fabsf(x - self->targetPose_.getX()) > 0.001f ||
+            fabsf(y - self->targetPose_.getY()) > 0.001f ||
+            fabsf(theta - self->targetPose_.getTheta()) > 0.01f) {
+          self->setGoal(x, y, theta);
+        }
         break;
       }
       case mcu_msgs__msg__DriveBase__DRIVE_TRAJ: {
@@ -784,15 +857,22 @@ class DriveSubsystem : public IMicroRosParticipant,
     // Clear path in status (we don't echo it back)
     status_msg_.goal_path.poses.size = 0;
 
-#ifdef USE_TEENSYTHREADS
-    {
-      Threads::Scope guard(g_microros_mutex);
-      (void)rcl_publish(&status_pub_, &status_msg_, NULL);
-    }
-#else
+#ifndef USE_TEENSYTHREADS
     (void)rcl_publish(&status_pub_, &status_msg_, NULL);
 #endif
   }
+
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !status_pub_.impl) return;
+    (void)rcl_publish(&status_pub_, &status_msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
+ private:
 
   // ── State ──────────────────────────────────────────────────────────────
 
@@ -826,6 +906,15 @@ class DriveSubsystem : public IMicroRosParticipant,
   secbot::utils::LowPass1P rcThrottleFilter_;
   secbot::utils::LowPass1P rcSteeringFilter_;
 
+  // cmd_vel input smoothing (same filter type as RC)
+  secbot::utils::LowPass1P cmdVelLinearFilter_;
+  secbot::utils::LowPass1P cmdVelAngularFilter_;
+
+  // Motor output smoothing (prevents PID spikes from jerking wheels)
+  // Snappier than RC input filters (tau=0.05s vs 0.15s)
+  secbot::utils::LowPass1P motorLeftFilter_;
+  secbot::utils::LowPass1P motorRightFilter_;
+
   // Timing
   uint32_t last_update_us_ = 0;
   uint32_t lastCommandMs_ = 0;
@@ -841,6 +930,11 @@ class DriveSubsystem : public IMicroRosParticipant,
   geometry_msgs__msg__Pose pose_msg_{};
   micro_ros_utilities_memory_conf_t status_mem_conf_{};
   micro_ros_utilities_memory_conf_t cmd_mem_conf_{};
+
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

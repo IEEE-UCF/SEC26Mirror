@@ -163,6 +163,11 @@ class DriveSubsystem : public IMicroRosParticipant,
     cmdVelLinearFilter_.configureTauDtFast(0.15f, 0.005f);
     cmdVelAngularFilter_.configureTauDtFast(0.15f, 0.005f);
 
+    // Motor output smoothing: tau=0.05s at drive loop dt=0.02s (50 Hz)
+    // Snappier than RC (tau=0.15s) — settles in ~3 time constants (~150ms)
+    motorLeftFilter_.configureTauDtFast(0.05f, 0.02f);
+    motorRightFilter_.configureTauDtFast(0.05f, 0.02f);
+
     // Ensure motors are off at startup
     stopMotors();
     last_update_us_ = micros();
@@ -444,10 +449,11 @@ class DriveSubsystem : public IMicroRosParticipant,
   }
 
   /**
-   * @brief Drive from ROS2 cmd_vel (normalized [-1.0, 1.0]).
+   * @brief Normalized arcade drive (for MCU-side callers, NOT ROS2 commands).
    * @param linear  Forward/backward (-1.0 to 1.0), positive = forward
    * @param angular Turn rate (-1.0 to 1.0), positive = turn left (CCW)
-   * Same smoothing as RC, with command timeout for safety.
+   * Uses low-pass filter smoothing. For ROS2 DRIVE_VECTOR commands (m/s),
+   * use setVelocity() instead — the command callback handles this.
    */
   void cmdVelDrive(float linear, float angular) {
     linear = secbot::utils::clamp(linear, -1.0f, 1.0f);
@@ -480,6 +486,8 @@ class DriveSubsystem : public IMicroRosParticipant,
     rcSteeringFilter_.reset(0.0f, false);
     cmdVelLinearFilter_.reset(0.0f, false);
     cmdVelAngularFilter_.reset(0.0f, false);
+    motorLeftFilter_.reset(0.0f, false);
+    motorRightFilter_.reset(0.0f, false);
   }
 
   /** @brief Override the internal pose estimate (e.g., from Pi EKF). */
@@ -698,12 +706,18 @@ class DriveSubsystem : public IMicroRosParticipant,
         left * setup_.leftMotorMultiplier, -1.0f, 1.0f);
     float r = secbot::utils::clamp(
         right * setup_.rightMotorMultiplier, -1.0f, 1.0f);
+    // Smooth motor output to prevent jerky transitions from PID spikes
+    l = motorLeftFilter_.update(l);
+    r = motorRightFilter_.update(r);
     setup_.motorManager->setSpeed(setup_.leftMotorIdx, l);
     setup_.motorManager->setSpeed(setup_.rightMotorIdx, r);
   }
 
   void stopMotors() {
     if (!setup_.motorManager) return;
+    // Snap filters to zero (don't ramp — safety stop)
+    motorLeftFilter_.reset(0.0f);
+    motorRightFilter_.reset(0.0f);
     setup_.motorManager->setSpeed(setup_.leftMotorIdx, 0.0f);
     setup_.motorManager->setSpeed(setup_.rightMotorIdx, 0.0f);
   }
@@ -718,9 +732,22 @@ class DriveSubsystem : public IMicroRosParticipant,
 
     switch (msg->drive_mode) {
       case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
-        float linear = static_cast<float>(msg->goal_velocity.linear.x);
-        float angular = static_cast<float>(msg->goal_velocity.angular.z);
-        self->cmdVelDrive(linear, angular);
+        // goal_velocity is in SI units: m/s (linear.x) and rad/s (angular.z)
+        float vx = static_cast<float>(msg->goal_velocity.linear.x);
+        float omega = static_cast<float>(msg->goal_velocity.angular.z);
+        // Clamp to physical limits
+        vx = secbot::utils::clamp(
+            vx, -self->setup_.maxLinearVel, self->setup_.maxLinearVel);
+        omega = secbot::utils::clamp(
+            omega, -self->setup_.maxAngularVel, self->setup_.maxAngularVel);
+        // Only reset profiles/PID if target actually changed
+        if (self->mode_ != DriveMode::VELOCITY ||
+            fabsf(vx - self->targetLinearVel_) > 0.01f ||
+            fabsf(omega - self->targetAngularVel_) > 0.01f) {
+          self->setVelocity(vx, omega);
+        } else {
+          self->lastCommandMs_ = millis();  // refresh timeout
+        }
         break;
       }
       case mcu_msgs__msg__DriveBase__DRIVE_GOAL: {
@@ -882,6 +909,11 @@ class DriveSubsystem : public IMicroRosParticipant,
   // cmd_vel input smoothing (same filter type as RC)
   secbot::utils::LowPass1P cmdVelLinearFilter_;
   secbot::utils::LowPass1P cmdVelAngularFilter_;
+
+  // Motor output smoothing (prevents PID spikes from jerking wheels)
+  // Snappier than RC input filters (tau=0.05s vs 0.15s)
+  secbot::utils::LowPass1P motorLeftFilter_;
+  secbot::utils::LowPass1P motorRightFilter_;
 
   // Timing
   uint32_t last_update_us_ = 0;

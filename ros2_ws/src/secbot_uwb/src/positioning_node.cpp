@@ -12,10 +12,14 @@
 
 namespace secbot_uwb {
 
-UWBPositioningNode::UWBPositioningNode() : Node("uwb_positioning_node") {
+UWBPositioningNode::UWBPositioningNode()
+    : Node("uwb_positioning_node",
+           rclcpp::NodeOptions()
+               .allow_undeclared_parameters(true)
+               .automatically_declare_parameters_from_overrides(true)) {
   RCLCPP_INFO(this->get_logger(), "Initializing UWB Positioning Node");
 
-  declareParameters();
+  // declareParameters();
   loadConfiguration();
 
   // Create ranging subscription
@@ -34,8 +38,8 @@ void UWBPositioningNode::declareParameters() {
   this->declare_parameter("odom_frame", "odom");
 
   // Beacon and tag configuration (will be loaded from YAML)
-  this->declare_parameter("beacons", rclcpp::PARAMETER_NOT_SET);
-  this->declare_parameter("tags", rclcpp::PARAMETER_NOT_SET);
+  // this->declare_parameter("beacons", rclcpp::PARAMETER_NOT_SET);
+  // this->declare_parameter("tags", rclcpp::PARAMETER_NOT_SET);
 
   // Positioning parameters
   this->declare_parameter("positioning.min_beacons_2d", 3);

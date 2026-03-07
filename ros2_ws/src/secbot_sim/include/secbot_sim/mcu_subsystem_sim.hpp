@@ -26,6 +26,7 @@
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <std_msgs/msg/int16.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -44,10 +45,10 @@ namespace secbot_sim {
 enum class DriveMode { MANUAL, VELOCITY_DRIVE, POSE_DRIVE, TRAJECTORY_DRIVE };
 
 class McuSubsystemSimulator : public rclcpp::Node {
- public:
+public:
   McuSubsystemSimulator();
 
- private:
+private:
   // ── Real MCU control objects (same as RobotDriveBase members) ──
   PIDController left_pid_;
   PIDController right_pid_;
@@ -73,24 +74,24 @@ class McuSubsystemSimulator : public rclcpp::Node {
   int right_motor_pwm_;
 
   // ── Simulated encoder state ──
-  double left_encoder_accum_;  // fractional tick accumulator (precision)
+  double left_encoder_accum_; // fractional tick accumulator (precision)
   double right_encoder_accum_;
   long prev_left_ticks_;
   long prev_right_ticks_;
 
   // ── Simulated IMU state ──
   float sim_yaw_;
-  double prev_vel_x_;  // for IMU linear acceleration
+  double prev_vel_x_; // for IMU linear acceleration
 
   // ── Config (from ROS params, matching DriveBaseConfig.example.h) ──
   float track_width_;
   float wheel_diameter_;
   int encoder_ticks_per_rev_;
-  int gear_ratio_;
+  double gear_ratio_;
   float max_velocity_;
   float max_angular_velocity_;
-  float max_wheel_velocity_;  // max single-wheel vel at PWM=255
-  float dist_per_tick_;     // derived
+  float max_wheel_velocity_; // max single-wheel vel at PWM=255
+  float inches_per_tick_;    // derived
 
   // Parameters
   int num_tof_sensors_;
@@ -118,6 +119,8 @@ class McuSubsystemSimulator : public rclcpp::Node {
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr gz_odom_sub_;
   rclcpp::Subscription<mcu_msgs::msg::ArmCommand>::SharedPtr arm_cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr intake_speed_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr
+      joint_state_sub_;
 
   // ── Gazebo ground-truth odom (for sim trajectory tracking) ──
   double gz_odom_x_ = 0.0;
@@ -128,8 +131,8 @@ class McuSubsystemSimulator : public rclcpp::Node {
   std::vector<TrajectoryController::Waypoint> active_traj_;
 
   // ── Commanded velocity for Gazebo (bypasses internal PID/physics) ──
-  double gz_cmd_v_ = 0.0;  // m/s
-  double gz_cmd_w_ = 0.0;  // rad/s
+  double gz_cmd_v_ = 0.0; // m/s
+  double gz_cmd_w_ = 0.0; // rad/s
 
   // ── Timers ──
   rclcpp::TimerBase::SharedPtr update_timer_;
@@ -167,11 +170,20 @@ class McuSubsystemSimulator : public rclcpp::Node {
   void mcuStatePublishCallback();
   void trajectoryCallback(const nav_msgs::msg::Path::SharedPtr msg);
   void gzOdomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
+  void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
 
   // -- Simulated intake state (improved) --
   uint8_t sim_intake_state_ = 0;  // STATE_IDLE
   int16_t sim_intake_speed_ = 0;
   std::chrono::steady_clock::time_point intake_state_time_;
+
+  double ekf_x_ = 0.0;
+  double ekf_y_ = 0.0;
+  double ekf_yaw_ = 0.0;
+  bool ekf_received_ = false;
+
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr ekf_sub_;
+  void ekfOdomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 };
 
-}  // namespace secbot_sim
+} // namespace secbot_sim

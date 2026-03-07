@@ -124,6 +124,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-rpi.gpio \
     python3-serial \
     python3-requests \
+    libgsl-dev \
     ros-$ROS_DISTRO-robot-localization && \
     rm -rf /var/lib/apt/lists/*
 

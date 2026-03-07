@@ -1,7 +1,7 @@
 # UWB Beacon Configuration
 # This file defines the beacon setup for the UWB positioning system
 
-uwb_positioning_node:
+/**:
   ros__parameters:
     # Frame IDs
     map_frame: "map"
@@ -9,35 +9,35 @@ uwb_positioning_node:
 
     # Beacon configuration
     beacons:
-      # Beacon 1 (origin)
+      # Beacon 1: bottom-left corner of field
       10:
         type: "stationary"
         position:
-          x: 0.0
-          y: 0.0
+          x: -7.5
+          y: -3.5
           z: 0.15  # Height of beacon mount
-        known_axes: ["x", "y", "z"]  # All axes known for stationary beacons
-        description: "Stationary beacon at origin"
+        known_axes: ["x", "y", "z"]
+        description: "Stationary beacon at bottom-left corner"
 
-      # Beacon 2: top right corner
+      # Beacon 2: top-left corner of field
       11:
         type: "stationary"
         position:
-          x: 3.0
-          y: 3.0
+          x: -7.5
+          y: 3.5
           z: 0.15  # Height of beacon mount
-        known_axes: ["x", "y", "z"]  # All axes known for stationary beacons
-        description: "Stationary beacon at top right corner"
+        known_axes: ["x", "y", "z"]
+        description: "Stationary beacon at top-left corner"
 
-      # Beacon 3: bottom right corner
+      # Beacon 3: right side center of field
       13:
         type: "stationary"
         position:
-          x: 3.0
+          x: 7.5
           y: 0.0
           z: 0.15
-        known_axes: ["x","y","z"]
-        description: "stationary beacon at bottom right corner "
+        known_axes: ["x", "y", "z"]
+        description: "Stationary beacon at right side center"
 
     # Tag configuration (devices that are tracked)
     tags:
@@ -69,5 +69,5 @@ uwb_positioning_node:
 
     # Publishing settings
     publishing:
-      rate_hz: 20.0  # Publishing rate for position estimates
+      rate_hz: 10.0  # Publishing rate for position estimates
       publish_diagnostics: true  # Publish diagnostic information

@@ -28,11 +28,11 @@ std::vector<GridMap::Cell> GridMap::neighbors(const Cell &cell) const {
   int r = cell.r;
   int c = cell.c;
 
-  // Directions: Up, Down, Left, Right
-  int dr[] = {-1, 1, 0, 0};
-  int dc[] = {0, 0, -1, 1};
+  // 8-directional: cardinal + diagonal
+  int dr[] = {-1, 1, 0, 0, -1, -1, 1, 1};
+  int dc[] = {0, 0, -1, 1, -1, 1, -1, 1};
 
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < 8; ++i) {
     Cell n = {r + dr[i], c + dc[i]};
     if (in_bounds(n) && is_free(n)) {
       result.push_back({n.r, n.c});

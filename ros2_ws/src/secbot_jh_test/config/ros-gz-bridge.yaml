@@ -1,0 +1,19 @@
+#to check the messages of ROS and gazebo....https://github.com/gazebosim/ros_gz/blob/ros2/ros_gz_bridge/README.md
+- ros_topic_name: "/cmd_vel"
+  gz_topic_name: "/model/first_drone/cmd_vel"
+  ros_type_name: "geometry_msgs/msg/Twist"
+  gz_type_name: "gz.msgs.Twist"
+  direction: ROS_TO_GZ
+  # publisher_qos:
+  #   reliability: best_effort
+  #   durability: volatile
+
+# - ros_topic_name: "drone_position"
+#   gz_topic_name: "/model/first_drone/pose"
+#   ros_type_name: "geometry_msgs/msg/Pose"
+#   gz_type_name: "gz.msgs.Pose"
+#   direction: ROS_TO_GZ
+#   publisher_qos:
+#     reliability: best_effort
+#     durability: volatile
+#i do not trust that gazebo topic....how can I verify??

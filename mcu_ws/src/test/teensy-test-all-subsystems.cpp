@@ -249,8 +249,8 @@ static Drive::TankDriveLocalizationSetup g_loc_setup(
     "drive_localization",
     RobotConfig::TRACK_WIDTH_M,
     RobotConfig::WHEEL_DIAMETER_M,
-    RobotConfig::RAW_TICKS_PER_REVOLUTION,
-    RobotConfig::GEAR_RATIO,
+    static_cast<int>(RobotConfig::TICKS_PER_REVOLUTION),
+    1,
     RobotConfig::START_X, RobotConfig::START_Y, RobotConfig::START_THETA);
 
 static DriveSubsystemSetup g_drive_setup(

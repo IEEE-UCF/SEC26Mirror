@@ -60,7 +60,10 @@ class BNO085Driver : public Classes::BaseDriver {
   ~BNO085Driver() override = default;
 
   explicit BNO085Driver(const BNO085DriverSetup& setup)
-      : BaseDriver(setup), setup_(setup), imu_(setup.reset_pin) {}
+      : BaseDriver(setup), setup_(setup), imu_(-1) {}
+  // Pass -1 to Adafruit lib to skip its internal hardware reset (only 10ms
+  // delay — insufficient).  BNO085Driver::init() does a proper reset with
+  // adequate delay using setup_.reset_pin directly.
 
   bool init() override;
   void update() override;
@@ -69,6 +72,9 @@ class BNO085Driver : public Classes::BaseDriver {
   BNO085DriverData getData() const { return data_; }
 
   float calculateYaw(float qx, float qy, float qz, float qw);
+  bool enableReports();
+
+  volatile uint32_t resetCount_ = 0;
 
  private:
   const BNO085DriverSetup setup_;
@@ -77,6 +83,8 @@ class BNO085Driver : public Classes::BaseDriver {
 
   Adafruit_BNO08x imu_;
   sh2_SensorValue_t sensorValue_;
+
+  static constexpr int kMaxEventsPerUpdate = 20;
 };
 
 }  // namespace Drivers

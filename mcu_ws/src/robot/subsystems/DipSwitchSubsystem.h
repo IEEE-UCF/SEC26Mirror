@@ -43,11 +43,11 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
                            public Classes::BaseSubsystem {
  public:
   // Named DIP switch bit positions (bit 0 = physical switch 1)
-  static constexpr uint8_t DIP_RC_OVERRIDE     = 0;  // ON = RC drives motors
+  static constexpr uint8_t DIP_ROS2_ENABLE     = 0;  // ON = ROS2 control, OFF = MCU/RC control
   static constexpr uint8_t DIP_UWB_ENABLE      = 1;  // ON = DW3000 ranging active
   static constexpr uint8_t DIP_VISION_ENABLE   = 2;  // ON = duck detection (ROS2)
   static constexpr uint8_t DIP_SPEED_PROFILE   = 3;  // ON = half speed (ROS2)
-  static constexpr uint8_t DIP_AUTONOMY_ENABLE = 4;  // ON = mission FSM auto (ROS2)
+  static constexpr uint8_t DIP_RESERVED_4      = 4;  // (unused)
   static constexpr uint8_t DIP_OLED_DEBUG      = 5;  // ON = debug dashboard
   static constexpr uint8_t DIP_FORCE_REFLASH   = 6;  // ON = force reflash
   static constexpr uint8_t DIP_DEPLOY_TARGET   = 7;  // ON = deploy target
@@ -75,13 +75,14 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-      msg_.data = fixGPIO(setup_.driver_->readPort(0));
 #ifdef USE_TEENSYTHREADS
       {
-        Threads::Scope guard(g_microros_mutex);
-        (void)rcl_publish(&pub_, &msg_, NULL);
+        Threads::Scope lock(data_mutex_);
+        msg_.data = fixGPIO(setup_.driver_->readPort(0));
+        data_ready_ = true;
       }
 #else
+      msg_.data = fixGPIO(setup_.driver_->readPort(0));
       (void)rcl_publish(&pub_, &msg_, NULL);
 #endif
     }
@@ -145,12 +146,27 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     return ~b;
   }
 
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
+ private:
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
   const DipSwitchSubsystemSetup setup_;
   rcl_publisher_t pub_{};
   std_msgs__msg__UInt8 msg_{};
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

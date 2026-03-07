@@ -1,7 +1,7 @@
 # Project Status — SEC26 Robot
 
-**Last Updated:** 2026-03-03
-**Branch:** `master`
+**Last Updated:** 2026-03-06
+**Branch:** `feat/FSMDebug`
 **Latest master:** `27afe33` (Merge feat/encoders-new #173)
 
 ---
@@ -32,7 +32,7 @@
 | KeypadSubsystem | Implemented | Servo channel 1 + drive-to-press, state/command topics |
 | DeploySubsystem | Implemented | Button-triggered, DIP 8 target select, trigger/status topics |
 | ResetSubsystem | Implemented | micro-ROS Reset service, 9 reset targets |
-| HeartbeatSubsystem | Mature | 5 Hz heartbeat string |
+| HeartbeatSubsystem | Mature | 1 Hz heartbeat string |
 | MiniRobotSubsystem | Not Active | Header exists but NOT instantiated in RobotLogic.h |
 
 ### MCU Subsystems (Other Targets)
@@ -190,3 +190,10 @@ Key changes since last update:
 - MicrorosManager: MAX_PARTICIPANTS=32, executor handles=24
 - ResetSubsystem manages 9 reset targets
 - micro-ROS participant count: 20 active (with UWB enabled)
+
+Changes on `feat/FSMDebug` (pending merge):
+- **Deferred publishing refactor**: All 16 publishing subsystems decoupled from `g_microros_mutex`. Sensor threads cache data under per-subsystem `data_mutex_`, MicrorosManager calls `publishAll()` in one pass. Eliminates mutex contention across ~17 threads.
+- **BNO085 IMU fixes**: 300ms boot delay, 20Hz report rate (matches consumer), max 20 events/update cap, 8K thread stack
+- **Container entrypoint fix**: Zombie process reaping, duplicate agent prevention via `is_running()` guard
+- **Regression test docs**: Added per-target regression test checklists (`src/robot/`, `src/beacon/`, `src/drone/`, `src/minibot/`)
+- **Verified topic rates** at full system load (stage 7, 20 participants): IMU ~21Hz, encoders ~17Hz, drive ~32Hz, all others within spec

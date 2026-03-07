@@ -40,7 +40,10 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   void begin() override {}
   void update() override {
     if (!pub_.impl) return;
-    publishHeartbeat();
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+#endif
+    data_ready_ = true;
   }
   void pause() override {}
   void reset() override { pause(); }
@@ -91,24 +94,25 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   uint32_t task_delay_ms_ = 200;
 #endif
 
- private:
-  void publishHeartbeat() {
-    if (!pub_.impl) return;
-    msg_.data = micro_ros_string_utilities_set(msg_.data, "HEARTBEAT");
+ public:
+  void publishAll() override {
 #ifdef USE_TEENSYTHREADS
-    {
-      Threads::Scope guard(g_microros_mutex);
-      [[maybe_unused]] auto rc = rcl_publish(&pub_, &msg_, NULL);
-    }
-#else
-    [[maybe_unused]] auto rc = rcl_publish(&pub_, &msg_, NULL);
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &msg_, NULL);
+    data_ready_ = false;
 #endif
   }
 
+ private:
   const HeartbeatSubsystemSetup setup_;
   rcl_publisher_t pub_{};
   std_msgs__msg__String msg_{};
   rcl_node_t* node_ = nullptr;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

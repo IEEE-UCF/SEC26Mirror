@@ -44,14 +44,20 @@ Threads::Mutex& mutexFor(TwoWire& wire);
 
 /// RAII scoped lock for an I2C bus.
 struct Lock {
-  explicit Lock(TwoWire& wire) : m_(mutexFor(wire)) { m_.lock(); }
-  ~Lock() { m_.unlock(); }
+  explicit Lock(TwoWire& wire) : m_(mutexFor(wire)) { m_.lock(); locked_ = true; }
+  ~Lock() { if (locked_) m_.unlock(); }
+
+  /// Temporarily release the lock (e.g. during a long delay).
+  void unlock() { if (locked_) { m_.unlock(); locked_ = false; } }
+  /// Re-acquire after unlock().
+  void relock() { if (!locked_) { m_.lock(); locked_ = true; } }
 
   Lock(const Lock&) = delete;
   Lock& operator=(const Lock&) = delete;
 
  private:
   Threads::Mutex& m_;
+  bool locked_ = false;
 };
 
 }  // namespace I2CBus

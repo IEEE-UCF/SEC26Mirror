@@ -6,9 +6,6 @@
 
 namespace Subsystem {
 
-// Frame ID for TF and robot_localization compatibility
-static char frame_id[] = "imu_link";
-
 bool ImuSubsystem::init() {
   if (!setup_.driver_) {
     DEBUG_PRINTLN("[IMU] init FAIL: no driver");
@@ -51,8 +48,21 @@ void ImuSubsystem::update() {
   // Cache yaw for cross-thread access (e.g., DriveSubsystem localization)
   yaw_rad_ = setup_.driver_->getData().yaw;
 
+  ++diag_update_count_;
+  diag_last_update_ms_ = millis();
+
   if (!pub_.impl) return;
+
+  // Populate message under data_mutex_ for deferred publishing
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope lock(data_mutex_);
+    publishData();
+    data_ready_ = true;
+  }
+#else
   publishData();
+#endif
 }
 
 void ImuSubsystem::reset() { pause(); }
@@ -66,11 +76,14 @@ bool ImuSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
   (void)executor;
   node_ = node;
 
-  // Initialize the IMU message ofc..
+  // Initialize the IMU message
   sensor_msgs__msg__Imu__init(&msg_);
 
   // Initialize covariance matrices
   initCovariances();
+
+  // frame_id will be set in publishData() using a static string pointer.
+  // See onDestroy() for why we null it before __fini.
 
   // Then we create a publisher with best-effort QoS for real-time sensor data
   if (rclc_publisher_init_best_effort(
@@ -85,9 +98,13 @@ bool ImuSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 }
 
 void ImuSubsystem::onDestroy() {
-  // destroy_entities() finalises the rcl_node before calling onDestroy, so
-  // rcl_*_fini would leave impl non-NULL on error; reset local state only.
   pub_ = rcl_get_zero_initialized_publisher();
+  // Null out the frame_id string BEFORE calling __fini.  publishData() sets
+  // frame_id.data to a static char[], and __fini would try to free() it,
+  // causing heap corruption.
+  msg_.header.frame_id.data = NULL;
+  msg_.header.frame_id.size = 0;
+  msg_.header.frame_id.capacity = 0;
   sensor_msgs__msg__Imu__fini(&msg_);
   node_ = nullptr;
 }
@@ -125,10 +142,12 @@ void ImuSubsystem::publishData() {
   msg_.header.stamp.sec = (int32_t)(time_ns / 1000000000);
   msg_.header.stamp.nanosec = (int32_t)(time_ns % 1000000000);
 
-  // Frame ID
+  // Frame ID — points to file-scope static string.  onDestroy() nulls this
+  // before calling __fini to prevent freeing a static pointer.
+  static char frame_id[] = "imu_link";
   msg_.header.frame_id.data = frame_id;
-  msg_.header.frame_id.size = strlen(frame_id);
-  msg_.header.frame_id.capacity = strlen(frame_id) + 1;
+  msg_.header.frame_id.size = 8;
+  msg_.header.frame_id.capacity = 9;
 
   // Orientation quaternion (Looking at the documentation and I think the BNO085
   // provides this directly)
@@ -155,14 +174,18 @@ void ImuSubsystem::publishData() {
   msg_.linear_acceleration.x = data.accel_x;
   msg_.linear_acceleration.y = data.accel_y;
   msg_.linear_acceleration.z = data.accel_z;
+}
 
+void ImuSubsystem::publishAll() {
 #ifdef USE_TEENSYTHREADS
-  {
-    Threads::Scope guard(g_microros_mutex);
-    (void)rcl_publish(&pub_, &msg_, NULL);
+  Threads::Scope lock(data_mutex_);
+  if (!data_ready_ || !pub_.impl) return;
+  rcl_ret_t rc = rcl_publish(&pub_, &msg_, NULL);
+  data_ready_ = false;
+  ++diag_pub_count_;
+  if (rc != RCL_RET_OK) {
+    DEBUG_PRINTF("[IMU] pub FAIL: rc=%d\n", (int)rc);
   }
-#else
-  (void)rcl_publish(&pub_, &msg_, NULL);
 #endif
 }
 

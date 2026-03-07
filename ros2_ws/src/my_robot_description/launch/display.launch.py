@@ -1,4 +1,5 @@
 import os
+import xml.etree.ElementTree as ET
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -12,6 +13,15 @@ def generate_launch_description():
 
     with open(urdf_file, 'r') as f:
         robot_description = f.read()
+
+    # Parse URDF to find the base link name
+    tree = ET.parse(urdf_file)
+    root = tree.getroot()
+    # The first link in strict URDF is often the base, or we can just pick the first one found if not specified.
+    # In this specific file, the first link is "1_x_1_x___23___aluminum_angle..."
+    base_link = root.find('link').attrib['name']
+
+    rviz_config_file = os.path.join(pkg, 'rviz', 'urdf.rviz')
 
     return LaunchDescription([
         # Publishes TF transforms from the URDF joint states
@@ -32,5 +42,6 @@ def generate_launch_description():
             package='rviz2',
             executable='rviz2',
             name='rviz2',
+            arguments=['-d', rviz_config_file, '-f', base_link],
         ),
     ])

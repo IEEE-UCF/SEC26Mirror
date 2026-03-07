@@ -1,0 +1,28 @@
+# Centralized Motion Configuration (Standardized to SI units: m, rad, s)
+# This file is the single source of truth for simulation and scripts.
+
+robot_parameters:
+  # Physical dimensions (converted from inches to meters where necessary)
+  # 11.93 inches = 0.303022 meters
+  track_width: 0.303022
+  # 3.25 inches = 0.08255 meters
+  wheel_diameter: 0.08255
+
+  # Drive system
+  encoder_ticks_per_rev: 104.0
+  gear_ratio: 0.6
+
+  # Velocity & Acceleration Limits
+  # (Converted from 24 in/s and 12 in/s^2 to m/s)
+  max_velocity: 0.6096 # ~24 in/s
+  max_angular_velocity: 3.0 # rad/s
+
+  max_acceleration: 0.3048 # ~12 in/s^2
+  max_jerk: 1.2192 # ~48 in/s^3
+
+calibration_defaults:
+  default_speed: 0.20 # m/s
+  default_turn_speed: 0.50 # rad/s
+  settle_time: 2.0 # s
+  tolerance: 0.05 # 5%
+  cmd_topic: "/cmd_vel"

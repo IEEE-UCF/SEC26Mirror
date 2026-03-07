@@ -96,6 +96,16 @@ class TCA9555Driver : public Classes::BaseDriver {
    */
   bool digitalRead(uint8_t pin) const;
 
+  // ── DMA injection ───────────────────────────────────────────────────────
+
+  /// Inject DMA-read input data into the cached input ports.
+  /// Call this from the bus task after dispatch() copies RX bytes.
+  /// Existing readPort() / digitalRead() will see the updated values.
+  void injectDMA(uint8_t port0, uint8_t port1) {
+    data_.inputPort0 = port0;
+    data_.inputPort1 = port1;
+  }
+
   // ── Port-level API ────────────────────────────────────────────────────────
 
   /// Write an entire 8-bit output port (0 or 1). Returns true on success.

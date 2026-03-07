@@ -4,18 +4,16 @@
  * @brief Implementation of the mission sequencer state machine
  *
  * Minibot launches FIRST (state 2), antenna alignment folded into solve
- * states, intake bridge replaces arm for pressure plate.
+ * states, intake rail replaces bridge abstraction for pressure plate.
  *
- * THINGS NEEDED IN REAL LIFE FOR IT TO BE ACCURATE
- * - Arena waypoint coordinates (the POS_* constants in the header, currently
- *   placeholder floats)
- * - Servo joint IDs 5/6/7 (camera mast, minibot latch, drone latch), need
- *   confirmation from mechanical
- * - Light bar detection for WAIT_FOR_START (currently only checks manual btn1
- *   press)
+ * Drives robot via drive_base/command (DriveBase msg) — no Nav2.
+ * Reads pose from drive_base/status.  MCU auto-stops after 500ms without
+ * a command, so refreshDriveCommand() re-publishes every tick (100ms).
  */
 
 #include "secbot_autonomy/mission_node.hpp"
+
+#include <cmath>
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -26,34 +24,28 @@ MissionNode::MissionNode() : Node("mission_node") {
   RCLCPP_INFO(this->get_logger(), "Mission node starting...");
 
   // Publishers
-  goal_pub_ =
-      this->create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);
+  drive_cmd_pub_ =
+      this->create_publisher<mcu_msgs::msg::DriveBase>("drive_base/command", 10);
   task_cmd_pub_ = this->create_publisher<std_msgs::msg::UInt8>(
       "/autonomy/task_command", 10);
   antenna_target_pub_ = this->create_publisher<std_msgs::msg::UInt8>(
       "/autonomy/antenna_target", 10);
-  cmd_vel_pub_ =
-      this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
   minibot_cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
       "/mcu_minibot/cmd_vel", 10);
   arm_cmd_pub_ =
       this->create_publisher<mcu_msgs::msg::ArmCommand>("/arm_command", 10);
-  intake_speed_pub_ =
-      this->create_publisher<std_msgs::msg::Int16>("/intake_speed", 10);
+  intake_cmd_pub_ = this->create_publisher<mcu_msgs::msg::IntakeCommand>(
+      "/mcu_robot/intake/command", 10);
   drone_cmd_pub_ = this->create_publisher<mcu_msgs::msg::DroneControl>(
       "/mcu_drone/control", 10);
-  bridge_cmd_pub_ = this->create_publisher<mcu_msgs::msg::IntakeBridgeCommand>(
-      "/mcu_robot/intake_bridge/command", 10);
 
   // Subscribers
-  goal_reached_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-      "/nav/goal_reached", 10,
-      std::bind(&MissionNode::onGoalReached, this, _1));
+  drive_status_sub_ = this->create_subscription<mcu_msgs::msg::DriveBase>(
+      "drive_base/status", 10,
+      std::bind(&MissionNode::onDriveStatus, this, _1));
   task_status_sub_ = this->create_subscription<secbot_msgs::msg::TaskStatus>(
       "/autonomy/task_status", 10,
       std::bind(&MissionNode::onTaskStatus, this, _1));
-  odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-      "/odom", 10, std::bind(&MissionNode::onOdom, this, _1));
   minibot_state_sub_ = this->create_subscription<mcu_msgs::msg::MiniRobotState>(
       "/mcu_minibot/state", 10,
       std::bind(&MissionNode::onMinibotState, this, _1));
@@ -62,15 +54,9 @@ MissionNode::MissionNode() : Node("mission_node") {
   robot_inputs_sub_ = this->create_subscription<mcu_msgs::msg::RobotInputs>(
       "/mcu_robot/inputs", 10,
       std::bind(&MissionNode::onRobotInputs, this, _1));
-  // Fixed topic: was /mcu_robot/intake_state, firmware publishes to
-  // /mcu_robot/intake/state
   intake_state_sub_ = this->create_subscription<mcu_msgs::msg::IntakeState>(
       "/mcu_robot/intake/state", 10,
       std::bind(&MissionNode::onIntakeState, this, _1));
-  bridge_state_sub_ =
-      this->create_subscription<mcu_msgs::msg::IntakeBridgeState>(
-          "/mcu_robot/intake_bridge/state", 10,
-          std::bind(&MissionNode::onBridgeState, this, _1));
   duck_detect_sub_ =
       this->create_subscription<secbot_msgs::msg::DuckDetections>(
           "/duck_detections", 10,
@@ -78,6 +64,11 @@ MissionNode::MissionNode() : Node("mission_node") {
   antenna_marker_sub_ = this->create_subscription<mcu_msgs::msg::AntennaMarker>(
       "/antenna_markers", 10,
       std::bind(&MissionNode::onAntennaMarker, this, _1));
+
+  // Start service — call to begin the mission
+  start_service_ = this->create_service<std_srvs::srv::Trigger>(
+      "/mission/start",
+      std::bind(&MissionNode::onStartService, this, _1, std::placeholders::_2));
 
   // 10 Hz step timer
   step_timer_ = this->create_wall_timer(
@@ -87,24 +78,61 @@ MissionNode::MissionNode() : Node("mission_node") {
               "Mission node ready, waiting for start signal");
 }
 
+// Service callbacks
+
+void MissionNode::onStartService(
+    const std_srvs::srv::Trigger::Request::SharedPtr /*req*/,
+    std_srvs::srv::Trigger::Response::SharedPtr res) {
+  if (!start_button_pressed_) {
+    start_button_pressed_ = true;
+    RCLCPP_INFO(this->get_logger(), "Mission start triggered via service!");
+    res->success = true;
+    res->message = "Mission started";
+  } else {
+    res->success = false;
+    res->message = "Mission already started";
+  }
+}
+
 // Callbacks
 
-void MissionNode::onGoalReached(const std_msgs::msg::Bool::SharedPtr msg) {
-  goal_reached_ = msg->data;
-  if (goal_reached_) {
-    RCLCPP_INFO(this->get_logger(), "Navigation goal reached!");
+void MissionNode::onDriveStatus(
+    const mcu_msgs::msg::DriveBase::SharedPtr msg) {
+  // Extract robot pose from transform
+  robot_x_ = msg->transform.transform.translation.x;
+  robot_y_ = msg->transform.transform.translation.y;
+
+  // Goal-reached: distance to nav_target_ within tolerance
+  double dx = robot_x_ - nav_target_.x;
+  double dy = robot_y_ - nav_target_.y;
+  double dist = std::sqrt(dx * dx + dy * dy);
+  if (dist < GOAL_REACHED_TOL && !goal_reached_) {
+    goal_reached_ = true;
+    RCLCPP_INFO(this->get_logger(),
+                "Navigation goal reached! (dist=%.3fm)", dist);
   }
+
+  // Also detect mode transition: GOAL/TRAJ → DRIVE_VECTOR with zero velocity
+  // indicates MCU finished its trajectory
+  uint8_t mode = msg->drive_mode;
+  if ((last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_GOAL ||
+       last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_TRAJ) &&
+      mode == mcu_msgs::msg::DriveBase::DRIVE_VECTOR) {
+    double vx = msg->twist.linear.x;
+    double omega = msg->twist.angular.z;
+    if (std::abs(vx) < 0.01 && std::abs(omega) < 0.01 && !goal_reached_) {
+      goal_reached_ = true;
+      RCLCPP_INFO(this->get_logger(),
+                  "Navigation goal reached! (MCU went idle)");
+    }
+  }
+  last_drive_mode_ = mode;
 }
 
 void MissionNode::onTaskStatus(
     const secbot_msgs::msg::TaskStatus::SharedPtr msg) {
   current_task_id_ = msg->task_id;
   task_idle_ = (msg->task_id == TASK_NONE);
-}
-
-void MissionNode::onOdom(const nav_msgs::msg::Odometry::SharedPtr msg) {
-  robot_x_ = msg->pose.pose.position.x;
-  robot_y_ = msg->pose.pose.position.y;
 }
 
 void MissionNode::onMinibotState(
@@ -130,13 +158,9 @@ void MissionNode::onRobotInputs(
 void MissionNode::onIntakeState(
     const mcu_msgs::msg::IntakeState::SharedPtr msg) {
   intake_state_ = msg->state;
-  duck_in_intake_ = msg->duck_detected;
-}
-
-void MissionNode::onBridgeState(
-    const mcu_msgs::msg::IntakeBridgeState::SharedPtr msg) {
-  bridge_state_ = msg->state;
-  bridge_duck_detected_ = msg->duck_detected;
+  intake_position_ = msg->position;
+  intake_limit_extend_ = msg->limit_extend_active;
+  intake_limit_retract_ = msg->limit_retract_active;
 }
 
 void MissionNode::onDuckDetections(
@@ -194,19 +218,66 @@ void MissionNode::onAntennaMarker(
   }
 }
 
-// Helpers
+// Navigation helpers
 
-void MissionNode::sendNavGoal(const ArenaPosition& pos) {
+void MissionNode::sendDriveGoal(const ArenaPosition& pos) {
   goal_reached_ = false;
-  auto msg = geometry_msgs::msg::PoseStamped();
-  msg.header.frame_id = "map";
+  nav_target_ = pos;
+  auto msg = mcu_msgs::msg::DriveBase();
   msg.header.stamp = this->now();
-  msg.pose.position.x = pos.x;
-  msg.pose.position.y = pos.y;
-  msg.pose.orientation.w = 1.0;
-  goal_pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "Sent nav goal: (%.2f, %.2f)", pos.x, pos.y);
+  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
+  msg.goal_transform.transform.translation.x = pos.x;
+  msg.goal_transform.transform.translation.y = pos.y;
+  msg.goal_transform.transform.rotation.w = 1.0;
+  last_drive_cmd_ = msg;
+  drive_cmd_pub_->publish(msg);
+  RCLCPP_INFO(this->get_logger(), "Sent drive goal: (%.3f, %.3f)", pos.x,
+              pos.y);
 }
+
+void MissionNode::sendDrivePath(
+    const std::vector<ArenaPosition>& waypoints) {
+  goal_reached_ = false;
+  if (!waypoints.empty()) {
+    nav_target_ = waypoints.back();
+  }
+  auto msg = mcu_msgs::msg::DriveBase();
+  msg.header.stamp = this->now();
+  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_TRAJ;
+  for (const auto& wp : waypoints) {
+    geometry_msgs::msg::PoseStamped ps;
+    ps.header.stamp = this->now();
+    ps.header.frame_id = "map";
+    ps.pose.position.x = wp.x;
+    ps.pose.position.y = wp.y;
+    ps.pose.orientation.w = 1.0;
+    msg.goal_path.poses.push_back(ps);
+  }
+  last_drive_cmd_ = msg;
+  drive_cmd_pub_->publish(msg);
+  RCLCPP_INFO(this->get_logger(), "Sent drive path with %zu waypoints",
+              waypoints.size());
+}
+
+void MissionNode::sendVelocity(double vx, double omega) {
+  auto msg = mcu_msgs::msg::DriveBase();
+  msg.header.stamp = this->now();
+  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_VECTOR;
+  msg.goal_velocity.linear.x = vx;
+  msg.goal_velocity.angular.z = omega;
+  last_drive_cmd_ = msg;
+  drive_cmd_pub_->publish(msg);
+}
+
+void MissionNode::stopRobot() { sendVelocity(0.0, 0.0); }
+
+void MissionNode::refreshDriveCommand() {
+  // Re-publish the last drive command every tick to prevent MCU 500ms timeout
+  last_drive_cmd_.header.stamp = this->now();
+  drive_cmd_pub_->publish(last_drive_cmd_);
+}
+
+// Task helpers
 
 void MissionNode::sendTaskCommand(uint8_t task_id) {
   auto msg = std_msgs::msg::UInt8();
@@ -221,14 +292,6 @@ void MissionNode::sendAntennaTarget(uint8_t antenna_id) {
   antenna_target_pub_->publish(msg);
 }
 
-void MissionNode::sendBackup(double speed, double duration_sec) {
-  auto msg = geometry_msgs::msg::Twist();
-  msg.linear.x = -std::abs(speed);
-  cmd_vel_pub_->publish(msg);
-  phase_timer_ = std::chrono::steady_clock::now();
-  backup_duration_sec_ = duration_sec;
-}
-
 void MissionNode::sendArmCommand(uint8_t joint_id, int16_t position,
                                  uint8_t speed) {
   auto msg = mcu_msgs::msg::ArmCommand();
@@ -238,16 +301,11 @@ void MissionNode::sendArmCommand(uint8_t joint_id, int16_t position,
   arm_cmd_pub_->publish(msg);
 }
 
-void MissionNode::setIntakeSpeed(int16_t speed) {
-  auto msg = std_msgs::msg::Int16();
-  msg.data = speed;
-  intake_speed_pub_->publish(msg);
-}
-
-void MissionNode::sendBridgeCommand(uint8_t cmd) {
-  auto msg = mcu_msgs::msg::IntakeBridgeCommand();
+void MissionNode::sendIntakeCommand(uint8_t cmd, float value) {
+  auto msg = mcu_msgs::msg::IntakeCommand();
   msg.command = cmd;
-  bridge_cmd_pub_->publish(msg);
+  msg.value = value;
+  intake_cmd_pub_->publish(msg);
 }
 
 bool MissionNode::checkStateTimeout(double timeout_s) {
@@ -417,8 +475,10 @@ void MissionNode::stepMission() {
     // -- NAVIGATE TO UWB CORNER --
     case MissionPhase::NAV_TO_UWB_CORNER: {
       if (phase_entry_) {
-        sendNavGoal(POS_UWB_CORNER);
+        sendDriveGoal(POS_UWB_CORNER);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::PLACE_UWB_BEACON);
@@ -449,8 +509,10 @@ void MissionNode::stepMission() {
     // -- NAVIGATE TO BUTTON BEACON --
     case MissionPhase::NAV_TO_BUTTON: {
       if (phase_entry_) {
-        sendNavGoal(POS_BUTTON_BEACON);
+        sendDriveGoal(POS_BUTTON_APPROACH);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_BUTTON);
@@ -504,8 +566,10 @@ void MissionNode::stepMission() {
     // -- NAVIGATE TO CRANK FLAG POSITION --
     case MissionPhase::NAV_TO_CRANK_FLAG: {
       if (phase_entry_) {
-        sendNavGoal(POS_CRANK_FLAG);
+        sendDriveGoal(POS_CRANK_FLAG);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::PLACE_UWB_FLAG);
@@ -536,8 +600,10 @@ void MissionNode::stepMission() {
     // -- NAVIGATE TO CRANK --
     case MissionPhase::NAV_TO_CRANK: {
       if (phase_entry_) {
-        sendNavGoal(POS_CRANK_APPROACH);
+        sendDriveGoal(POS_CRANK_APPROACH);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_CRANK);
@@ -608,15 +674,17 @@ void MissionNode::stepMission() {
 
       switch (duck_collect_step_) {
         case DuckCollectStep::NAV_TO_DUCK: {
-          sendNavGoal(known_duck_positions_[duck_collect_index_]);
+          sendDriveGoal(known_duck_positions_[duck_collect_index_]);
           RCLCPP_INFO(this->get_logger(), "Navigating to duck %zu/%zu",
                       duck_collect_index_ + 1, known_duck_positions_.size());
           duck_collect_step_ = DuckCollectStep::INTAKE_ON;
           break;
         }
         case DuckCollectStep::INTAKE_ON: {
+          refreshDriveCommand();
           if (goal_reached_) {
-            setIntakeSpeed(INTAKE_CAPTURE_SPEED);
+            sendIntakeCommand(
+                mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, 1.0f);
             phase_timer_ = std::chrono::steady_clock::now();
             duck_collect_step_ = DuckCollectStep::WAIT_CAPTURE;
           }
@@ -624,21 +692,22 @@ void MissionNode::stepMission() {
         }
         case DuckCollectStep::WAIT_CAPTURE: {
           auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-          if (duck_in_intake_ ||
-              std::chrono::duration<double>(elapsed).count() >= 3.0) {
-            setIntakeSpeed(INTAKE_OFF_SPEED);
+          if (std::chrono::duration<double>(elapsed).count() >= 3.0) {
+            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
             duck_collect_step_ = DuckCollectStep::NAV_TO_DEPOSIT;
           }
           break;
         }
         case DuckCollectStep::NAV_TO_DEPOSIT: {
-          sendNavGoal(POS_DUCK_DEPOSIT);
+          sendDriveGoal(POS_DUCK_DEPOSIT);
           duck_collect_step_ = DuckCollectStep::EJECT;
           break;
         }
         case DuckCollectStep::EJECT: {
+          refreshDriveCommand();
           if (goal_reached_) {
-            setIntakeSpeed(INTAKE_EJECT_SPEED);
+            sendIntakeCommand(
+                mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, -1.0f);
             phase_timer_ = std::chrono::steady_clock::now();
             duck_collect_step_ = DuckCollectStep::WAIT_EJECT;
           }
@@ -646,9 +715,8 @@ void MissionNode::stepMission() {
         }
         case DuckCollectStep::WAIT_EJECT: {
           auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-          if (!duck_in_intake_ ||
-              std::chrono::duration<double>(elapsed).count() >= 2.0) {
-            setIntakeSpeed(INTAKE_OFF_SPEED);
+          if (std::chrono::duration<double>(elapsed).count() >= 2.0) {
+            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
             duck_collect_step_ = DuckCollectStep::NEXT_DUCK;
           }
           break;
@@ -668,7 +736,7 @@ void MissionNode::stepMission() {
       }
       // Overall duck collection timeout
       if (checkStateTimeout(60.0)) {
-        setIntakeSpeed(INTAKE_OFF_SPEED);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
         duck_interrupt_enabled_ = true;
         transitionTo(MissionPhase::NAV_TO_KEYPAD);
       }
@@ -676,10 +744,13 @@ void MissionNode::stepMission() {
     }
 
     // -- NAVIGATE TO KEYPAD BEACON --
+    // Multi-waypoint: crank area → below crater → keypad (west side)
     case MissionPhase::NAV_TO_KEYPAD: {
       if (phase_entry_) {
-        sendNavGoal(POS_KEYPAD_BEACON);
+        sendDrivePath({{1.04, 1.14}, {0.20, 0.98}});
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_KEYPAD);
@@ -731,10 +802,13 @@ void MissionNode::stepMission() {
     }
 
     // -- NAVIGATE TO PRESSURE PLATE --
+    // Multi-waypoint: keypad → up left wall → approach crater from west
     case MissionPhase::NAV_TO_PRESSURE: {
       if (phase_entry_) {
-        sendNavGoal(POS_PRESSURE_PLATE);
+        sendDrivePath({{0.13, 1.40}, POS_PRESSURE_APPROACH});
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::SOLVE_PRESSURE);
@@ -745,7 +819,7 @@ void MissionNode::stepMission() {
       break;
     }
 
-    // -- SOLVE PRESSURE (align antenna 3, then intake bridge sub-FSM) --
+    // -- SOLVE PRESSURE (align antenna 3, then intake rail sub-FSM) --
     case MissionPhase::SOLVE_PRESSURE: {
       if (phase_entry_) {
         sub_step_ = SolveSubStep::ALIGN_ANTENNA;
@@ -759,19 +833,21 @@ void MissionNode::stepMission() {
         case SolveSubStep::ALIGN_ANTENNA:
           if (task_idle_) {
             sub_step_ = SolveSubStep::EXECUTE_TASK;
-            bridge_step_ = IntakeBridgeStep::EXTEND;
+            rail_step_ = IntakeRailStep::EXTEND;
             RCLCPP_INFO(this->get_logger(),
-                        "Antenna aligned, starting intake bridge");
-            // Send extend command and start intake
-            sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
-            setIntakeSpeed(INTAKE_CAPTURE_SPEED);
+                        "Antenna aligned, starting intake rail");
+            // Extend rail and start intake spinner
+            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_EXTEND);
+            sendIntakeCommand(
+                mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, 1.0f);
             phase_timer_ = std::chrono::steady_clock::now();
           }
           if (checkStateTimeout(DEFAULT_TASK_TIMEOUT_S)) {
             sub_step_ = SolveSubStep::EXECUTE_TASK;
-            bridge_step_ = IntakeBridgeStep::EXTEND;
-            sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
-            setIntakeSpeed(INTAKE_CAPTURE_SPEED);
+            rail_step_ = IntakeRailStep::EXTEND;
+            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_EXTEND);
+            sendIntakeCommand(
+                mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, 1.0f);
             phase_timer_ = std::chrono::steady_clock::now();
           }
           break;
@@ -780,46 +856,46 @@ void MissionNode::stepMission() {
           auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
           double sec = std::chrono::duration<double>(elapsed).count();
 
-          switch (bridge_step_) {
-            case IntakeBridgeStep::EXTEND:
-              if (bridge_state_ ==
-                      mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED ||
+          switch (rail_step_) {
+            case IntakeRailStep::EXTEND:
+              if (intake_position_ >= 0.95 || intake_limit_extend_ ||
                   sec >= 3.0) {
-                bridge_step_ = IntakeBridgeStep::WAIT_CAPTURE;
+                rail_step_ = IntakeRailStep::WAIT_CAPTURE;
                 phase_timer_ = std::chrono::steady_clock::now();
                 RCLCPP_INFO(this->get_logger(),
-                            "Bridge extended, waiting for duck");
+                            "Rail extended, waiting for duck capture");
               }
               break;
-            case IntakeBridgeStep::WAIT_CAPTURE:
-              if (bridge_duck_detected_ || sec >= 2.0) {
-                bridge_step_ = IntakeBridgeStep::RETRACT;
-                sendBridgeCommand(
-                    mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT);
+            case IntakeRailStep::WAIT_CAPTURE:
+              if (sec >= 2.0) {
+                rail_step_ = IntakeRailStep::RETRACT;
+                sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_RETRACT);
                 phase_timer_ = std::chrono::steady_clock::now();
-                RCLCPP_INFO(this->get_logger(), "Retracting bridge (duck=%s)",
-                            bridge_duck_detected_ ? "yes" : "timeout");
-              }
-              break;
-            case IntakeBridgeStep::RETRACT:
-              if (bridge_state_ ==
-                      mcu_msgs::msg::IntakeBridgeState::STATE_STOWED ||
-                  sec >= 3.0) {
-                setIntakeSpeed(INTAKE_OFF_SPEED);
-                bridge_step_ = IntakeBridgeStep::DONE;
                 RCLCPP_INFO(this->get_logger(),
-                            "Bridge retracted, pressure clear complete");
+                            "Capture window elapsed, retracting rail");
               }
               break;
-            case IntakeBridgeStep::DONE:
+            case IntakeRailStep::RETRACT:
+              if (intake_position_ <= 0.05 || intake_limit_retract_ ||
+                  sec >= 3.0) {
+                sendIntakeCommand(
+                    mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
+                sendIntakeCommand(
+                    mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
+                rail_step_ = IntakeRailStep::DONE;
+                RCLCPP_INFO(this->get_logger(),
+                            "Rail retracted, pressure clear complete");
+              }
+              break;
+            case IntakeRailStep::DONE:
               transitionTo(MissionPhase::DEPOSIT_DUCK);
               break;
           }
 
           // Overall pressure solve timeout
           if (checkStateTimeout(15.0)) {
-            sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
-            setIntakeSpeed(INTAKE_OFF_SPEED);
+            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
+            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
             transitionTo(MissionPhase::DEPOSIT_DUCK);
           }
           break;
@@ -833,18 +909,21 @@ void MissionNode::stepMission() {
     }
 
     // -- DEPOSIT DUCK (nav to target zone + eject from intake) --
+    // Multi-waypoint: exit crater west, go to Lunar Landing
     case MissionPhase::DEPOSIT_DUCK: {
       if (phase_entry_) {
         deposit_step_ = DepositStep::NAV_TO_ZONE;
         RCLCPP_INFO(this->get_logger(), "Depositing duck in target zone");
-        sendNavGoal(POS_DUCK_DEPOSIT);
+        sendDrivePath({{0.25, 1.40}, POS_DUCK_DEPOSIT});
         phase_entry_ = false;
       }
 
       switch (deposit_step_) {
         case DepositStep::NAV_TO_ZONE: {
+          refreshDriveCommand();
           if (goal_reached_) {
-            setIntakeSpeed(INTAKE_EJECT_SPEED);
+            sendIntakeCommand(
+                mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, -1.0f);
             phase_timer_ = std::chrono::steady_clock::now();
             deposit_step_ = DepositStep::EJECT;
           }
@@ -852,9 +931,8 @@ void MissionNode::stepMission() {
         }
         case DepositStep::EJECT: {
           auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-          if (!duck_in_intake_ ||
-              std::chrono::duration<double>(elapsed).count() >= 2.0) {
-            setIntakeSpeed(INTAKE_OFF_SPEED);
+          if (std::chrono::duration<double>(elapsed).count() >= 2.0) {
+            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
             deposit_step_ = DepositStep::WAIT_EJECT;
             phase_timer_ = std::chrono::steady_clock::now();
           }
@@ -874,7 +952,7 @@ void MissionNode::stepMission() {
         }
       }
       if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
-        setIntakeSpeed(INTAKE_OFF_SPEED);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
         transitionTo(MissionPhase::VIEW_LED_COLORS);
       }
       break;
@@ -932,8 +1010,10 @@ void MissionNode::stepMission() {
     // -- NAVIGATE TO LAUNCH POINT --
     case MissionPhase::NAV_TO_LAUNCH: {
       if (phase_entry_) {
-        sendNavGoal(POS_LAUNCH_POINT);
+        sendDriveGoal(POS_LAUNCH_POINT);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::LAUNCH_DRONE);
@@ -978,8 +1058,10 @@ void MissionNode::stepMission() {
     // -- NAVIGATE TO FINISH / PARK --
     case MissionPhase::NAV_TO_FINISH: {
       if (phase_entry_) {
-        sendNavGoal(POS_FINISH);
+        sendDriveGoal(POS_FINISH);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         // Signal minibot to return
@@ -988,8 +1070,6 @@ void MissionNode::stepMission() {
         auto cmd = geometry_msgs::msg::Twist();
         cmd.linear.x = 0.3;
         minibot_cmd_pub_->publish(cmd);
-        phase_timer_ = std::chrono::steady_clock::now();
-        // Wait briefly for minibot, then complete
         transitionTo(MissionPhase::MISSION_COMPLETE);
       }
       if (checkStateTimeout(DEFAULT_NAV_TIMEOUT_S)) {
@@ -1007,12 +1087,12 @@ void MissionNode::stepMission() {
                     "MISSION COMPLETE! Total time: %.1f seconds", seconds);
 
         // Stop everything
+        stopRobot();
         auto stop = geometry_msgs::msg::Twist();
-        cmd_vel_pub_->publish(stop);
         minibot_cmd_pub_->publish(stop);
         sendTaskCommand(TASK_NONE);
-        setIntakeSpeed(INTAKE_OFF_SPEED);
-        sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
 
         phase_entry_ = false;
       }
@@ -1024,8 +1104,10 @@ void MissionNode::stepMission() {
     // Navigate to detected duck
     case MissionPhase::DUCK_INTERRUPT_NAV: {
       if (phase_entry_) {
-        sendNavGoal(interrupt_duck_pos_);
+        sendDriveGoal(interrupt_duck_pos_);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::DUCK_INTERRUPT_CAPTURE);
@@ -1039,13 +1121,13 @@ void MissionNode::stepMission() {
     // Activate intake to capture duck
     case MissionPhase::DUCK_INTERRUPT_CAPTURE: {
       if (phase_entry_) {
-        setIntakeSpeed(INTAKE_CAPTURE_SPEED);
+        sendIntakeCommand(
+            mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, 1.0f);
         phase_entry_ = false;
       }
       auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-      if (duck_in_intake_ ||
-          std::chrono::duration<double>(elapsed).count() >= 3.0) {
-        setIntakeSpeed(INTAKE_OFF_SPEED);
+      if (std::chrono::duration<double>(elapsed).count() >= 3.0) {
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
         transitionTo(MissionPhase::DUCK_INTERRUPT_DEPOSIT_NAV);
       }
       break;
@@ -1054,8 +1136,10 @@ void MissionNode::stepMission() {
     // Navigate to deposit zone
     case MissionPhase::DUCK_INTERRUPT_DEPOSIT_NAV: {
       if (phase_entry_) {
-        sendNavGoal(POS_DUCK_DEPOSIT);
+        sendDriveGoal(POS_DUCK_DEPOSIT);
         phase_entry_ = false;
+      } else {
+        refreshDriveCommand();
       }
       if (goal_reached_) {
         transitionTo(MissionPhase::DUCK_INTERRUPT_DEPOSIT);
@@ -1069,25 +1153,24 @@ void MissionNode::stepMission() {
     // Eject duck at deposit zone
     case MissionPhase::DUCK_INTERRUPT_DEPOSIT: {
       if (phase_entry_) {
-        setIntakeSpeed(INTAKE_EJECT_SPEED);
+        sendIntakeCommand(
+            mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED, -1.0f);
         phase_entry_ = false;
       }
       auto elapsed = std::chrono::steady_clock::now() - phase_timer_;
-      if (!duck_in_intake_ ||
-          std::chrono::duration<double>(elapsed).count() >= 2.0) {
-        setIntakeSpeed(INTAKE_OFF_SPEED);
+      if (std::chrono::duration<double>(elapsed).count() >= 2.0) {
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
         transitionTo(MissionPhase::DUCK_INTERRUPT_RESUME);
       }
       break;
     }
 
-    // Resume the saved phase (fix: re-send nav goal by setting phase_entry_
-    // true)
+    // Resume the saved phase (re-send nav goal by setting phase_entry_ true)
     case MissionPhase::DUCK_INTERRUPT_RESUME: {
       RCLCPP_INFO(this->get_logger(), "Duck interrupt complete, resuming %s",
                   phaseName(saved_phase_));
       phase_ = saved_phase_;
-      // Fix race condition: always set phase_entry_=true so nav goal is re-sent
+      // Always set phase_entry_=true so nav goal is re-sent
       phase_entry_ = true;
       phase_timer_ = std::chrono::steady_clock::now();
       break;
@@ -1095,12 +1178,12 @@ void MissionNode::stepMission() {
 
   }  // end switch
 
-  // Match time check (5 minute safety, force finish at 4:55)
+  // Match time check (3 minute limit, force finish at 2:55)
   if (phase_ != MissionPhase::WAIT_FOR_START &&
       phase_ != MissionPhase::MISSION_COMPLETE) {
     auto elapsed = std::chrono::steady_clock::now() - match_start_;
     double seconds = std::chrono::duration<double>(elapsed).count();
-    if (seconds > 295.0) {
+    if (seconds > 175.0) {
       RCLCPP_WARN(this->get_logger(),
                   "MATCH TIME LIMIT! Forcing finish (%.1fs)", seconds);
       transitionTo(MissionPhase::NAV_TO_FINISH);

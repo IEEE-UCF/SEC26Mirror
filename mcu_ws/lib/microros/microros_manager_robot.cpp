@@ -193,8 +193,9 @@ void MicrorosManager::taskFunction(void* pvParams) {
   }
 }
 
-void MicrorosManager::beginThreaded(uint32_t stackSize, int /*priority*/) {
-  threads.addThread(taskFunction, this, stackSize);
+void MicrorosManager::beginThreaded(uint32_t stackSize, int priority) {
+  int id = threads.addThread(taskFunction, this, stackSize);
+  threads.setTimeSlice(id, priority);
 }
 
 Threads::Mutex& MicrorosManager::getMutex() { return mutex_; }

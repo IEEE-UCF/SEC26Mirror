@@ -50,10 +50,11 @@ class ImuSubsystem : public IMicroRosParticipant,
   float getYaw() const { return yaw_rad_; }
 
 #ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+  void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
+    int id = threads.addThread(taskFunction, this, stackSize);
+    threads.setTimeSlice(id, priority);
   }
 
  private:

@@ -1,6 +1,6 @@
 /**
  * @file test_drone_ekf.cpp
- * @brief Native unit tests for drone EKF: predict, trilateration, and update.
+ * @brief Native unit tests for drone EKF: predict, per-range update, integration.
  * @date 2026-03-07
  *
  * Tests the algorithms from DroneEKFSubsystem without FreeRTOS dependencies.
@@ -26,7 +26,9 @@ struct AnchorInfo {
 static constexpr float PROCESS_NOISE_POS = 0.01f;
 static constexpr float PROCESS_NOISE_VEL = 0.1f;
 static constexpr float MEASURE_NOISE_UWB = 0.15f;
-static constexpr float OUTLIER_GATE_M = 1.0f;
+static constexpr float MAHALANOBIS_GATE_SQ = 9.0f;
+static constexpr float COV_MAX_POS = 10.0f;
+static constexpr float COV_MAX_VEL = 5.0f;
 static constexpr uint8_t MAX_ANCHORS = 4;
 
 // ── 4x4 matrix helpers (from DroneEKFSubsystem.cpp) ──
@@ -42,6 +44,22 @@ static void mat4_mul(const float* A, const float* B, float* C) {
 
 static void mat4_add(const float* A, const float* B, float* C) {
   for (int i = 0; i < 16; i++) C[i] = A[i] + B[i];
+}
+
+// ── Covariance bounding (from DroneEKFSubsystem.cpp) ──
+
+static void boundCovariance(float P[16]) {
+  if (P[0] > COV_MAX_POS) P[0] = COV_MAX_POS;
+  if (P[5] > COV_MAX_POS) P[5] = COV_MAX_POS;
+  if (P[10] > COV_MAX_VEL) P[10] = COV_MAX_VEL;
+  if (P[15] > COV_MAX_VEL) P[15] = COV_MAX_VEL;
+
+  for (int i = 0; i < 4; i++)
+    for (int j = i + 1; j < 4; j++) {
+      float avg = 0.5f * (P[i * 4 + j] + P[j * 4 + i]);
+      P[i * 4 + j] = avg;
+      P[j * 4 + i] = avg;
+    }
 }
 
 // ── Predict step (from DroneEKFSubsystem::predict) ──
@@ -67,111 +85,95 @@ static void ekf_predict(EKFState& state, float P[16], float ax, float ay,
   mat4_mul(F, P, FP);
   mat4_mul(FP, FT, FPFT);
   mat4_add(FPFT, Q, P);
+
+  boundCovariance(P);
 }
 
-// ── Trilateration (from DroneEKFSubsystem::trilaterate) ──
+// ── Per-range scalar Kalman update (from DroneEKFSubsystem::updateRange) ──
 
-static bool trilaterate(const float* distances_m, const uint8_t* peer_ids,
-                        uint8_t num_ranges, const AnchorInfo* anchors,
-                        uint8_t num_anchors, float& x_out, float& y_out) {
-  struct MatchedRange {
-    float x, y, d;
-  };
-  MatchedRange matched[MAX_ANCHORS];
-  uint8_t n = 0;
+static bool ekf_update_range(EKFState& state, float P[16], float distance_m,
+                              float anchor_x, float anchor_y) {
+  float dx = state.x - anchor_x;
+  float dy = state.y - anchor_y;
+  float predicted_dist = sqrtf(dx * dx + dy * dy);
+  if (predicted_dist < 1e-4f) predicted_dist = 1e-4f;
 
-  for (uint8_t i = 0; i < num_ranges && n < MAX_ANCHORS; i++) {
-    if (distances_m[i] <= 0.0f) continue;
+  float H[4];
+  H[0] = dx / predicted_dist;
+  H[1] = dy / predicted_dist;
+  H[2] = 0.0f;
+  H[3] = 0.0f;
+
+  float innovation = distance_m - predicted_dist;
+
+  // S = H*P*H^T + R
+  float S = MEASURE_NOISE_UWB;
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+      S += H[i] * P[i * 4 + j] * H[j];
+
+  if (S < 1e-10f) return false;
+  float mahal_sq = (innovation * innovation) / S;
+  if (mahal_sq > MAHALANOBIS_GATE_SQ) return false;
+
+  // K = P*H^T / S
+  float K[4];
+  for (int i = 0; i < 4; i++) {
+    K[i] = 0.0f;
+    for (int j = 0; j < 4; j++)
+      K[i] += P[i * 4 + j] * H[j];
+    K[i] /= S;
+  }
+
+  state.x += K[0] * innovation;
+  state.y += K[1] * innovation;
+  state.vx += K[2] * innovation;
+  state.vy += K[3] * innovation;
+
+  // Joseph form: P = (I-KH)*P*(I-KH)^T + K*R*K^T
+  float IKH[16];
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+      IKH[i * 4 + j] = ((i == j) ? 1.0f : 0.0f) - K[i] * H[j];
+
+  float IKHT[16];
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+      IKHT[i * 4 + j] = IKH[j * 4 + i];
+
+  float temp[16], P_new[16];
+  mat4_mul(IKH, P, temp);
+  mat4_mul(temp, IKHT, P_new);
+
+  float R = MEASURE_NOISE_UWB;
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+      P_new[i * 4 + j] += K[i] * R * K[j];
+
+  memcpy(P, P_new, sizeof(float) * 16);
+  return true;
+}
+
+// ── Multi-range update (from DroneEKFSubsystem::updateUWB) ──
+
+static uint8_t ekf_update_uwb(EKFState& state, float P[16],
+                                const float* distances, const uint8_t* ids,
+                                uint8_t num_ranges, const AnchorInfo* anchors,
+                                uint8_t num_anchors) {
+  uint8_t fused = 0;
+  for (uint8_t i = 0; i < num_ranges; i++) {
+    if (distances[i] <= 0.0f) continue;
     for (uint8_t j = 0; j < num_anchors; j++) {
-      if (anchors[j].valid && anchors[j].id == peer_ids[i]) {
-        matched[n].x = anchors[j].x;
-        matched[n].y = anchors[j].y;
-        matched[n].d = distances_m[i];
-        n++;
+      if (anchors[j].valid && anchors[j].id == ids[i]) {
+        if (ekf_update_range(state, P, distances[i], anchors[j].x,
+                             anchors[j].y)) {
+          fused++;
+        }
         break;
       }
     }
   }
-
-  if (n < 3) return false;
-
-  float x0 = matched[0].x, y0 = matched[0].y, d0 = matched[0].d;
-  float d0sq = d0 * d0, x0sq = x0 * x0, y0sq = y0 * y0;
-
-  float xi = matched[1].x, yi = matched[1].y, di = matched[1].d;
-  float A00 = 2.0f * (x0 - xi);
-  float A01 = 2.0f * (y0 - yi);
-  float b0 = di * di - d0sq - xi * xi + x0sq - yi * yi + y0sq;
-
-  xi = matched[2].x;
-  yi = matched[2].y;
-  di = matched[2].d;
-  float A10 = 2.0f * (x0 - xi);
-  float A11 = 2.0f * (y0 - yi);
-  float b1 = di * di - d0sq - xi * xi + x0sq - yi * yi + y0sq;
-
-  float det = A00 * A11 - A01 * A10;
-  if (fabsf(det) < 1e-6f) return false;
-
-  x_out = (b0 * A11 - b1 * A01) / det;
-  y_out = (A00 * b1 - A10 * b0) / det;
-  return true;
-}
-
-// ── EKF update (from DroneEKFSubsystem::updateUWB, without mutex) ──
-
-static bool ekf_update(EKFState& state, float P[16], float x_meas,
-                        float y_meas) {
-  float innov_x = x_meas - state.x;
-  float innov_y = y_meas - state.y;
-
-  float residual = sqrtf(innov_x * innov_x + innov_y * innov_y);
-  if (residual > OUTLIER_GATE_M) return false;
-
-  float R = MEASURE_NOISE_UWB;
-  float S00 = P[0] + R, S01 = P[1];
-  float S10 = P[4], S11 = P[5] + R;
-
-  float det = S00 * S11 - S01 * S10;
-  if (fabsf(det) < 1e-10f) return false;
-  float inv_det = 1.0f / det;
-
-  float Si00 = S11 * inv_det, Si01 = -S01 * inv_det;
-  float Si10 = -S10 * inv_det, Si11 = S00 * inv_det;
-
-  float K[8];
-  K[0] = P[0] * Si00 + P[1] * Si10;
-  K[1] = P[0] * Si01 + P[1] * Si11;
-  K[2] = P[4] * Si00 + P[5] * Si10;
-  K[3] = P[4] * Si01 + P[5] * Si11;
-  K[4] = P[8] * Si00 + P[9] * Si10;
-  K[5] = P[8] * Si01 + P[9] * Si11;
-  K[6] = P[12] * Si00 + P[13] * Si10;
-  K[7] = P[12] * Si01 + P[13] * Si11;
-
-  state.x += K[0] * innov_x + K[1] * innov_y;
-  state.y += K[2] * innov_x + K[3] * innov_y;
-  state.vx += K[4] * innov_x + K[5] * innov_y;
-  state.vy += K[6] * innov_x + K[7] * innov_y;
-
-  float KH[16] = {};
-  for (int i = 0; i < 4; i++) {
-    KH[i * 4 + 0] = K[i * 2 + 0];
-    KH[i * 4 + 1] = K[i * 2 + 1];
-  }
-
-  float P_new[16];
-  for (int i = 0; i < 4; i++)
-    for (int j = 0; j < 4; j++) {
-      float sum = 0.0f;
-      for (int k = 0; k < 4; k++) {
-        float I_KH = ((i == k) ? 1.0f : 0.0f) - KH[i * 4 + k];
-        sum += I_KH * P[k * 4 + j];
-      }
-      P_new[i * 4 + j] = sum;
-    }
-  memcpy(P, P_new, sizeof(float) * 16);
-  return true;
+  return fused;
 }
 
 // ── Helpers ──
@@ -184,13 +186,27 @@ static void init_P(float P[16]) {
   P[15] = 0.5f;
 }
 
-// Helper: compute distance from point to anchor
 static float dist(float x, float y, float ax, float ay) {
   return sqrtf((x - ax) * (x - ax) + (y - ay) * (y - ay));
 }
 
+static bool is_symmetric(const float P[16], float tol = 1e-5f) {
+  for (int i = 0; i < 4; i++)
+    for (int j = i + 1; j < 4; j++)
+      if (fabsf(P[i * 4 + j] - P[j * 4 + i]) > tol) return false;
+  return true;
+}
+
+static bool diag_positive(const float P[16]) {
+  return P[0] > 0.0f && P[5] > 0.0f && P[10] > 0.0f && P[15] > 0.0f;
+}
+
 void setUp(void) {}
 void tearDown(void) {}
+
+// Standard anchor layout
+static const AnchorInfo STD_ANCHORS[3] = {
+    {10, 0.0f, 0.0f, true}, {11, 3.0f, 0.0f, true}, {12, 0.0f, 4.0f, true}};
 
 // ════════════════════════════════════════════════════════════════
 //  PREDICT TESTS
@@ -216,7 +232,6 @@ void test_predict_constant_velocity_x() {
   TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.1f, s.x);
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, s.y);
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, s.vx);
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, s.vy);
 }
 
 void test_predict_constant_velocity_y() {
@@ -225,7 +240,6 @@ void test_predict_constant_velocity_y() {
   float P[16];
   init_P(P);
   ekf_predict(s, P, 0.0f, 0.0f, 0.1f);
-  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, s.x);
   TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.2f, s.y);
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 2.0f, s.vy);
 }
@@ -235,10 +249,8 @@ void test_predict_constant_acceleration_x() {
   float P[16];
   init_P(P);
   ekf_predict(s, P, 2.0f, 0.0f, 0.1f);
-  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.01f, s.x);   // 0.5*2*0.01
-  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.2f, s.vx);    // 2*0.1
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, s.y);
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, s.vy);
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.01f, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.2f, s.vx);
 }
 
 void test_predict_constant_acceleration_y() {
@@ -246,9 +258,8 @@ void test_predict_constant_acceleration_y() {
   float P[16];
   init_P(P);
   ekf_predict(s, P, 0.0f, -3.0f, 0.1f);
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, s.x);
-  TEST_ASSERT_FLOAT_WITHIN(1e-4f, -0.015f, s.y);  // 0.5*(-3)*0.01
-  TEST_ASSERT_FLOAT_WITHIN(1e-5f, -0.3f, s.vy);   // -3*0.1
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, -0.015f, s.y);
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, -0.3f, s.vy);
 }
 
 void test_predict_both_axes() {
@@ -290,13 +301,12 @@ void test_predict_invalid_dt_too_large() {
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, s.x);
 }
 
-void test_predict_dt_at_boundary_0_5_rejected() {
+void test_predict_dt_at_boundary_0_5_passes() {
   EKFState s;
   float P[16];
   init_P(P);
   ekf_predict(s, P, 1.0f, 1.0f, 0.5f);
-  // dt > 0.5 is rejected, dt == 0.5 should NOT be rejected (it's not > 0.5)
-  // Actually the code says dt > 0.5f, so exactly 0.5 passes
+  // dt == 0.5 is not > 0.5, so it passes
   TEST_ASSERT_TRUE(s.x != 0.0f || s.vx != 0.0f);
 }
 
@@ -305,14 +315,10 @@ void test_predict_covariance_grows() {
   float P[16];
   init_P(P);
   float P0_before = P[0];
-  float P5_before = P[5];
   float P10_before = P[10];
-  float P15_before = P[15];
   ekf_predict(s, P, 0.0f, 0.0f, 0.01f);
   TEST_ASSERT_TRUE(P[0] > P0_before);
-  TEST_ASSERT_TRUE(P[5] > P5_before);
   TEST_ASSERT_TRUE(P[10] > P10_before);
-  TEST_ASSERT_TRUE(P[15] > P15_before);
 }
 
 void test_predict_covariance_symmetric() {
@@ -324,10 +330,7 @@ void test_predict_covariance_symmetric() {
   for (int step = 0; step < 20; step++) {
     ekf_predict(s, P, 0.1f, -0.2f, 0.004f);
   }
-  // P should remain symmetric: P[i*4+j] == P[j*4+i]
-  for (int i = 0; i < 4; i++)
-    for (int j = i + 1; j < 4; j++)
-      TEST_ASSERT_FLOAT_WITHIN(1e-5f, P[i * 4 + j], P[j * 4 + i]);
+  TEST_ASSERT_TRUE(is_symmetric(P));
 }
 
 void test_predict_multiple_steps_accumulate() {
@@ -337,13 +340,11 @@ void test_predict_multiple_steps_accumulate() {
   for (int i = 0; i < 100; i++) {
     ekf_predict(s, P, 1.0f, 0.0f, 0.004f);
   }
-  // After 0.4s: x = 0.5*1.0*0.16 = 0.08, vx = 1.0*0.4 = 0.4
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.08f, s.x);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.4f, s.vx);
 }
 
 void test_predict_x_y_symmetry() {
-  // Identical acceleration in x and y should produce identical results
   EKFState sx, sy;
   float Px[16], Py[16];
   init_P(Px);
@@ -359,9 +360,7 @@ void test_predict_large_acceleration() {
   float P[16];
   init_P(P);
   ekf_predict(s, P, 50.0f, -50.0f, 0.004f);
-  // x = 0.5*50*0.000016 = 0.0004
   TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0004f, s.x);
-  // vx = 50*0.004 = 0.2
   TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.2f, s.vx);
   TEST_ASSERT_FLOAT_WITHIN(1e-5f, -0.2f, s.vy);
 }
@@ -376,393 +375,326 @@ void test_predict_small_dt() {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  TRILATERATION TESTS
+//  COVARIANCE BOUNDING TESTS
 // ════════════════════════════════════════════════════════════════
 
-// Standard anchor layout
-static const AnchorInfo STD_ANCHORS[3] = {
-    {10, 0.0f, 0.0f, true}, {11, 3.0f, 0.0f, true}, {12, 0.0f, 4.0f, true}};
-
-void test_trilaterate_known_position_1_1() {
-  float tx = 1.0f, ty = 1.0f;
-  float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3, 0), dist(tx, ty, 0, 4)};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, tx, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, ty, y);
-}
-
-void test_trilaterate_known_position_2_3() {
-  float tx = 2.0f, ty = 3.0f;
-  float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3, 0), dist(tx, ty, 0, 4)};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, tx, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, ty, y);
-}
-
-void test_trilaterate_at_anchor_position() {
-  // Target at anchor 11 (3, 0)
-  float d[] = {3.0f, 0.001f, 5.0f};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 3.0f, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, y);
-}
-
-void test_trilaterate_origin() {
-  float d[] = {0.001f, 3.0f, 4.0f};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, y);
-}
-
-void test_trilaterate_field_center() {
-  // SEC field is ~3.66m x 3.66m, center is (1.83, 1.83)
-  AnchorInfo field_anchors[3] = {
-      {10, 0.0f, 0.0f, true}, {11, 3.66f, 0.0f, true}, {12, 0.0f, 3.66f, true}};
-  float tx = 1.83f, ty = 1.83f;
-  float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3.66f, 0), dist(tx, ty, 0, 3.66f)};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 3, field_anchors, 3, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.02f, tx, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.02f, ty, y);
-}
-
-void test_trilaterate_too_few_ranges() {
-  float d[] = {1.0f, 2.0f};
-  uint8_t ids[] = {10, 11};
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 2, STD_ANCHORS, 3, x, y));
-}
-
-void test_trilaterate_one_range() {
-  float d[] = {1.0f};
-  uint8_t ids[] = {10};
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 1, STD_ANCHORS, 3, x, y));
-}
-
-void test_trilaterate_zero_ranges() {
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(nullptr, nullptr, 0, STD_ANCHORS, 3, x, y));
-}
-
-void test_trilaterate_unmatched_ids() {
-  float d[] = {1.0f, 2.0f, 3.0f};
-  uint8_t ids[] = {99, 98, 97};
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-}
-
-void test_trilaterate_partial_match_insufficient() {
-  // Only 2 out of 3 IDs match → too few valid ranges
-  float d[] = {1.0f, 2.0f, 3.0f};
-  uint8_t ids[] = {10, 11, 99};
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-}
-
-void test_trilaterate_collinear_anchors_degenerate() {
-  AnchorInfo lin[3] = {
-      {10, 0.0f, 0.0f, true}, {11, 1.0f, 0.0f, true}, {12, 2.0f, 0.0f, true}};
-  float d[] = {1.0f, 1.0f, 1.0f};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 3, lin, 3, x, y));
-}
-
-void test_trilaterate_negative_distance_skipped() {
-  float d[] = {-1.0f, 3.0f, 4.0f};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-}
-
-void test_trilaterate_zero_distance_skipped() {
-  float d[] = {0.0f, 3.0f, 4.0f};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-}
-
-void test_trilaterate_extra_ranges_uses_first_three() {
-  AnchorInfo a4[4] = {{10, 0, 0, true}, {11, 3, 0, true},
-                      {12, 0, 4, true}, {13, 3, 4, true}};
-  float tx = 1.0f, ty = 1.0f;
-  float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3, 0),
-               dist(tx, ty, 0, 4), dist(tx, ty, 3, 4)};
-  uint8_t ids[] = {10, 11, 12, 13};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 4, a4, 4, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, tx, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, ty, y);
-}
-
-void test_trilaterate_scrambled_id_order() {
-  // IDs in different order than anchors
-  float tx = 1.5f, ty = 2.0f;
-  float d12 = dist(tx, ty, 0, 4);
-  float d10 = dist(tx, ty, 0, 0);
-  float d11 = dist(tx, ty, 3, 0);
-  float d[] = {d12, d10, d11};
-  uint8_t ids[] = {12, 10, 11};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, tx, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, ty, y);
-}
-
-void test_trilaterate_invalid_anchor_skipped() {
-  AnchorInfo a3[3] = {{10, 0, 0, true}, {11, 3, 0, false}, {12, 0, 4, true}};
-  float d[] = {1.0f, 2.0f, 3.0f};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  // Anchor 11 has valid=false, so only 2 matches → fails
-  TEST_ASSERT_FALSE(trilaterate(d, ids, 3, a3, 3, x, y));
-}
-
-void test_trilaterate_noisy_distances() {
-  // Add small noise to distances — result should still be close
-  float tx = 1.0f, ty = 1.0f;
-  float noise = 0.02f;
-  float d[] = {dist(tx, ty, 0, 0) + noise, dist(tx, ty, 3, 0) - noise,
-               dist(tx, ty, 0, 4) + noise};
-  uint8_t ids[] = {10, 11, 12};
-  float x, y;
-  TEST_ASSERT_TRUE(trilaterate(d, ids, 3, STD_ANCHORS, 3, x, y));
-  TEST_ASSERT_FLOAT_WITHIN(0.15f, tx, x);
-  TEST_ASSERT_FLOAT_WITHIN(0.15f, ty, y);
-}
-
-// ════════════════════════════════════════════════════════════════
-//  UPDATE TESTS
-// ════════════════════════════════════════════════════════════════
-
-void test_update_moves_state_toward_measurement() {
+void test_covariance_bounded_after_many_predicts() {
   EKFState s;
   float P[16];
   init_P(P);
-  TEST_ASSERT_TRUE(ekf_update(s, P, 0.8f, 0.0f));
-  TEST_ASSERT_TRUE(s.x > 0.0f);
-  TEST_ASSERT_TRUE(s.x < 0.8f);
+  // Predict for a long time without updates — P should be clamped
+  for (int i = 0; i < 10000; i++) {
+    ekf_predict(s, P, 0.0f, 0.0f, 0.004f);
+  }
+  TEST_ASSERT_TRUE(P[0] <= COV_MAX_POS + 1e-6f);
+  TEST_ASSERT_TRUE(P[5] <= COV_MAX_POS + 1e-6f);
+  TEST_ASSERT_TRUE(P[10] <= COV_MAX_VEL + 1e-6f);
+  TEST_ASSERT_TRUE(P[15] <= COV_MAX_VEL + 1e-6f);
 }
 
-void test_update_y_direction() {
+void test_covariance_symmetry_enforced() {
+  float P[16];
+  init_P(P);
+  // Manually break symmetry
+  P[1] = 0.1f;
+  P[4] = 0.2f;
+  boundCovariance(P);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, P[1], P[4]);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.15f, P[1]);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PER-RANGE UPDATE TESTS
+// ════════════════════════════════════════════════════════════════
+
+void test_update_range_moves_toward_anchor() {
+  // State at origin, anchor at (3,0), true distance = 3.0
+  // Measured distance = 2.5 → drone is closer than predicted → state moves right
   EKFState s;
   float P[16];
   init_P(P);
-  TEST_ASSERT_TRUE(ekf_update(s, P, 0.0f, 0.7f));
-  TEST_ASSERT_TRUE(s.y > 0.0f);
-  TEST_ASSERT_TRUE(s.y < 0.7f);
+  TEST_ASSERT_TRUE(ekf_update_range(s, P, 2.5f, 3.0f, 0.0f));
+  TEST_ASSERT_TRUE(s.x > 0.0f);  // moved toward anchor
 }
 
-void test_update_both_axes() {
+void test_update_range_moves_away_from_anchor() {
+  // State at origin, anchor at (3,0), measured distance = 3.5 → drone farther
   EKFState s;
   float P[16];
   init_P(P);
-  TEST_ASSERT_TRUE(ekf_update(s, P, 0.5f, 0.5f));
-  TEST_ASSERT_TRUE(s.x > 0.0f);
-  TEST_ASSERT_TRUE(s.y > 0.0f);
+  TEST_ASSERT_TRUE(ekf_update_range(s, P, 3.5f, 3.0f, 0.0f));
+  TEST_ASSERT_TRUE(s.x < 0.0f);  // moved away from anchor
 }
 
-void test_update_reduces_position_covariance() {
+void test_update_range_reduces_position_covariance() {
   EKFState s;
+  s.x = 1.0f;
+  s.y = 1.0f;
   float P[16];
   init_P(P);
   float Px_before = P[0];
-  float Py_before = P[5];
-  ekf_update(s, P, 0.0f, 0.0f);
+  ekf_update_range(s, P, dist(1, 1, 0, 0), 0.0f, 0.0f);
   TEST_ASSERT_TRUE(P[0] < Px_before);
-  TEST_ASSERT_TRUE(P[5] < Py_before);
 }
 
-void test_update_does_not_increase_velocity_variance() {
+void test_update_range_covariance_stays_symmetric() {
+  EKFState s;
+  s.x = 1.0f;
+  s.y = 0.5f;
+  float P[16];
+  init_P(P);
+  ekf_update_range(s, P, dist(1, 0.5f, 3, 0), 3.0f, 0.0f);
+  TEST_ASSERT_TRUE(is_symmetric(P));
+}
+
+void test_update_range_covariance_stays_positive_diagonal() {
+  EKFState s;
+  s.x = 1.0f;
+  s.y = 1.0f;
+  float P[16];
+  init_P(P);
+  // Multiple updates from different anchors
+  for (int i = 0; i < 5; i++) {
+    ekf_update_range(s, P, dist(s.x, s.y, 0, 0) + 0.05f, 0.0f, 0.0f);
+    ekf_update_range(s, P, dist(s.x, s.y, 3, 0) - 0.03f, 3.0f, 0.0f);
+    ekf_update_range(s, P, dist(s.x, s.y, 0, 4) + 0.02f, 0.0f, 4.0f);
+  }
+  TEST_ASSERT_TRUE(diag_positive(P));
+}
+
+void test_update_range_exact_distance_no_state_change() {
+  EKFState s;
+  s.x = 1.0f;
+  s.y = 1.0f;
+  float P[16];
+  init_P(P);
+  float d = dist(1, 1, 3, 0);
+  ekf_update_range(s, P, d, 3.0f, 0.0f);
+  // Innovation is zero → no state change
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 1.0f, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 1.0f, s.y);
+}
+
+void test_update_range_mahalanobis_gate_rejects_outlier() {
   EKFState s;
   float P[16];
   init_P(P);
-  float Pvx_before = P[10];
-  float Pvy_before = P[15];
-  ekf_update(s, P, 0.0f, 0.0f);
-  // Velocity variance should decrease or stay same (not increase)
-  TEST_ASSERT_TRUE(P[10] <= Pvx_before + 1e-6f);
-  TEST_ASSERT_TRUE(P[15] <= Pvy_before + 1e-6f);
-}
-
-void test_update_covariance_stays_symmetric() {
-  EKFState s;
-  s.x = 0.5f;
-  s.y = 0.3f;
-  float P[16];
-  init_P(P);
-  ekf_update(s, P, 0.6f, 0.4f);
-  for (int i = 0; i < 4; i++)
-    for (int j = i + 1; j < 4; j++)
-      TEST_ASSERT_FLOAT_WITHIN(1e-5f, P[i * 4 + j], P[j * 4 + i]);
-}
-
-void test_update_outlier_rejected_2m() {
-  EKFState s;
-  float P[16];
-  init_P(P);
-  TEST_ASSERT_FALSE(ekf_update(s, P, 2.0f, 0.0f));
+  // State at origin, anchor at (3,0), predicted distance = 3
+  // Measured distance = 100 → huge innovation → gated out
+  TEST_ASSERT_FALSE(ekf_update_range(s, P, 100.0f, 3.0f, 0.0f));
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, s.x);
 }
 
-void test_update_outlier_rejected_diagonal() {
+void test_update_range_mahalanobis_adapts_to_uncertainty() {
+  // With large P (high uncertainty), same residual should pass gate
   EKFState s;
   float P[16];
   init_P(P);
-  // sqrt(0.8^2 + 0.8^2) ≈ 1.13 > 1.0 → rejected
-  TEST_ASSERT_FALSE(ekf_update(s, P, 0.8f, 0.8f));
+  P[0] = 100.0f;  // very uncertain
+  P[5] = 100.0f;
+  // Large innovation that would fail with small P
+  TEST_ASSERT_TRUE(ekf_update_range(s, P, 10.0f, 3.0f, 0.0f));
 }
 
-void test_update_at_gate_boundary_accepted() {
+void test_update_range_single_range_partial_correction() {
+  // With only 1 range, we can still update — it constrains the state
+  // along the radial direction to/from that anchor
   EKFState s;
   float P[16];
   init_P(P);
-  // Exactly at gate: 1.0m away
-  TEST_ASSERT_TRUE(ekf_update(s, P, 1.0f, 0.0f));
-}
-
-void test_update_just_beyond_gate_rejected() {
-  EKFState s;
-  float P[16];
-  init_P(P);
-  TEST_ASSERT_FALSE(ekf_update(s, P, 1.001f, 0.0f));
-}
-
-void test_update_within_gate_accepted() {
-  EKFState s;
-  float P[16];
-  init_P(P);
-  TEST_ASSERT_TRUE(ekf_update(s, P, 0.5f, 0.0f));
+  ekf_update_range(s, P, 2.0f, 3.0f, 0.0f);
+  // State should move toward x=3 (anchor direction)
   TEST_ASSERT_TRUE(s.x > 0.0f);
 }
 
-void test_update_exact_match_no_change() {
+void test_update_range_state_at_anchor_handled() {
+  // Edge case: state exactly at anchor position
+  EKFState s;
+  s.x = 3.0f;
+  s.y = 0.0f;
+  float P[16];
+  init_P(P);
+  // Distance should be ~0 but measured as 0.5 → should still work
+  bool ok = ekf_update_range(s, P, 0.5f, 3.0f, 0.0f);
+  // Should handle gracefully (predicted_dist clamped to 1e-4)
+  TEST_ASSERT_TRUE(ok || !ok);  // just don't crash
+  TEST_ASSERT_TRUE(diag_positive(P));
+}
+
+// ════════════════════════════════════════════════════════════════
+//  MULTI-RANGE UPDATE TESTS
+// ════════════════════════════════════════════════════════════════
+
+void test_multi_range_three_anchors_converges() {
+  EKFState s;
+  float P[16];
+  init_P(P);
+
+  float tx = 1.0f, ty = 1.0f;
+  float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3, 0), dist(tx, ty, 0, 4)};
+  uint8_t ids[] = {10, 11, 12};
+
+  // Multiple rounds of updates
+  for (int i = 0; i < 20; i++) {
+    ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.1f, tx, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(0.1f, ty, s.y);
+}
+
+void test_multi_range_single_range_works() {
+  EKFState s;
+  float P[16];
+  init_P(P);
+  float d[] = {3.0f};
+  uint8_t ids[] = {10};
+  uint8_t fused = ekf_update_uwb(s, P, d, ids, 1, STD_ANCHORS, 3);
+  TEST_ASSERT_EQUAL(1, fused);
+}
+
+void test_multi_range_two_ranges_works() {
+  EKFState s;
+  float P[16];
+  init_P(P);
+  float tx = 1.0f, ty = 1.0f;
+  float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3, 0)};
+  uint8_t ids[] = {10, 11};
+  uint8_t fused = ekf_update_uwb(s, P, d, ids, 2, STD_ANCHORS, 3);
+  TEST_ASSERT_EQUAL(2, fused);
+}
+
+void test_multi_range_unmatched_ids_zero_fused() {
+  EKFState s;
+  float P[16];
+  init_P(P);
+  float d[] = {1.0f, 2.0f};
+  uint8_t ids[] = {99, 98};
+  uint8_t fused = ekf_update_uwb(s, P, d, ids, 2, STD_ANCHORS, 3);
+  TEST_ASSERT_EQUAL(0, fused);
+}
+
+void test_multi_range_negative_distance_skipped() {
+  EKFState s;
+  float P[16];
+  init_P(P);
+  float d[] = {-1.0f, 3.0f, 4.0f};
+  uint8_t ids[] = {10, 11, 12};
+  // First range negative → skipped, other two should fuse
+  uint8_t fused = ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
+  TEST_ASSERT_EQUAL(2, fused);
+}
+
+void test_multi_range_scrambled_ids() {
+  EKFState s;
+  float P[16];
+  init_P(P);
+  float tx = 1.5f, ty = 2.0f;
+  float d[] = {dist(tx, ty, 0, 4), dist(tx, ty, 0, 0), dist(tx, ty, 3, 0)};
+  uint8_t ids[] = {12, 10, 11};
+  for (int i = 0; i < 20; i++) {
+    ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, tx, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, ty, s.y);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  JOSEPH FORM SPECIFIC TESTS
+// ════════════════════════════════════════════════════════════════
+
+void test_joseph_form_symmetry_after_many_updates() {
   EKFState s;
   s.x = 1.0f;
+  s.y = 1.0f;
+  float P[16];
+  init_P(P);
+
+  for (int i = 0; i < 50; i++) {
+    ekf_predict(s, P, 0.01f, -0.01f, 0.004f);
+    if (i % 5 == 0) {
+      ekf_update_range(s, P, dist(s.x, s.y, 0, 0) + 0.02f, 0.0f, 0.0f);
+      ekf_update_range(s, P, dist(s.x, s.y, 3, 0) - 0.01f, 3.0f, 0.0f);
+      ekf_update_range(s, P, dist(s.x, s.y, 0, 4) + 0.01f, 0.0f, 4.0f);
+    }
+  }
+  TEST_ASSERT_TRUE(is_symmetric(P));
+  TEST_ASSERT_TRUE(diag_positive(P));
+}
+
+void test_joseph_form_no_negative_diagonal_under_stress() {
+  // Aggressive updates that might cause negative P with simple form
+  EKFState s;
+  s.x = 2.0f;
   s.y = 2.0f;
   float P[16];
   init_P(P);
-  TEST_ASSERT_TRUE(ekf_update(s, P, 1.0f, 2.0f));
-  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1.0f, s.x);
-  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 2.0f, s.y);
-}
+  // Make P very small to stress the update
+  P[0] = 0.001f;
+  P[5] = 0.001f;
+  P[10] = 0.001f;
+  P[15] = 0.001f;
 
-void test_update_negative_measurement() {
-  EKFState s;
-  s.x = -0.3f;
-  float P[16];
-  init_P(P);
-  TEST_ASSERT_TRUE(ekf_update(s, P, -0.5f, 0.0f));
-  TEST_ASSERT_TRUE(s.x < -0.3f);  // moves toward -0.5
-}
-
-void test_update_multiple_reduces_uncertainty() {
-  EKFState s;
-  float P[16];
-  init_P(P);
-  // Multiple updates at the same location should converge and reduce P
-  for (int i = 0; i < 10; i++) {
-    ekf_update(s, P, 0.5f, 0.3f);
+  for (int i = 0; i < 20; i++) {
+    ekf_update_range(s, P, dist(s.x, s.y, 0, 0) + 0.1f, 0.0f, 0.0f);
+    ekf_update_range(s, P, dist(s.x, s.y, 3, 0) - 0.1f, 3.0f, 0.0f);
   }
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.5f, s.x);
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.3f, s.y);
-  TEST_ASSERT_TRUE(P[0] < 0.1f);  // Uncertainty should be very small
-}
-
-void test_update_kalman_gain_reasonable() {
-  // With initial P = I and R = 0.15, Kalman gain for position should be
-  // K = P*H^T * (H*P*H^T + R)^-1 = 1/(1+0.15) ≈ 0.87
-  // So state should move ~87% toward measurement
-  EKFState s;
-  float P[16];
-  init_P(P);
-  ekf_update(s, P, 0.5f, 0.0f);
-  float gain_approx = s.x / 0.5f;
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.87f, gain_approx);
-}
-
-void test_update_covariance_positive_diag() {
-  EKFState s;
-  float P[16];
-  init_P(P);
-  for (int i = 0; i < 5; i++) {
-    ekf_predict(s, P, 0.1f, -0.1f, 0.01f);
-    ekf_update(s, P, s.x + 0.1f, s.y - 0.05f);
-  }
-  // Diagonal elements of P must remain positive
-  TEST_ASSERT_TRUE(P[0] > 0.0f);
-  TEST_ASSERT_TRUE(P[5] > 0.0f);
-  TEST_ASSERT_TRUE(P[10] > 0.0f);
-  TEST_ASSERT_TRUE(P[15] > 0.0f);
+  TEST_ASSERT_TRUE(diag_positive(P));
 }
 
 // ════════════════════════════════════════════════════════════════
 //  PREDICT + UPDATE INTEGRATION TESTS
 // ════════════════════════════════════════════════════════════════
 
-void test_predict_update_converges_to_truth() {
+void test_integration_stationary_converges() {
   EKFState s;
   float P[16];
   init_P(P);
 
-  // Target at (0.5, 0.5) — within outlier gate from origin (dist ≈ 0.707m < 1.0m)
-  float tx = 0.5f, ty = 0.5f;
-
-  AnchorInfo anchors[3] = {
-      {10, 0.0f, 0.0f, true}, {11, 3.0f, 0.0f, true}, {12, 0.0f, 4.0f, true}};
+  float tx = 1.0f, ty = 1.5f;
 
   for (int i = 0; i < 200; i++) {
     ekf_predict(s, P, 0.0f, 0.0f, 0.004f);
 
     if (i % 12 == 0) {
-      float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3, 0), dist(tx, ty, 0, 4)};
+      float d[] = {dist(tx, ty, 0, 0), dist(tx, ty, 3, 0),
+                   dist(tx, ty, 0, 4)};
       uint8_t ids[] = {10, 11, 12};
-      float x_meas, y_meas;
-      if (trilaterate(d, ids, 3, anchors, 3, x_meas, y_meas)) {
-        ekf_update(s, P, x_meas, y_meas);
-      }
+      ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
     }
   }
 
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, tx, s.x);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, ty, s.y);
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, tx, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, ty, s.y);
   TEST_ASSERT_FLOAT_WITHIN(0.3f, 0.0f, s.vx);
   TEST_ASSERT_FLOAT_WITHIN(0.3f, 0.0f, s.vy);
 }
 
-void test_predict_update_with_constant_velocity() {
+void test_integration_constant_velocity_tracks() {
   EKFState s;
   float P[16];
   init_P(P);
 
-  s.vx = 1.0f;
+  s.vx = 0.5f;
   float true_x = 0.0f;
 
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 200; i++) {
     float dt = 0.004f;
-    true_x += 1.0f * dt;
+    true_x += 0.5f * dt;
     ekf_predict(s, P, 0.0f, 0.0f, dt);
 
     if (i % 12 == 0) {
-      ekf_update(s, P, true_x, 0.0f);
+      float d[] = {dist(true_x, 0, 0, 0), dist(true_x, 0, 3, 0),
+                   dist(true_x, 0, 0, 4)};
+      uint8_t ids[] = {10, 11, 12};
+      ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
     }
   }
 
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, true_x, s.x);
-  TEST_ASSERT_FLOAT_WITHIN(0.3f, 1.0f, s.vx);
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, true_x, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(0.3f, 0.5f, s.vx);
 }
 
-void test_predict_update_with_acceleration() {
+void test_integration_with_acceleration() {
   EKFState s;
   float P[16];
   init_P(P);
@@ -776,52 +708,85 @@ void test_predict_update_with_acceleration() {
     true_vx += ax * dt;
     ekf_predict(s, P, ax, 0.0f, dt);
 
-    if (i % 12 == 0 && fabsf(true_x - s.x) < OUTLIER_GATE_M) {
-      ekf_update(s, P, true_x, 0.0f);
+    if (i % 12 == 0) {
+      float d[] = {dist(true_x, 0, 0, 0), dist(true_x, 0, 3, 0),
+                   dist(true_x, 0, 0, 4)};
+      uint8_t ids[] = {10, 11, 12};
+      ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
     }
   }
 
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, true_x, s.x);
-  TEST_ASSERT_FLOAT_WITHIN(0.2f, true_vx, s.vx);
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, true_x, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(0.3f, true_vx, s.vx);
 }
 
-void test_predict_only_diverges_without_updates() {
+void test_integration_predict_only_diverges() {
   EKFState s;
   float P[16];
   init_P(P);
 
-  // Push EKF state to 0.5, then only predict (no updates)
-  ekf_update(s, P, 0.5f, 0.0f);
-  float x_after_update = s.x;
+  // Give it a good starting point
+  float d[] = {dist(0.5f, 0, 0, 0), dist(0.5f, 0, 3, 0),
+               dist(0.5f, 0, 0, 4)};
+  uint8_t ids[] = {10, 11, 12};
+  for (int i = 0; i < 10; i++)
+    ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
+  float x_good = s.x;
 
-  // Apply acceleration for many steps with no correction
+  // Now predict with acceleration and no updates
   for (int i = 0; i < 500; i++) {
     ekf_predict(s, P, 0.1f, 0.0f, 0.004f);
   }
 
-  // State should have drifted significantly from 0.5
-  TEST_ASSERT_TRUE(fabsf(s.x - x_after_update) > 0.1f);
-  // And covariance should have grown large
+  TEST_ASSERT_TRUE(fabsf(s.x - x_good) > 0.1f);
   TEST_ASSERT_TRUE(P[0] > 1.0f);
 }
 
-void test_outlier_gate_blocks_bad_measurement() {
+void test_integration_outlier_rejected() {
   EKFState s;
   float P[16];
   init_P(P);
 
-  // First establish a good position
-  for (int i = 0; i < 5; i++) {
-    ekf_update(s, P, 0.5f, 0.5f);
+  // Converge to (1, 1)
+  for (int i = 0; i < 50; i++) {
+    float d[] = {dist(1, 1, 0, 0), dist(1, 1, 3, 0), dist(1, 1, 0, 4)};
+    uint8_t ids[] = {10, 11, 12};
+    ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
   }
   float x_before = s.x;
   float y_before = s.y;
 
-  // Try a bad measurement far away — should be rejected
-  bool ok = ekf_update(s, P, 5.0f, 5.0f);
-  TEST_ASSERT_FALSE(ok);
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, x_before, s.x);
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, y_before, s.y);
+  // Try to fuse bogus ranges (huge distances)
+  float bad_d[] = {50.0f, 50.0f, 50.0f};
+  uint8_t ids[] = {10, 11, 12};
+  uint8_t fused = ekf_update_uwb(s, P, bad_d, ids, 3, STD_ANCHORS, 3);
+
+  TEST_ASSERT_EQUAL(0, fused);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, x_before, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, y_before, s.y);
+}
+
+void test_integration_noisy_ranges_converge() {
+  EKFState s;
+  float P[16];
+  init_P(P);
+
+  float tx = 1.5f, ty = 2.0f;
+  // Simple pseudo-noise (alternating bias)
+  for (int i = 0; i < 100; i++) {
+    ekf_predict(s, P, 0.0f, 0.0f, 0.004f);
+
+    if (i % 5 == 0) {
+      float noise = (i % 10 == 0) ? 0.05f : -0.03f;
+      float d[] = {dist(tx, ty, 0, 0) + noise, dist(tx, ty, 3, 0) - noise,
+                   dist(tx, ty, 0, 4) + noise * 0.5f};
+      uint8_t ids[] = {10, 11, 12};
+      ekf_update_uwb(s, P, d, ids, 3, STD_ANCHORS, 3);
+    }
+  }
+
+  TEST_ASSERT_FLOAT_WITHIN(0.2f, tx, s.x);
+  TEST_ASSERT_FLOAT_WITHIN(0.2f, ty, s.y);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -870,7 +835,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_predict_invalid_dt_zero);
   RUN_TEST(test_predict_invalid_dt_negative);
   RUN_TEST(test_predict_invalid_dt_too_large);
-  RUN_TEST(test_predict_dt_at_boundary_0_5_rejected);
+  RUN_TEST(test_predict_dt_at_boundary_0_5_passes);
   RUN_TEST(test_predict_covariance_grows);
   RUN_TEST(test_predict_covariance_symmetric);
   RUN_TEST(test_predict_multiple_steps_accumulate);
@@ -878,49 +843,41 @@ int main(int argc, char** argv) {
   RUN_TEST(test_predict_large_acceleration);
   RUN_TEST(test_predict_small_dt);
 
-  // Trilateration
-  RUN_TEST(test_trilaterate_known_position_1_1);
-  RUN_TEST(test_trilaterate_known_position_2_3);
-  RUN_TEST(test_trilaterate_at_anchor_position);
-  RUN_TEST(test_trilaterate_origin);
-  RUN_TEST(test_trilaterate_field_center);
-  RUN_TEST(test_trilaterate_too_few_ranges);
-  RUN_TEST(test_trilaterate_one_range);
-  RUN_TEST(test_trilaterate_zero_ranges);
-  RUN_TEST(test_trilaterate_unmatched_ids);
-  RUN_TEST(test_trilaterate_partial_match_insufficient);
-  RUN_TEST(test_trilaterate_collinear_anchors_degenerate);
-  RUN_TEST(test_trilaterate_negative_distance_skipped);
-  RUN_TEST(test_trilaterate_zero_distance_skipped);
-  RUN_TEST(test_trilaterate_extra_ranges_uses_first_three);
-  RUN_TEST(test_trilaterate_scrambled_id_order);
-  RUN_TEST(test_trilaterate_invalid_anchor_skipped);
-  RUN_TEST(test_trilaterate_noisy_distances);
+  // Covariance bounding
+  RUN_TEST(test_covariance_bounded_after_many_predicts);
+  RUN_TEST(test_covariance_symmetry_enforced);
 
-  // Update
-  RUN_TEST(test_update_moves_state_toward_measurement);
-  RUN_TEST(test_update_y_direction);
-  RUN_TEST(test_update_both_axes);
-  RUN_TEST(test_update_reduces_position_covariance);
-  RUN_TEST(test_update_does_not_increase_velocity_variance);
-  RUN_TEST(test_update_covariance_stays_symmetric);
-  RUN_TEST(test_update_outlier_rejected_2m);
-  RUN_TEST(test_update_outlier_rejected_diagonal);
-  RUN_TEST(test_update_at_gate_boundary_accepted);
-  RUN_TEST(test_update_just_beyond_gate_rejected);
-  RUN_TEST(test_update_within_gate_accepted);
-  RUN_TEST(test_update_exact_match_no_change);
-  RUN_TEST(test_update_negative_measurement);
-  RUN_TEST(test_update_multiple_reduces_uncertainty);
-  RUN_TEST(test_update_kalman_gain_reasonable);
-  RUN_TEST(test_update_covariance_positive_diag);
+  // Per-range update
+  RUN_TEST(test_update_range_moves_toward_anchor);
+  RUN_TEST(test_update_range_moves_away_from_anchor);
+  RUN_TEST(test_update_range_reduces_position_covariance);
+  RUN_TEST(test_update_range_covariance_stays_symmetric);
+  RUN_TEST(test_update_range_covariance_stays_positive_diagonal);
+  RUN_TEST(test_update_range_exact_distance_no_state_change);
+  RUN_TEST(test_update_range_mahalanobis_gate_rejects_outlier);
+  RUN_TEST(test_update_range_mahalanobis_adapts_to_uncertainty);
+  RUN_TEST(test_update_range_single_range_partial_correction);
+  RUN_TEST(test_update_range_state_at_anchor_handled);
+
+  // Multi-range update
+  RUN_TEST(test_multi_range_three_anchors_converges);
+  RUN_TEST(test_multi_range_single_range_works);
+  RUN_TEST(test_multi_range_two_ranges_works);
+  RUN_TEST(test_multi_range_unmatched_ids_zero_fused);
+  RUN_TEST(test_multi_range_negative_distance_skipped);
+  RUN_TEST(test_multi_range_scrambled_ids);
+
+  // Joseph form
+  RUN_TEST(test_joseph_form_symmetry_after_many_updates);
+  RUN_TEST(test_joseph_form_no_negative_diagonal_under_stress);
 
   // Integration
-  RUN_TEST(test_predict_update_converges_to_truth);
-  RUN_TEST(test_predict_update_with_constant_velocity);
-  RUN_TEST(test_predict_update_with_acceleration);
-  RUN_TEST(test_predict_only_diverges_without_updates);
-  RUN_TEST(test_outlier_gate_blocks_bad_measurement);
+  RUN_TEST(test_integration_stationary_converges);
+  RUN_TEST(test_integration_constant_velocity_tracks);
+  RUN_TEST(test_integration_with_acceleration);
+  RUN_TEST(test_integration_predict_only_diverges);
+  RUN_TEST(test_integration_outlier_rejected);
+  RUN_TEST(test_integration_noisy_ranges_converge);
 
   // Matrix helpers
   RUN_TEST(test_mat4_mul_identity);

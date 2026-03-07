@@ -51,13 +51,31 @@ static void axisAngleToQuat(float ax, float ay, float az, float angle_rad,
 }
 
 // ── World-frame rotation (from GyroSubsystem::getAccelWorld) ──
-
+// Old yaw-only version kept for existing yaw rotation tests
 static void rotateToWorld(float accel_x, float accel_y, float yaw_rad,
                           float& ax_world, float& ay_world) {
   float cy = cosf(yaw_rad);
   float sy = sinf(yaw_rad);
   ax_world = accel_x * cy - accel_y * sy;
   ay_world = accel_x * sy + accel_y * cy;
+}
+
+// Full ZYX Euler rotation (matches new GyroSubsystem::getAccelWorld)
+static void rotateToWorldFull(float accel_x, float accel_y, float accel_z,
+                              float roll_deg, float pitch_deg, float yaw_deg,
+                              float& ax_world, float& ay_world) {
+  float roll_rad = roll_deg * DEG2RAD;
+  float pitch_rad = pitch_deg * DEG2RAD;
+  float yaw_rad = yaw_deg * DEG2RAD;
+  float cr = cosf(roll_rad), sr = sinf(roll_rad);
+  float cp = cosf(pitch_rad), sp = sinf(pitch_rad);
+  float cy = cosf(yaw_rad), sy = sinf(yaw_rad);
+  ax_world = (cy * cp) * accel_x +
+             (cy * sp * sr - sy * cr) * accel_y +
+             (cy * sp * cr + sy * sr) * accel_z;
+  ay_world = (sy * cp) * accel_x +
+             (sy * sp * sr + cy * cr) * accel_y +
+             (sy * sp * cr - cy * sr) * accel_z;
 }
 
 void setUp(void) {}
@@ -551,6 +569,74 @@ void test_negative_yaw_rotation() {
   TEST_ASSERT_FLOAT_WITHIN(1e-4f, -1.0f, ay_w);
 }
 
+// ════════════════════════════════════════════════════════════════
+//  FULL ZYX BODY→WORLD ROTATION TESTS
+// ════════════════════════════════════════════════════════════════
+
+void test_full_rotation_zero_angles_identity() {
+  float ax_w, ay_w;
+  rotateToWorldFull(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ax_w, ay_w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1.0f, ax_w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, ay_w);
+}
+
+void test_full_rotation_yaw_only_matches_simple() {
+  // With zero roll/pitch, full rotation should match yaw-only
+  float ax_w_full, ay_w_full, ax_w_simple, ay_w_simple;
+  rotateToWorldFull(1.0f, 0.5f, 0.0f, 0.0f, 0.0f, 45.0f, ax_w_full, ay_w_full);
+  rotateToWorld(1.0f, 0.5f, 45.0f * DEG2RAD, ax_w_simple, ay_w_simple);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, ax_w_simple, ax_w_full);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, ay_w_simple, ay_w_full);
+}
+
+void test_full_rotation_pitch_30_body_x_projects_down() {
+  // 30° pitch (nose up): body X accel partially goes to world Z (not captured),
+  // world X component should be cos(30°) of body X
+  float ax_w, ay_w;
+  rotateToWorldFull(1.0f, 0.0f, 0.0f, 0.0f, 30.0f, 0.0f, ax_w, ay_w);
+  float expected_x = cosf(30.0f * DEG2RAD);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, expected_x, ax_w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, ay_w);
+}
+
+void test_full_rotation_roll_30_body_y_projects() {
+  // 30° roll: body Y accel partially goes to world Z (not captured),
+  // world Y component should be cos(30°) of body Y
+  float ax_w, ay_w;
+  rotateToWorldFull(0.0f, 1.0f, 0.0f, 30.0f, 0.0f, 0.0f, ax_w, ay_w);
+  float expected_y = cosf(30.0f * DEG2RAD);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, ax_w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, expected_y, ay_w);
+}
+
+void test_full_rotation_body_z_accel_appears_in_xy() {
+  // With 30° pitch and only body-Z accel, some appears in world X
+  float ax_w, ay_w;
+  rotateToWorldFull(0.0f, 0.0f, 1.0f, 0.0f, 30.0f, 0.0f, ax_w, ay_w);
+  // R[0][2] = cos(yaw)*sin(pitch)*cos(roll) = 1*sin30*1 = 0.5
+  float expected_x = sinf(30.0f * DEG2RAD);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, expected_x, ax_w);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, ay_w);
+}
+
+void test_full_rotation_preserves_magnitude_at_tilt() {
+  // Magnitude of (ax_w, ay_w, az_w) should equal body magnitude,
+  // but since we only compute XY, we check that XY magnitude <= body magnitude
+  float ax_w, ay_w;
+  rotateToWorldFull(1.0f, 0.0f, 0.0f, 0.0f, 30.0f, 0.0f, ax_w, ay_w);
+  float mag_xy = sqrtf(ax_w * ax_w + ay_w * ay_w);
+  TEST_ASSERT_TRUE(mag_xy <= 1.001f);   // should be cos(30°) ≈ 0.866
+  TEST_ASSERT_TRUE(mag_xy > 0.85f);
+}
+
+void test_full_rotation_combined_roll_pitch_yaw() {
+  // Arbitrary combined rotation should not produce NaN
+  float ax_w, ay_w;
+  rotateToWorldFull(1.0f, 2.0f, -0.5f, 15.0f, -20.0f, 45.0f, ax_w, ay_w);
+  TEST_ASSERT_FALSE(std::isnan(ax_w));
+  TEST_ASSERT_FALSE(std::isnan(ay_w));
+}
+
 int main(int argc, char** argv) {
   UNITY_BEGIN();
 
@@ -630,6 +716,15 @@ int main(int argc, char** argv) {
   // Special yaw values
   RUN_TEST(test_very_small_yaw);
   RUN_TEST(test_negative_yaw_rotation);
+
+  // Full ZYX body→world rotation
+  RUN_TEST(test_full_rotation_zero_angles_identity);
+  RUN_TEST(test_full_rotation_yaw_only_matches_simple);
+  RUN_TEST(test_full_rotation_pitch_30_body_x_projects_down);
+  RUN_TEST(test_full_rotation_roll_30_body_y_projects);
+  RUN_TEST(test_full_rotation_body_z_accel_appears_in_xy);
+  RUN_TEST(test_full_rotation_preserves_magnitude_at_tilt);
+  RUN_TEST(test_full_rotation_combined_roll_pitch_yaw);
 
   return UNITY_END();
 }

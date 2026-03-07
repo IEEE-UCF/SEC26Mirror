@@ -1,6 +1,6 @@
 #pragma once
 // GyroSubsystem: BNO085 IMU wrapper for the drone
-// Uses onboard sensor fusion (no Madgwick needed), outputs Euler angles + gyro
+// Uses onboard sensor fusion (no Madgwick needed!), outputs Euler angles + gyro
 // rates + linear acceleration
 
 #include <Adafruit_BNO08x.h>
@@ -47,13 +47,27 @@ class GyroSubsystem {
     return copy;
   }
 
-  // Get world-frame XY acceleration (rotated by yaw)
-  void getAccelWorld(float yaw_rad, float& ax_world, float& ay_world) const {
+  // Get world-frame XY acceleration using full ZYX Euler rotation.
+  // BNO085 linear accel is body-frame with gravity removed — we need
+  // the full roll/pitch/yaw rotation to project onto world XY.
+  // Only rotating by yaw causes drift proportional to tilt angle.
+  void getAccelWorld(float& ax_world, float& ay_world) const {
     IMUData d = getData();
-    float cy = cosf(yaw_rad);
-    float sy = sinf(yaw_rad);
-    ax_world = d.accel_x * cy - d.accel_y * sy;
-    ay_world = d.accel_x * sy + d.accel_y * cy;
+    float roll_rad = d.roll * 0.01745329252f;
+    float pitch_rad = d.pitch * 0.01745329252f;
+    float yaw_rad = d.yaw * 0.01745329252f;
+
+    float cr = cosf(roll_rad), sr = sinf(roll_rad);
+    float cp = cosf(pitch_rad), sp = sinf(pitch_rad);
+    float cy = cosf(yaw_rad), sy = sinf(yaw_rad);
+
+    // ZYX rotation matrix (body → world), rows 0 and 1 only
+    ax_world = (cy * cp) * d.accel_x +
+               (cy * sp * sr - sy * cr) * d.accel_y +
+               (cy * sp * cr + sy * sr) * d.accel_z;
+    ay_world = (sy * cp) * d.accel_x +
+               (sy * sp * sr + cy * cr) * d.accel_y +
+               (sy * sp * cr - cy * sr) * d.accel_z;
   }
 
   bool isInitialized() const { return initialized_; }

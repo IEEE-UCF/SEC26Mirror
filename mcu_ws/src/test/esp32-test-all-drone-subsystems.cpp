@@ -212,10 +212,9 @@ static void flightControlTask(void* /*param*/) {
 
     IMUData imu = g_gyro.getData();
 
-    // EKF predict (world-frame accel)
+    // EKF predict (world-frame accel via full body→world rotation)
     float ax_w, ay_w;
-    float yaw_rad = imu.yaw * 0.01745329252f;
-    g_gyro.getAccelWorld(yaw_rad, ax_w, ay_w);
+    g_gyro.getAccelWorld(ax_w, ay_w);
     g_ekf.predict(ax_w, ay_w, dt);
 
     // Flight controller update
@@ -260,17 +259,17 @@ static void uwbTask(void* /*param*/) {
     g_uwb.startRanging();
 
     const auto& data = g_uwb.getData();
-    if (data.num_valid_ranges >= 3) {
-      float distances[Drivers::UWBDriverData::MAX_ANCHORS];
-      uint8_t ids[Drivers::UWBDriverData::MAX_ANCHORS];
-      uint8_t n = 0;
-      for (uint8_t i = 0; i < Drivers::UWBDriverData::MAX_ANCHORS; i++) {
-        if (data.ranges[i].valid) {
-          distances[n] = data.ranges[i].distance_cm / 100.0f;
-          ids[n] = data.ranges[i].peer_id;
-          n++;
-        }
+    float distances[Drivers::UWBDriverData::MAX_ANCHORS];
+    uint8_t ids[Drivers::UWBDriverData::MAX_ANCHORS];
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < Drivers::UWBDriverData::MAX_ANCHORS; i++) {
+      if (data.ranges[i].valid) {
+        distances[n] = data.ranges[i].distance_cm / 100.0f;
+        ids[n] = data.ranges[i].peer_id;
+        n++;
       }
+    }
+    if (n > 0) {
       g_ekf.updateUWB(distances, ids, n);
     }
 
@@ -397,8 +396,8 @@ void setup() {
   Serial.println("[INIT] EKF: OK");
   Serial.printf("[INIT]   Process noise: pos=%.3f, vel=%.3f\n",
                 Config::EKF_PROCESS_NOISE_POS, Config::EKF_PROCESS_NOISE_VEL);
-  Serial.printf("[INIT]   Measure noise: %.3f, outlier gate: %.1fm\n",
-                Config::EKF_MEASURE_NOISE_UWB, Config::EKF_OUTLIER_GATE_M);
+  Serial.printf("[INIT]   Measure noise: %.3f, Mahalanobis gate²: %.1f\n",
+                Config::EKF_MEASURE_NOISE_UWB, Config::EKF_MAHALANOBIS_GATE_SQ);
 #endif
 
   // ─── Stage 5: + IR transmitter ──────────────────────────────────

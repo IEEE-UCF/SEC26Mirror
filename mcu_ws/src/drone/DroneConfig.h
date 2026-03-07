@@ -23,47 +23,54 @@ constexpr uint32_t MOTOR_PWM_FREQ = 20000;     // 20 kHz
 constexpr uint8_t MOTOR_PWM_RESOLUTION = 10;   // 10-bit (0-1023)
 constexpr uint32_t MOTOR_PWM_MAX = (1 << MOTOR_PWM_RESOLUTION) - 1;
 
-// ── PID gains (cascaded: outer angle → inner rate) ─────────
-// All use DerivativeMode::OnMeasurement for smooth response.
+// ── PID gains (cascaded: outer angle -> inner rate) ─────────
 
 inline PIDController::Config rollAnglePID() {
-  return {{0.2f, 0.3f, 0.05f},          // kp, ki, kd
-          {-25.0f, 25.0f, -25.0f, 25.0f},  // out limits, i limits
+  return {{5.0f, 0.5f, 0.0f},               // kp, ki, kd
+          {-250.0f, 250.0f, -30.0f, 30.0f},  // out=deg/s, i bounded
           PIDController::DerivativeMode::OnMeasurement,
           true, 0.0f, 1e-6f, 0.1f};
 }
 
 inline PIDController::Config pitchAnglePID() {
-  return {{0.2f, 0.3f, 0.05f},
-          {-25.0f, 25.0f, -25.0f, 25.0f},
+  return {{5.0f, 0.5f, 0.0f},
+          {-250.0f, 250.0f, -30.0f, 30.0f},
           PIDController::DerivativeMode::OnMeasurement,
           true, 0.0f, 1e-6f, 0.1f};
 }
 
 inline PIDController::Config rollRatePID() {
-  return {{0.15f, 0.2f, 0.0002f},
-          {-1.0f, 1.0f, -25.0f, 25.0f},
+  return {{0.003f, 0.001f, 0.00003f},
+          {-0.5f, 0.5f, -0.3f, 0.3f},       // i_limit <= out_limit!
           PIDController::DerivativeMode::OnMeasurement,
-          true, 0.0f, 1e-6f, 0.1f};
+          true, 0.7f, 1e-6f, 0.1f};          // d_filter_alpha=0.7
 }
 
 inline PIDController::Config pitchRatePID() {
-  return {{0.15f, 0.2f, 0.0002f},
-          {-1.0f, 1.0f, -25.0f, 25.0f},
+  return {{0.003f, 0.001f, 0.00003f},
+          {-0.5f, 0.5f, -0.3f, 0.3f},
           PIDController::DerivativeMode::OnMeasurement,
-          true, 0.0f, 1e-6f, 0.1f};
+          true, 0.7f, 1e-6f, 0.1f};
 }
 
 inline PIDController::Config yawRatePID() {
-  return {{0.3f, 0.05f, 0.00015f},
-          {-1.0f, 1.0f, -25.0f, 25.0f},
+  return {{0.005f, 0.001f, 0.0f},
+          {-0.3f, 0.3f, -0.2f, 0.2f},
           PIDController::DerivativeMode::OnError,
           true, 0.0f, 1e-6f, 0.1f};
 }
 
 inline PIDController::Config altitudePID() {
-  return {{0.8f, 0.15f, 0.4f},
-          {-0.3f, 0.3f, -0.3f, 0.3f},
+  return {{1.2f, 0.15f, 0.0f},              // no D — velocity feedforward instead
+          {-0.3f, 0.3f, -0.2f, 0.2f},
+          PIDController::DerivativeMode::OnMeasurement,
+          true, 0.0f, 1e-6f, 1.0f};
+}
+
+// Altitude velocity damping (inner loop of altitude cascade)
+inline PIDController::Config altitudeVelocityPID() {
+  return {{0.5f, 0.0f, 0.0f},               // P-only velocity damping
+          {-0.2f, 0.2f, -0.1f, 0.1f},
           PIDController::DerivativeMode::OnMeasurement,
           true, 0.0f, 1e-6f, 1.0f};
 }
@@ -112,8 +119,10 @@ constexpr uint32_t STATE_PUB_RATE_HZ = 10;
 // ── EKF noise parameters ──────────────────────────────────
 constexpr float EKF_PROCESS_NOISE_POS = 0.01f;   // m²
 constexpr float EKF_PROCESS_NOISE_VEL = 0.1f;    // (m/s)²
-constexpr float EKF_MEASURE_NOISE_UWB = 0.15f;   // m²
-constexpr float EKF_OUTLIER_GATE_M = 1.0f;       // Residual reject
+constexpr float EKF_MEASURE_NOISE_UWB = 0.15f;   // m² per range
+constexpr float EKF_MAHALANOBIS_GATE_SQ = 9.0f;  // chi² gate (3σ for 1-DOF)
+constexpr float EKF_COV_MAX_POS = 10.0f;         // max position variance
+constexpr float EKF_COV_MAX_VEL = 5.0f;          // max velocity variance
 
 // ── IMU config ─────────────────────────────────────────────
 constexpr uint8_t IMU_I2C_ADDR = 0x4A;

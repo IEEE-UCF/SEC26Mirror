@@ -163,10 +163,9 @@ static void flightControlTask(void* /*param*/) {
 
     IMUData imu = g_gyro.getData();
 
-    // EKF predict (world-frame accel)
+    // EKF predict (world-frame accel via full body→world rotation)
     float ax_w, ay_w;
-    float yaw_rad = imu.yaw * 0.01745329252f;
-    g_gyro.getAccelWorld(yaw_rad, ax_w, ay_w);
+    g_gyro.getAccelWorld(ax_w, ay_w);
     g_ekf.predict(ax_w, ay_w, dt);
 
     // Flight controller update
@@ -209,19 +208,19 @@ static void uwbTask(void* /*param*/) {
     g_uwb.update();
     g_uwb.startRanging();
 
-    // Feed valid ranges to EKF
+    // Feed valid ranges to EKF (per-range scalar updates)
     const auto& data = g_uwb.getData();
-    if (data.num_valid_ranges >= 3) {
-      float distances[Drivers::UWBDriverData::MAX_ANCHORS];
-      uint8_t ids[Drivers::UWBDriverData::MAX_ANCHORS];
-      uint8_t n = 0;
-      for (uint8_t i = 0; i < Drivers::UWBDriverData::MAX_ANCHORS; i++) {
-        if (data.ranges[i].valid) {
-          distances[n] = data.ranges[i].distance_cm / 100.0f;
-          ids[n] = data.ranges[i].peer_id;
-          n++;
-        }
+    float distances[Drivers::UWBDriverData::MAX_ANCHORS];
+    uint8_t ids[Drivers::UWBDriverData::MAX_ANCHORS];
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < Drivers::UWBDriverData::MAX_ANCHORS; i++) {
+      if (data.ranges[i].valid) {
+        distances[n] = data.ranges[i].distance_cm / 100.0f;
+        ids[n] = data.ranges[i].peer_id;
+        n++;
       }
+    }
+    if (n > 0) {
       g_ekf.updateUWB(distances, ids, n);
     }
 

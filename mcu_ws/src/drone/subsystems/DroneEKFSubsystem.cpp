@@ -1,6 +1,7 @@
 #include "DroneEKFSubsystem.h"
 
 #include <cmath>
+#include <cstring>
 
 namespace Drone {
 
@@ -39,11 +40,7 @@ void DroneEKFSubsystem::predict(float ax_world, float ay_world, float dt) {
 
   xSemaphoreTake(mutex_, portMAX_DELAY);
 
-  // State prediction
-  // x  += vx*dt + 0.5*ax*dt²
-  // y  += vy*dt + 0.5*ay*dt²
-  // vx += ax*dt
-  // vy += ay*dt
+  // State prediction: constant-acceleration kinematic model
   float dt2 = 0.5f * dt * dt;
   state_.x += state_.vx * dt + ax_world * dt2;
   state_.y += state_.vy * dt + ay_world * dt2;
@@ -51,16 +48,10 @@ void DroneEKFSubsystem::predict(float ax_world, float ay_world, float dt) {
   state_.vy += ay_world * dt;
 
   // F = state transition Jacobian
-  // [1  0  dt  0 ]
-  // [0  1  0   dt]
-  // [0  0  1   0 ]
-  // [0  0  0   1 ]
   float F[16] = {1, 0, dt, 0, 0, 1, 0, dt, 0, 0, 1, 0, 0, 0, 0, 1};
-
-  // F^T
   float FT[16] = {1, 0, 0, 0, 0, 1, 0, 0, dt, 0, 1, 0, 0, dt, 0, 1};
 
-  // Process noise Q
+  // Process noise Q (scaled by dt)
   float qp = Config::EKF_PROCESS_NOISE_POS * dt;
   float qv = Config::EKF_PROCESS_NOISE_VEL * dt;
   float Q[16] = {qp, 0, 0, 0, 0, qp, 0, 0, 0, 0, qv, 0, 0, 0, 0, qv};
@@ -72,93 +63,148 @@ void DroneEKFSubsystem::predict(float ax_world, float ay_world, float dt) {
   mat4_mul(FP, FT, FPFT);
   mat4_add(FPFT, Q, P_);
 
+  // Bound covariance to prevent divergence during UWB dropout
+  boundCovariance();
+
   xSemaphoreGive(mutex_);
 }
 
-bool DroneEKFSubsystem::updateUWB(const float* distances_m,
-                                   const uint8_t* peer_ids,
-                                   uint8_t num_ranges) {
-  float x_meas, y_meas;
-  if (!trilaterate(distances_m, peer_ids, num_ranges, x_meas, y_meas)) {
-    return false;
-  }
-
+uint8_t DroneEKFSubsystem::updateUWB(const float* distances_m,
+                                      const uint8_t* peer_ids,
+                                      uint8_t num_ranges) {
   xSemaphoreTake(mutex_, portMAX_DELAY);
 
-  // Innovation: y = z - H*x where H = [I₂ | 0₂]
-  float innov_x = x_meas - state_.x;
-  float innov_y = y_meas - state_.y;
+  // Snapshot anchors under mutex to avoid race conditions
+  AnchorInfo anchors_local[MAX_ANCHORS];
+  uint8_t num_anchors_local = num_anchors_;
+  memcpy(anchors_local, anchors_, sizeof(anchors_));
 
-  // Outlier gate
-  float residual = sqrtf(innov_x * innov_x + innov_y * innov_y);
-  if (residual > Config::EKF_OUTLIER_GATE_M) {
-    xSemaphoreGive(mutex_);
-    return false;
-  }
+  uint8_t fused = 0;
 
-  // S = H*P*H^T + R (2×2)
-  // H*P*H^T extracts top-left 2×2 of P
-  float R = Config::EKF_MEASURE_NOISE_UWB;
-  float S00 = P_[0] + R;
-  float S01 = P_[1];
-  float S10 = P_[4];
-  float S11 = P_[5] + R;
+  // Process each range as an independent scalar Kalman update
+  for (uint8_t i = 0; i < num_ranges; i++) {
+    if (distances_m[i] <= 0.0f) continue;
 
-  // S inverse (2×2)
-  float det = S00 * S11 - S01 * S10;
-  if (fabsf(det) < 1e-10f) {
-    xSemaphoreGive(mutex_);
-    return false;
-  }
-  float inv_det = 1.0f / det;
-  float Si00 = S11 * inv_det;
-  float Si01 = -S01 * inv_det;
-  float Si10 = -S10 * inv_det;
-  float Si11 = S00 * inv_det;
-
-  // K = P*H^T*S^-1 (4×2)
-  // P*H^T = first two columns of P
-  float K[8];  // 4×2
-  K[0] = P_[0] * Si00 + P_[1] * Si10;
-  K[1] = P_[0] * Si01 + P_[1] * Si11;
-  K[2] = P_[4] * Si00 + P_[5] * Si10;
-  K[3] = P_[4] * Si01 + P_[5] * Si11;
-  K[4] = P_[8] * Si00 + P_[9] * Si10;
-  K[5] = P_[8] * Si01 + P_[9] * Si11;
-  K[6] = P_[12] * Si00 + P_[13] * Si10;
-  K[7] = P_[12] * Si01 + P_[13] * Si11;
-
-  // State update: x = x + K*y
-  state_.x += K[0] * innov_x + K[1] * innov_y;
-  state_.y += K[2] * innov_x + K[3] * innov_y;
-  state_.vx += K[4] * innov_x + K[5] * innov_y;
-  state_.vy += K[6] * innov_x + K[7] * innov_y;
-
-  // Covariance update: P = (I - K*H)*P
-  // K*H is 4×4: [K col | zeros]
-  float KH[16] = {};
-  for (int i = 0; i < 4; i++) {
-    KH[i * 4 + 0] = K[i * 2 + 0];
-    KH[i * 4 + 1] = K[i * 2 + 1];
-    // columns 2,3 are zero
-  }
-
-  // P_new = (I - KH) * P
-  float P_new[16];
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      float sum = 0.0f;
-      for (int k = 0; k < 4; k++) {
-        float I_KH = ((i == k) ? 1.0f : 0.0f) - KH[i * 4 + k];
-        sum += I_KH * P_[k * 4 + j];
+    // Find matching anchor
+    for (uint8_t j = 0; j < num_anchors_local; j++) {
+      if (anchors_local[j].valid && anchors_local[j].id == peer_ids[i]) {
+        if (updateRange(distances_m[i], anchors_local[j].x,
+                        anchors_local[j].y)) {
+          fused++;
+        }
+        break;
       }
-      P_new[i * 4 + j] = sum;
     }
   }
-  memcpy(P_, P_new, sizeof(P_));
 
   xSemaphoreGive(mutex_);
+  return fused;
+}
+
+bool DroneEKFSubsystem::updateRange(float distance_m, float anchor_x,
+                                     float anchor_y) {
+  // Nonlinear observation model: h(x) = sqrt((x-ax)² + (y-ay)²)
+  float dx = state_.x - anchor_x;
+  float dy = state_.y - anchor_y;
+  float predicted_dist = sqrtf(dx * dx + dy * dy);
+
+  // Avoid division by zero when state is exactly at anchor
+  if (predicted_dist < 1e-4f) predicted_dist = 1e-4f;
+
+  // Jacobian H = dh/dstate = [(x-ax)/d, (y-ay)/d, 0, 0]
+  // Only position states affect range observation; velocity states don't.
+  float H[4];
+  H[0] = dx / predicted_dist;
+  H[1] = dy / predicted_dist;
+  H[2] = 0.0f;
+  H[3] = 0.0f;
+
+  // Innovation: z - h(x)
+  float innovation = distance_m - predicted_dist;
+
+  // S = H*P*H^T + R (scalar)
+  // H*P*H^T = sum over i,j of H[i]*P[i*4+j]*H[j]
+  float S = Config::EKF_MEASURE_NOISE_UWB;
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      S += H[i] * P_[i * 4 + j] * H[j];
+    }
+  }
+
+  // Mahalanobis distance gate: (innovation^2)/S < threshold
+  if (S < 1e-10f) return false;
+  float mahal_sq = (innovation * innovation) / S;
+  if (mahal_sq > Config::EKF_MAHALANOBIS_GATE_SQ) return false;
+
+  // Kalman gain K = P*H^T / S (4×1 vector)
+  float K[4];
+  for (int i = 0; i < 4; i++) {
+    K[i] = 0.0f;
+    for (int j = 0; j < 4; j++) {
+      K[i] += P_[i * 4 + j] * H[j];
+    }
+    K[i] /= S;
+  }
+
+  // State update: x += K * innovation
+  state_.x += K[0] * innovation;
+  state_.y += K[1] * innovation;
+  state_.vx += K[2] * innovation;
+  state_.vy += K[3] * innovation;
+
+  // Joseph form covariance update: P = (I-KH)*P*(I-KH)^T + K*R*K^T
+  // This is numerically stable and guarantees P stays symmetric positive
+  // semi-definite even with floating point rounding.
+
+  // Compute (I - K*H) as a 4×4 matrix
+  float IKH[16];
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      IKH[i * 4 + j] = ((i == j) ? 1.0f : 0.0f) - K[i] * H[j];
+    }
+  }
+
+  // (I-KH)^T
+  float IKHT[16];
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++)
+      IKHT[i * 4 + j] = IKH[j * 4 + i];
+
+  // temp = (I-KH) * P
+  float temp[16];
+  mat4_mul(IKH, P_, temp);
+
+  // P_new = temp * (I-KH)^T
+  float P_new[16];
+  mat4_mul(temp, IKHT, P_new);
+
+  // Add K*R*K^T (rank-1 outer product scaled by R)
+  float R = Config::EKF_MEASURE_NOISE_UWB;
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      P_new[i * 4 + j] += K[i] * R * K[j];
+    }
+  }
+
+  memcpy(P_, P_new, sizeof(P_));
   return true;
+}
+
+void DroneEKFSubsystem::boundCovariance() {
+  // Clamp diagonal entries to prevent unbounded growth
+  if (P_[0] > Config::EKF_COV_MAX_POS) P_[0] = Config::EKF_COV_MAX_POS;
+  if (P_[5] > Config::EKF_COV_MAX_POS) P_[5] = Config::EKF_COV_MAX_POS;
+  if (P_[10] > Config::EKF_COV_MAX_VEL) P_[10] = Config::EKF_COV_MAX_VEL;
+  if (P_[15] > Config::EKF_COV_MAX_VEL) P_[15] = Config::EKF_COV_MAX_VEL;
+
+  // Enforce symmetry by averaging off-diagonal pairs
+  for (int i = 0; i < 4; i++) {
+    for (int j = i + 1; j < 4; j++) {
+      float avg = 0.5f * (P_[i * 4 + j] + P_[j * 4 + i]);
+      P_[i * 4 + j] = avg;
+      P_[j * 4 + i] = avg;
+    }
+  }
 }
 
 void DroneEKFSubsystem::setAnchors(const AnchorInfo* anchors, uint8_t count) {
@@ -168,68 +214,6 @@ void DroneEKFSubsystem::setAnchors(const AnchorInfo* anchors, uint8_t count) {
     anchors_[i] = anchors[i];
   }
   xSemaphoreGive(mutex_);
-}
-
-bool DroneEKFSubsystem::trilaterate(const float* distances_m,
-                                     const uint8_t* peer_ids,
-                                     uint8_t num_ranges, float& x_out,
-                                     float& y_out) {
-  // Match peer_ids to known anchors
-  struct MatchedRange {
-    float x, y, d;
-  };
-  MatchedRange matched[MAX_ANCHORS];
-  uint8_t n = 0;
-
-  for (uint8_t i = 0; i < num_ranges && n < MAX_ANCHORS; i++) {
-    if (distances_m[i] <= 0.0f) continue;
-    for (uint8_t j = 0; j < num_anchors_; j++) {
-      if (anchors_[j].valid && anchors_[j].id == peer_ids[i]) {
-        matched[n].x = anchors_[j].x;
-        matched[n].y = anchors_[j].y;
-        matched[n].d = distances_m[i];
-        n++;
-        break;
-      }
-    }
-  }
-
-  if (n < 3) return false;
-
-  // Linearize by subtracting pairs of circle equations:
-  //   (x - xi)² + (y - yi)² = di²
-  // Subtract equation 0 from equations 1..n-1:
-  //   2*(x0-xi)*x + 2*(y0-yi)*y = d_i² - d_0² - xi² + x0² - yi² + y0²
-  // This gives a linear system Ax = b.
-  // For n >= 3, use first two equations for a 2×2 solve.
-
-  float x0 = matched[0].x, y0 = matched[0].y, d0 = matched[0].d;
-  float d0sq = d0 * d0;
-  float x0sq = x0 * x0, y0sq = y0 * y0;
-
-  // Build 2×2 system from first two linearized equations
-  float A00 = 0, A01 = 0, A10 = 0, A11 = 0;
-  float b0 = 0, b1 = 0;
-
-  float xi = matched[1].x, yi = matched[1].y, di = matched[1].d;
-  A00 = 2.0f * (x0 - xi);
-  A01 = 2.0f * (y0 - yi);
-  b0 = di * di - d0sq - xi * xi + x0sq - yi * yi + y0sq;
-
-  xi = matched[2].x;
-  yi = matched[2].y;
-  di = matched[2].d;
-  A10 = 2.0f * (x0 - xi);
-  A11 = 2.0f * (y0 - yi);
-  b1 = di * di - d0sq - xi * xi + x0sq - yi * yi + y0sq;
-
-  // Solve 2×2 via Cramer's rule
-  float det = A00 * A11 - A01 * A10;
-  if (fabsf(det) < 1e-6f) return false;
-
-  x_out = (b0 * A11 - b1 * A01) / det;
-  y_out = (A00 * b1 - A10 * b0) / det;
-  return true;
 }
 
 }  // namespace Drone

@@ -88,11 +88,14 @@ class DroneFlightSubsystem {
   PIDController pitch_rate_pid_;
   PIDController yaw_rate_pid_;
   PIDController altitude_pid_;
+  PIDController alt_vel_pid_;  // velocity damping for altitude
 
-  // Altitude velocity estimate
+  // Altitude velocity estimate (runs at sensor rate, not control rate)
   secbot::utils::LowPass1P alt_vel_filter_;
   float alt_prev_ = 0.0f;
+  float alt_vel_ = 0.0f;       // filtered vertical velocity (m/s)
   bool alt_initialized_ = false;
+  uint32_t alt_update_count_ = 0;  // detect when sensor value changes
 
   // PID outputs
   float roll_correction_ = 0.0f;

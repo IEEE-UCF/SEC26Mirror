@@ -26,9 +26,10 @@ void DroneFlightSubsystem::init() {
   pitch_rate_pid_.configure(Config::pitchRatePID());
   yaw_rate_pid_.configure(Config::yawRatePID());
   altitude_pid_.configure(Config::altitudePID());
+  alt_vel_pid_.configure(Config::altitudeVelocityPID());
 
-  // Altitude velocity LPF (alpha=0.3)
-  alt_vel_filter_.setAlpha(0.3f);
+  // Altitude velocity LPF (alpha=0.6 — heavier filtering for noisy VL53L0X)
+  alt_vel_filter_.setAlpha(0.6f);
 
   disarm();
 }
@@ -54,9 +55,12 @@ void DroneFlightSubsystem::resetPIDs() {
   pitch_rate_pid_.reset();
   yaw_rate_pid_.reset();
   altitude_pid_.reset();
+  alt_vel_pid_.reset();
   alt_vel_filter_.reset(0.0f, false);
   alt_prev_ = 0.0f;
+  alt_vel_ = 0.0f;
   alt_initialized_ = false;
+  alt_update_count_ = 0;
   roll_correction_ = pitch_correction_ = yaw_correction_ = 0.0f;
   throttle_ = 0.0f;
 }
@@ -92,7 +96,7 @@ void DroneFlightSubsystem::update(const IMUData& imu, float altitude_m,
   sp.pitch_des =
       clamp(sp.pitch_des, -Config::MAX_PITCH_DEG, Config::MAX_PITCH_DEG);
 
-  // 2. Cascaded angle → rate PID (using clamped sp)
+  // 2. Cascaded angle -> rate PID (using clamped sp)
   controlAngle(imu, sp, dt);
 
   // 3. Motor mixing
@@ -104,13 +108,13 @@ void DroneFlightSubsystem::update(const IMUData& imu, float altitude_m,
 
 void DroneFlightSubsystem::controlAngle(const IMUData& imu,
                                         const FlightSetpoint& sp, float dt) {
-  // Outer loop: angle → desired rate
+  // Outer loop: angle -> desired rate
   float desired_roll_rate =
       roll_angle_pid_.update(sp.roll_des, imu.roll, dt);
   float desired_pitch_rate =
       pitch_angle_pid_.update(sp.pitch_des, imu.pitch, dt);
 
-  // Inner loop: rate → motor correction
+  // Inner loop: rate -> motor correction
   roll_correction_ =
       roll_rate_pid_.update(desired_roll_rate, imu.gyro_x, dt);
   pitch_correction_ =
@@ -120,10 +124,9 @@ void DroneFlightSubsystem::controlAngle(const IMUData& imu,
   yaw_correction_ =
       yaw_rate_pid_.update(sp.yaw_rate_des, imu.gyro_z, dt);
 
-  // Reset integrators when throttle is very low (on the ground)
+  // Reset rate integrators when throttle is very low (on the ground).
+  // Only reset rate PIDs — angle PIDs hold CG trim across brief ground contact.
   if (throttle_ < 0.05f) {
-    roll_angle_pid_.reset();
-    pitch_angle_pid_.reset();
     roll_rate_pid_.reset();
     pitch_rate_pid_.reset();
     yaw_rate_pid_.reset();
@@ -132,21 +135,36 @@ void DroneFlightSubsystem::controlAngle(const IMUData& imu,
 
 void DroneFlightSubsystem::controlAltitude(const FlightSetpoint& sp,
                                            float altitude_m, float dt) {
-  // Estimate vertical velocity
+  // Estimate vertical velocity only when the sensor value actually changes.
+  // VL53L0X updates at 50Hz but this runs at 250Hz — computing velocity
+  // on stale data produces zero/spike artifacts that destroy the D-term.
   if (!alt_initialized_) {
     alt_prev_ = altitude_m;
     alt_initialized_ = true;
     return;
   }
-  float raw_vel = (dt > 0.0f) ? (altitude_m - alt_prev_) / dt : 0.0f;
-  alt_vel_filter_.update(raw_vel);
-  alt_prev_ = altitude_m;
 
-  // PID on altitude error (D-term uses measurement = altitude, so velocity
-  // derivative is handled by OnMeasurement mode)
-  float alt_correction = altitude_pid_.update(sp.altitude_des, altitude_m, dt);
+  // Detect actual sensor update (value changed since last tick)
+  if (altitude_m != alt_prev_) {
+    float sensor_dt = dt * (alt_update_count_ + 1);  // time since last change
+    if (sensor_dt > 0.001f) {
+      float raw_vel = (altitude_m - alt_prev_) / sensor_dt;
+      alt_vel_ = alt_vel_filter_.update(raw_vel);
+    }
+    alt_prev_ = altitude_m;
+    alt_update_count_ = 0;
+  } else {
+    alt_update_count_++;
+  }
 
-  throttle_ = Config::HOVER_THROTTLE + alt_correction;
+  // Cascaded altitude control:
+  //   Outer: position error -> desired velocity
+  //   Inner: velocity error -> throttle correction
+  // This avoids the noisy D-term problem entirely.
+  float desired_vel = altitude_pid_.update(sp.altitude_des, altitude_m, dt);
+  float vel_correction = alt_vel_pid_.update(desired_vel, alt_vel_, dt);
+
+  throttle_ = Config::HOVER_THROTTLE + vel_correction;
   throttle_ = clamp(throttle_, 0.0f, 1.0f);
 }
 
@@ -157,6 +175,7 @@ void DroneFlightSubsystem::controlMixer() {
   //         [DRONE]
   //        /      \
   //   BL (CW)    BR (CCW)
+  // wow thanks internet for cool diagram
   motors_[0] =
       throttle_ + roll_correction_ - pitch_correction_ + yaw_correction_;  // FL
   motors_[1] =

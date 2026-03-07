@@ -25,7 +25,6 @@ using namespace secbot::utils::units;
 //  Physical dimensions (inches — update these when measured!)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// TODO: MEASURE AND UPDATE THESE VALUES
 constexpr float TRACK_WIDTH_IN = 10.0f;           // center-to-center wheel dist
 constexpr float WHEEL_DIAMETER_IN = 3.25f;         // Vex omniwheel outer diameter
 
@@ -41,9 +40,12 @@ constexpr float WHEEL_CIRCUMFERENCE_M =
 // ═══════════════════════════════════════════════════════════════════════════
 
 constexpr int RAW_TICKS_PER_REVOLUTION = 3;
-constexpr int GEAR_RATIO = 34;
+constexpr int MOTOR_GEAR_RATIO = 34;
+constexpr int EXTERNAL_GEAR_SMALL = 36;   // motor-side gear teeth
+constexpr int EXTERNAL_GEAR_LARGE = 60;   // wheel-side gear teeth
 constexpr long TICKS_PER_REVOLUTION =
-    RAW_TICKS_PER_REVOLUTION * GEAR_RATIO;  // 102
+    RAW_TICKS_PER_REVOLUTION * MOTOR_GEAR_RATIO
+    * EXTERNAL_GEAR_LARGE / EXTERNAL_GEAR_SMALL;  // 170
 
 constexpr float DIST_PER_TICK_M =
     WHEEL_CIRCUMFERENCE_M / TICKS_PER_REVOLUTION;

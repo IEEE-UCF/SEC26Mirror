@@ -72,6 +72,7 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   // IMicroRosParticipant interface
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   /** @brief Access raw RC channel data (updated every loop cycle). */
   const RCSubsystemData& getData() const { return data_; }
@@ -111,6 +112,10 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   mcu_msgs__msg__RC msg_{};
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

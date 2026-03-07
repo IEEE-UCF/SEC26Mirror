@@ -57,6 +57,10 @@ class IMicroRosParticipant {
   // Called when manager tears down entities; participant should clean up any
   // resources
   virtual void onDestroy() = 0;
+  // Called by the manager thread under g_microros_mutex to publish latest data.
+  // Subsystems override this to publish without acquiring the global mutex
+  // themselves.  Default no-op for non-publishing participants.
+  virtual void publishAll() {}
 };
 
 class MicrorosManagerSetup : public Classes::BaseSetup {

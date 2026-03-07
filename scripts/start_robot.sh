@@ -35,7 +35,7 @@ if colcon build --executor sequential; then
     if [ -f "install/setup.bash" ]; then
         source install/setup.bash
     fi
-    
+
     # Explicitly exit with success code
     exit 0
 else

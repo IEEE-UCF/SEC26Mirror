@@ -83,13 +83,14 @@ class ButtonSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-      msg_.data = current;
 #ifdef USE_TEENSYTHREADS
       {
-        Threads::Scope guard(g_microros_mutex);
-        (void)rcl_publish(&pub_, &msg_, NULL);
+        Threads::Scope lock(data_mutex_);
+        msg_.data = current;
+        data_ready_ = true;
       }
 #else
+      msg_.data = current;
       (void)rcl_publish(&pub_, &msg_, NULL);
 #endif
     }
@@ -156,6 +157,17 @@ class ButtonSubsystem : public IMicroRosParticipant,
     return ~b;
   }
 
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
+ private:
   static constexpr uint32_t PUBLISH_INTERVAL_MS = 100;
   const ButtonSubsystemSetup setup_;
   rcl_publisher_t pub_{};
@@ -164,6 +176,10 @@ class ButtonSubsystem : public IMicroRosParticipant,
   uint32_t last_publish_ms_ = 0;
   uint8_t prev_state_ = 0;
   std::function<void()> callbacks_[NUM_BUTTONS];
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

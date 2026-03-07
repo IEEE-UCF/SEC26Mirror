@@ -11,7 +11,6 @@ PCA9685Manager::~PCA9685Manager() {
 }
 
 bool PCA9685Manager::init() {
-  // initialize each contained driver
   bool ok = true;
   for (auto d : drivers_) {
     ok = d->init() && ok;

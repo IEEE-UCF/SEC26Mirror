@@ -508,17 +508,18 @@ void setup() {
   // ─── Start threaded tasks ─────────────────────────────────────────────
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);       // ROS agent
+  // Priority: 4=highest (IMU/drive/motor/encoder), 3=microros, 2=mid, 1=low
+  g_mr.beginThreaded(8192, 3);       // ROS agent
   g_hb.beginThreaded(1024, 1, 1000); // 1 Hz
 
 #if DEBUG_STAGE >= 2
-  g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (50ms was ~14Hz due to I2C overhead)
+  g_imu.beginThreaded(8192, 4, 30);  // target ~20 Hz — highest priority
 #endif
 
 #if DEBUG_STAGE >= 3
   g_servo.beginThreaded(1024, 2, 100);       // 10 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);         // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(1024, 2, 50);  // 20 Hz encoder reading
+  g_motor.beginThreaded(1024, 4, 1);         // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(1024, 4, 50);  // 20 Hz encoder reading
   threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
 #endif
 
@@ -538,7 +539,7 @@ void setup() {
 #endif
 
 #if DEBUG_STAGE >= 6
-  g_drive.beginThreaded(4096, 3, 20);      // 50 Hz drive control
+  g_drive.beginThreaded(4096, 4, 20);      // 50 Hz drive control — highest priority
 #endif
 
 #if DEBUG_STAGE >= 7

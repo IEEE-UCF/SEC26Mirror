@@ -54,13 +54,11 @@ bool TCA9555Driver::init() {
 void TCA9555Driver::update() {
   if (dma_bus_) return;  // DMA mode: data updated by processDMAResults()
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
   uint8_t p0, p1;
   if (readReg(REG_INPUT0, &p0) && readReg(REG_INPUT1, &p1)) {
     data_.inputPort0 = p0;
     data_.inputPort1 = p1;
   }
-  __enable_irq();
 }
 
 // ── DMA support ──────────────────────────────────────────────────────────
@@ -88,7 +86,6 @@ const char* TCA9555Driver::getInfo() {
 bool TCA9555Driver::pinMode(uint8_t pin, uint8_t mode) {
   if (pin > 15) return false;
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
 
   bool result;
   if (pin < 8) {
@@ -105,14 +102,12 @@ bool TCA9555Driver::pinMode(uint8_t pin, uint8_t mode) {
       data_.configPort1 |= (1 << bit);
     result = writeReg(REG_CONFIG1, data_.configPort1);
   }
-  __enable_irq();
   return result;
 }
 
 bool TCA9555Driver::digitalWrite(uint8_t pin, bool val) {
   if (pin > 15) return false;
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
 
   bool result;
   if (pin < 8) {
@@ -129,7 +124,6 @@ bool TCA9555Driver::digitalWrite(uint8_t pin, bool val) {
       data_.outputPort1 &= ~(1 << bit);
     result = writeReg(REG_OUTPUT1, data_.outputPort1);
   }
-  __enable_irq();
   return result;
 }
 
@@ -143,7 +137,6 @@ bool TCA9555Driver::digitalRead(uint8_t pin) const {
 
 bool TCA9555Driver::writePort(uint8_t port, uint8_t value) {
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
   bool result = false;
   if (port == 0) {
     data_.outputPort0 = value;
@@ -152,7 +145,6 @@ bool TCA9555Driver::writePort(uint8_t port, uint8_t value) {
     data_.outputPort1 = value;
     result = writeReg(REG_OUTPUT1, value);
   }
-  __enable_irq();
   return result;
 }
 
@@ -164,7 +156,6 @@ uint8_t TCA9555Driver::readPort(uint8_t port) const {
 
 bool TCA9555Driver::configurePort(uint8_t port, uint8_t mask) {
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
   bool result = false;
   if (port == 0) {
     data_.configPort0 = mask;
@@ -173,7 +164,6 @@ bool TCA9555Driver::configurePort(uint8_t port, uint8_t mask) {
     data_.configPort1 = mask;
     result = writeReg(REG_CONFIG1, mask);
   }
-  __enable_irq();
   return result;
 }
 

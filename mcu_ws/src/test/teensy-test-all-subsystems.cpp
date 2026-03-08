@@ -568,7 +568,8 @@ void setup() {
   g_servo.beginThreaded(2048, 2, 100);       // 10 Hz state pub
   g_motor.beginThreaded(2048, 2, 1);         // 1000 Hz — NFPShop reverse-pulse
   g_encoder_sub.beginThreaded(2048, 2, 50);  // 20 Hz encoder reading
-  threads.addThread(pca_task, nullptr, 2048);  // 50 Hz PWM flush
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(pca_task),
+              "pca_dma", 2048 / 4, nullptr, 2, nullptr);  // 1000 Hz Wire2 DMA (pri 2)
 #endif
 
 #if DEBUG_STAGE >= 4
@@ -588,7 +589,8 @@ void setup() {
 
 #if DEBUG_STAGE >= 6
   g_drive.beginThreaded(4096, 3, 20);      // 50 Hz drive control
-  threads.addThread(rc_drive_task, nullptr, 2048);  // RC polling + manual drive
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(rc_drive_task),
+              "rc_drive", 2048 / 4, nullptr, 1, nullptr);  // RC polling + manual drive
 #endif
 
 #if DEBUG_STAGE >= 7

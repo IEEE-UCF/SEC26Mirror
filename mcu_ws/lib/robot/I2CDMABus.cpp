@@ -39,6 +39,10 @@ I2CDMABus::I2CDMABus(TwoWire &wire, uint32_t clock_hz)
   // Mark TX DMA as done so first fire() succeeds.
   tx_dma_.TCD->CSR |= DMA_TCD_CSR_DONE;
   rx_dma_.TCD->CSR |= DMA_TCD_CSR_DONE;
+
+  // Configure bus clock speed once (all users on this bus share the same rate).
+  wire_.begin();
+  wire_.setClock(clock_hz_);
 }
 
 // ── Queue: register write ──────────────────────────────────────────────────
@@ -117,9 +121,6 @@ bool I2CDMABus::fire()
   // Acquire bus lock — blocks other threads doing blocking I2C on this bus.
   I2CBus::mutexFor(wire_).lock();
   bus_locked_ = true;
-
-  // Set bus clock speed.
-  wire_.setClock(clock_hz_);
 
   // Flush TX buffer from data cache if it lives in cached memory (OCRAM).
   if ((uint32_t)tx_buf_ >= 0x20200000u)

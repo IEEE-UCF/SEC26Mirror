@@ -36,11 +36,17 @@ PCA9685Driver* PCA9685Manager::createDriver(const PCA9685DriverSetup& setup) {
 // ── Shared DMA bus support ──────────────────────────────────────────────────
 
 uint16_t PCA9685Manager::buildForDriver(PCA9685Driver* drv, uint16_t* out) {
+  // Snapshot dirty flags and buffer values atomically (relative to producers).
+  // Producers only set dirty=true and write buffer; we clear dirty after
+  // capturing the value.  At worst a concurrent write is picked up next cycle.
   uint32_t dirty = 0;
-  uint8_t* d = (uint8_t*)drv->buffer_dirty_;
+  uint16_t snapshot[16];
   for (uint8_t i = 0; i < 16; i++) {
-    dirty |= (uint32_t)d[i] << i;
-    d[i] = 0;
+    if (drv->buffer_dirty_[i]) {
+      snapshot[i] = drv->buffer_[i];
+      drv->buffer_dirty_[i] = false;
+      dirty |= 1u << i;
+    }
   }
 
   if (dirty == 0) return 0;
@@ -51,10 +57,10 @@ uint16_t PCA9685Manager::buildForDriver(PCA9685Driver* drv, uint16_t* out) {
     uint32_t tz = __builtin_ctz(dirty);
     uint32_t run = __builtin_ctz(~(dirty >> tz));
 
-    *p++ = LPI2C_MTDR_CMD_START | drv->setup_.i2c_addr_ << 1;
+    *p++ = LPI2C_MTDR_CMD_START | (drv->setup_.i2c_addr_ << 1);
     *p++ = PCA9685_LED0_ON_L + (tz << 2);
 
-    const uint16_t* src = &drv->buffer_[tz];
+    const uint16_t* src = &snapshot[tz];
     uint32_t cnt = run;
     do {
       uint32_t dd = *src++;

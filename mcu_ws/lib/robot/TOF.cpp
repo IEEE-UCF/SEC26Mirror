@@ -20,9 +20,7 @@ bool TOFDriver::init() {
 void TOFDriver::update() {
   if (!initSuccess_) return;
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
   range_.range = sensor_.readRangeContinuousMillimeters();
-  __enable_irq();
 }
 
 const char* TOFDriver::getInfo() {

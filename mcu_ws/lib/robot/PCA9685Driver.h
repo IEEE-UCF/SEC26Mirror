@@ -63,8 +63,8 @@ class PCA9685Driver : public Classes::BaseDriver {
  private:
   const PCA9685DriverSetup setup_;
   Adafruit_PWMServoDriver pwm_;
-  uint16_t buffer_[16];
-  bool buffer_dirty_[16];
+  volatile uint16_t buffer_[16];
+  volatile bool buffer_dirty_[16];
 };
 
 }  // namespace Robot

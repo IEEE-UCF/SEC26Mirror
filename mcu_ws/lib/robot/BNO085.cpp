@@ -100,14 +100,9 @@ void BNO085Driver::update() {
   I2CBus::Lock lock(setup_.wire_);
 #endif
 
-  // Disable ALL interrupts for the entire I2C transaction so the BNO085
-  // read cannot be preempted mid-transfer by TeensyThreads or anything else.
-  __disable_irq();
-
   bool wasRst = imu_.wasReset();
 
   if (wasRst) {
-    __enable_irq();
     ++resetCount_;
     DEBUG_PRINTF("[BNO085] Reset detected (#%lu) — waiting 300ms\n", resetCount_);
 #if defined(USE_FREERTOS)
@@ -117,9 +112,7 @@ void BNO085Driver::update() {
 #if defined(USE_FREERTOS)
     lock.relock();
 #endif
-    __disable_irq();
     if (!enableReports()) {
-      __enable_irq();
       DEBUG_PRINTLN("[BNO085] WARNING: enableReports failed after reset");
       return;
     }
@@ -128,7 +121,6 @@ void BNO085Driver::update() {
   // INT pin is active LOW when data is ready.  Skip the I2C read if no
   // data is queued — keeps poll cycles cheap (single GPIO read).
   if (setup_.int_pin_ >= 0 && digitalReadFast(setup_.int_pin_) == HIGH) {
-    __enable_irq();
     return;
   }
 
@@ -159,8 +151,6 @@ void BNO085Driver::update() {
         break;
     }
   }
-
-  __enable_irq();
 }
 
 // yaw in radians

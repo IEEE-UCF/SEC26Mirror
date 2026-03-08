@@ -295,16 +295,29 @@ static KeypadSubsystem g_keypad(g_keypad_setup);
 // Wire0 DMA bus task: batches mux select + INA219 + TCA9555 reads at 50 Hz.
 // TOF (VL53L0X) remains blocking, complex multi-step library protocol.
 static void wire0_dma_task(void*) {
+  static constexpr uint32_t DMA_TIMEOUT_MS = 50;
   while (true) {
     g_mux.queueDMASelect(MUX_CH_BATTERY);
     g_power_driver.queueDMAReads();
     g_gpio.queueDMARead();
 
     if (g_dma_wire0.fire()) {
-      while (!g_dma_wire0.isComplete()) vTaskDelay(1);
+      uint32_t start = millis();
+      while (!g_dma_wire0.isComplete()) {
+        if (millis() - start > DMA_TIMEOUT_MS) {
+          g_dma_wire0.reset();
+          break;
+        }
+        vTaskDelay(1);
+      }
+      if (g_dma_wire0.isComplete()) {
+        g_dma_wire0.dispatch();
+        g_power_driver.processDMAResults();
+        g_gpio.processDMAResults();
+      }
+    } else {
+      // fire() failed (empty or previous transfer stuck) — reset queues
       g_dma_wire0.dispatch();
-      g_power_driver.processDMAResults();
-      g_gpio.processDMAResults();
     }
 
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -500,9 +513,12 @@ void setup() {
   g_crank.beginThreaded(2048, 1, 200);    // 5 Hz crank
   g_keypad.beginThreaded(2048, 1, 200);   // 5 Hz keypad
   g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
-  threads.addThread(wire0_dma_task, nullptr, 2048);  // 50 Hz Wire0 DMA
-  threads.addThread(pca_task, nullptr, 2048);         // 1000 Hz Wire2 DMA (PWM)
-  threads.addThread(rc_drive_task, nullptr, 2048);  // RC polling + manual drive
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(wire0_dma_task),
+              "wire0_dma", 2048 / 4, nullptr, 1, nullptr);   // 50 Hz Wire0 DMA
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(pca_task),
+              "pca_dma", 2048 / 4, nullptr, 2, nullptr);     // 1000 Hz Wire2 DMA (pri 2)
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(rc_drive_task),
+              "rc_drive", 2048 / 4, nullptr, 1, nullptr);    // RC polling + manual drive
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 

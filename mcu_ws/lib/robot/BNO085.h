@@ -25,17 +25,25 @@ class BNO085DriverSetup : public Classes::BaseSetup {
   BNO085DriverSetup() = delete;
 
   /**
-   * @param _id    Driver identifier string.
-   * @param _pin   Reset pin, or -1 if not connected.
-   * @param wire   I2C bus the BNO085 is on (default Wire1).
+   * @param _id       Driver identifier string.
+   * @param _pin      Reset pin, or -1 if not connected.
+   * @param wire      I2C bus the BNO085 is on (default Wire1).
+   * @param addr      I2C address (default 0x4B).
+   * @param int_pin   Interrupt pin (active LOW when data ready), or -1 if not
+   *                  connected.
    */
   BNO085DriverSetup(const char* _id, int8_t _pin = -1, TwoWire& wire = Wire1,
-                    uint8_t addr = 0x4B)
-      : Classes::BaseSetup(_id), reset_pin(_pin), wire_(wire), addr_(addr) {}
+                    uint8_t addr = 0x4B, int8_t int_pin = -1)
+      : Classes::BaseSetup(_id),
+        reset_pin(_pin),
+        wire_(wire),
+        addr_(addr),
+        int_pin_(int_pin) {}
 
   const int8_t reset_pin;
   TwoWire& wire_;
   uint8_t addr_;
+  int8_t int_pin_;
 };
 
 struct BNO085DriverData {
@@ -83,8 +91,6 @@ class BNO085Driver : public Classes::BaseDriver {
 
   Adafruit_BNO08x imu_;
   sh2_SensorValue_t sensorValue_;
-
-  static constexpr int kMaxEventsPerUpdate = 20;
 };
 
 }  // namespace Drivers

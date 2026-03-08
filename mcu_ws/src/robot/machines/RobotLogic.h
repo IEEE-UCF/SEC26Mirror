@@ -102,7 +102,7 @@ static SensorSubsystem g_sensor(g_sensor_setup);
 
 // --- Wire1: IMU (BNO085) ---
 static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", PIN_GYRO_RST,
-                                                     Wire1);
+                                                     Wire1, 0x4B, PIN_GYRO_INT);
 static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
@@ -417,7 +417,7 @@ void setup() {
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
   g_mr.beginThreaded(8192, 4, 10);   // ROS agent
-  g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (I2C + mutex overhead adds ~20ms per cycle)
+  g_imu.beginThreaded(8192, 3, 10);  // 100Hz poll — INT pin skips I2C when no data ready
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
   g_servo.beginThreaded(1024, 2, 100);    // 10 Hz state pub
   g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse

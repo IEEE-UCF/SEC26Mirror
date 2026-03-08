@@ -54,28 +54,8 @@ class ImuSubsystem : public IMicroRosParticipant,
   rcl_node_t* node_ = nullptr;
   float yaw_rad_ = 0.0f;
 
-  // Gyro calibration offsets (they're calculated during init)
-  float gyro_offset_x_ = 0.0f;
-  float gyro_offset_y_ = 0.0f;
-  float gyro_offset_z_ = 0.0f;
-  bool calibrated_ = false;
-
-  // Dead zone threshold for angular velocity (rad/s)
-  // Values below this are zeroed to reduce noise!
-  static constexpr float kGyroDeadZone = 0.01f;
-
-  // Covariance values based on BNO085 typical specs
-  // Orientation: around 2 degrees accuracy -> variance around 0.001 rad^2
+  // Orientation covariance (BNO085 Game Rotation Vector: ~2 deg accuracy)
   static constexpr double kOrientationVariance = 0.001;
-  // Angular velocity: around 0.1 deg/s noise -> variance around 0.00003
-  // rad^2/s^2
-  static constexpr double kAngularVelocityVariance = 0.00003;
-  // Linear acceleration: around 0.01 m/s^2 noise -> variance around 0.0001
-  // m^2/s^4
-  static constexpr double kLinearAccelerationVariance = 0.0001;
-
-  static constexpr int kCalibrationSamples = 40;
-  static constexpr int kCalibrationDelayMs = 50;
 
   bool data_ready_ = false;
   Threads::Mutex data_mutex_;

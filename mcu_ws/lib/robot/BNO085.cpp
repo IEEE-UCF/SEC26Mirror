@@ -59,6 +59,11 @@ bool BNO085Driver::init() {
     return initSuccess_;
   }
 
+  // Configure INT pin (active LOW when data ready)
+  if (setup_.int_pin_ >= 0) {
+    pinMode(setup_.int_pin_, INPUT_PULLUP);
+  }
+
   // Consume the initial wasReset flag from the boot sequence
   (void)imu_.wasReset();
   delay(100);
@@ -74,11 +79,8 @@ bool BNO085Driver::init() {
 }
 
 bool BNO085Driver::enableReports() {
-  // 50000us = 50ms = 20Hz per report — matches the IMU subsystem publish rate.
-  // Higher rates (100Hz) cause event backlog in the getSensorEvent() loop.
-  return imu_.enableReport(SH2_ACCELEROMETER, 50000) &&
-         imu_.enableReport(SH2_GYROSCOPE_CALIBRATED, 50000) &&
-         imu_.enableReport(SH2_GAME_ROTATION_VECTOR, 50000);
+  // 20000us = 20ms = 50Hz report rate
+  return imu_.enableReport(SH2_GAME_ROTATION_VECTOR, 20000);
 }
 
 void BNO085Driver::update() {
@@ -101,39 +103,23 @@ void BNO085Driver::update() {
     }
   }
 
-  // Drain available sensor events.  Cap iterations to prevent infinite loop
-  // if the chip produces data faster than we consume (or I2C returns garbage).
-  int eventsRead = 0;
-  while (eventsRead < kMaxEventsPerUpdate && imu_.getSensorEvent(&sensorValue_)) {
-    ++eventsRead;
-    switch (sensorValue_.sensorId) {
-      case SH2_ACCELEROMETER:
-        data_.accel_x = sensorValue_.un.accelerometer.x;
-        data_.accel_y = sensorValue_.un.accelerometer.y;
-        data_.accel_z = sensorValue_.un.accelerometer.z;
-        break;
-
-      case SH2_GYROSCOPE_CALIBRATED:
-        data_.gyro_x = sensorValue_.un.gyroscope.x;
-        data_.gyro_y = sensorValue_.un.gyroscope.y;
-        data_.gyro_z = sensorValue_.un.gyroscope.z;
-        break;
-
-      case SH2_GAME_ROTATION_VECTOR:
-        data_.qx = sensorValue_.un.gameRotationVector.i;
-        data_.qy = sensorValue_.un.gameRotationVector.j;
-        data_.qz = sensorValue_.un.gameRotationVector.k;
-        data_.qw = sensorValue_.un.gameRotationVector.real;
-
-        data_.yaw = calculateYaw(data_.qx, data_.qy, data_.qz, data_.qw);
-        break;
-
-      default:
-        break;
-    }
+  // INT pin is active LOW when data is ready.  Skip the I2C read if no
+  // data is queued — keeps poll cycles cheap (single GPIO read).
+  if (setup_.int_pin_ >= 0 && digitalReadFast(setup_.int_pin_) == HIGH) {
+    return;
   }
-  if (eventsRead >= kMaxEventsPerUpdate) {
-    DEBUG_PRINTLN("[BNO085] WARNING: hit max events per update — possible I2C issue");
+
+  // Read one event per update.  With a single report at 50Hz and update()
+  // polling at 100Hz+, consumption outpaces production so the SHTP queue
+  // stays drained.  The BNO085's internal buffer is hardware-bounded.
+  if (imu_.getSensorEvent(&sensorValue_) &&
+      sensorValue_.sensorId == SH2_GAME_ROTATION_VECTOR) {
+    data_.qx = sensorValue_.un.gameRotationVector.i;
+    data_.qy = sensorValue_.un.gameRotationVector.j;
+    data_.qz = sensorValue_.un.gameRotationVector.k;
+    data_.qw = sensorValue_.un.gameRotationVector.real;
+
+    data_.yaw = calculateYaw(data_.qx, data_.qy, data_.qz, data_.qw);
   }
 }
 

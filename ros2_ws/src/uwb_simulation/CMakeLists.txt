@@ -21,23 +21,27 @@ find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(uwb_interfaces REQUIRED)
-find_package(gz-transport13 QUIET REQUIRED OPTIONAL_COMPONENTS log)
+find_package(gz-transport13 QUIET OPTIONAL_COMPONENTS log)
 
-add_executable(uwb_simulation_node 
-  src/uwb_simulation_main.cpp 
-  src/uwb_simulation.cpp 
-  src/tinyxml2.cpp)
+if(gz-transport13_FOUND)
+  add_executable(uwb_simulation_node
+    src/uwb_simulation_main.cpp
+    src/uwb_simulation.cpp
+    src/tinyxml2.cpp)
 
-target_include_directories(uwb_simulation_node PUBLIC include)
+  target_include_directories(uwb_simulation_node PUBLIC include)
 
-set(GZ_TRANSPORT_VER ${gz-transport13_VERSION_MAJOR})
-target_link_libraries(uwb_simulation_node gz-transport${GZ_TRANSPORT_VER}::core)
+  set(GZ_TRANSPORT_VER ${gz-transport13_VERSION_MAJOR})
+  target_link_libraries(uwb_simulation_node gz-transport${GZ_TRANSPORT_VER}::core)
 
-ament_target_dependencies(uwb_simulation_node rclcpp nav_msgs ament_index_cpp uwb_interfaces)
+  ament_target_dependencies(uwb_simulation_node rclcpp nav_msgs ament_index_cpp uwb_interfaces)
 
-install(TARGETS
-  uwb_simulation_node
-  DESTINATION lib/${PROJECT_NAME})
+  install(TARGETS
+    uwb_simulation_node
+    DESTINATION lib/${PROJECT_NAME})
+else()
+  message(STATUS "gz-transport13 not found — skipping uwb_simulation_node (Gazebo not available)")
+endif()
 
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}

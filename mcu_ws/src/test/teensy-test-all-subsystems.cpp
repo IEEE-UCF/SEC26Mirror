@@ -385,10 +385,12 @@ static void rc_drive_task(void*) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 static bool s_uwb_enabled = false;
+static void debugMonitorTask(void*);
 
 void setup() {
   Serial.begin(0);
   DEBUG_BEGIN();
+  delay(3000);  // Wait for USB serial ports to enumerate
   if (CrashReport) {
     Serial.print(CrashReport);
     DEBUG_PRINT(CrashReport);
@@ -399,6 +401,8 @@ void setup() {
 
   Serial.println(
       PSTR("\r\nSEC26 Robot — All Subsystems Test (FreeRTOS)\r\n"));
+  DEBUG_PRINTF("[HEAP] Free at start: %lu bytes\n",
+               (unsigned long)xPortGetFreeHeapSize());
   DEBUG_PRINTLN("\r\n=== SEC26 All-Subsystems Test — Debug Console (SerialUSB1) ===\r\n");
   DEBUG_PRINTF("[CONFIG] DEBUG_STAGE = %d\n", DEBUG_STAGE);
 
@@ -583,19 +587,29 @@ void setup() {
   if (s_uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
 #endif
 
-  DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
+  DEBUG_PRINTLN("[INIT] All tasks created — starting scheduler");
+
+  // FreeRTOS scheduler must be started explicitly — vTaskStartScheduler()
+  // never returns.  The debug monitor runs as its own task (created above
+  // would need a task, so we create one here for the periodic status).
+  xTaskCreate(debugMonitorTask, "debug_monitor", 4096 / 4, nullptr, 1, nullptr);
+
+  DEBUG_PRINTLN("[INIT] Starting FreeRTOS scheduler...");
+  vTaskStartScheduler();
+
+  // Should never reach here
+  DEBUG_PRINTLN("[FATAL] Scheduler exited!");
+  while (true) {}
 }
 
-static uint32_t s_last_debug_ms = 0;
-static constexpr uint32_t DEBUG_INTERVAL_MS = 200;
+// ═══════════════════════════════════════════════════════════════════════════
+//  Debug monitor task — periodic status (replaces loop())
+// ═══════════════════════════════════════════════════════════════════════════
+static void debugMonitorTask(void*) {
+  static constexpr uint32_t DEBUG_INTERVAL_MS = 200;
 
-void loop() {
-  // RC + drive logic moved to rc_drive_task (FreeRTOS task)
-
-  // Periodic debug output
-  uint32_t now = millis();
-  if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
-    s_last_debug_ms = now;
+  for (;;) {
+    uint32_t now = millis();
 
     DEBUG_PRINTF("[%lu] === Periodic Status (Stage %d) ===\n", now, DEBUG_STAGE);
     DEBUG_PRINTF("  uROS state : %s\n", g_mr.isConnected() ? "CONNECTED" : "WAITING");
@@ -658,7 +672,10 @@ void loop() {
 #endif
 
     DEBUG_PRINTF("  Uptime     : %lus\n", now / 1000);
-  }
 
-  vTaskDelay(pdMS_TO_TICKS(200));
+    vTaskDelay(pdMS_TO_TICKS(DEBUG_INTERVAL_MS));
+  }
 }
+
+// loop() should never be reached — scheduler takes over
+void loop() {}

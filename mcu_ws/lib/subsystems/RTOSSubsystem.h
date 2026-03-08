@@ -29,15 +29,26 @@ class RTOSSubsystem : public Classes::BaseSubsystem {
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
+    TaskHandle_t handle = nullptr;
     // FreeRTOS stack depth is in words (4 bytes); callers pass bytes.
-    xTaskCreate(taskFunction, getInfo(), stackSize / 4,
-                static_cast<void*>(this), priority, nullptr);
+    BaseType_t rc = xTaskCreate(taskFunction, getInfo(), stackSize / 4,
+                                static_cast<void*>(this), priority, &handle);
+    if (rc != pdPASS || handle == nullptr) {
+      SerialUSB1.printf("[RTOS] FAIL xTaskCreate '%s' rc=%ld stack=%lu pri=%d heap=%lu\n",
+                    getInfo(), (long)rc, stackSize, priority,
+                    (unsigned long)xPortGetFreeHeapSize());
+    } else {
+      SerialUSB1.printf("[RTOS] Task '%s' created OK (heap free=%lu)\n",
+                    getInfo(), (unsigned long)xPortGetFreeHeapSize());
+    }
   }
 
  private:
   static void taskFunction(void* pv) {
     auto* self = static_cast<RTOSSubsystem*>(pv);
+    SerialUSB1.printf("[RTOS] Task '%s' RUNNING (begin)\n", self->getInfo());
     self->begin();   // virtual dispatch
+    SerialUSB1.printf("[RTOS] Task '%s' begin() done, entering loop\n", self->getInfo());
     while (true) {
       self->update();  // virtual dispatch
       vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));

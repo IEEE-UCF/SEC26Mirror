@@ -11,6 +11,7 @@
 
 #include <BNO085.h>
 #include <RTOSSubsystem.h>
+#include <mcu_msgs/srv/reset.h>
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
 #include <atomic>
@@ -46,6 +47,9 @@ class ImuSubsystem : public IMicroRosParticipant,
   /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (std::atomic). */
   float getYaw() const { return yaw_rad_.load(std::memory_order_relaxed); }
 
+  /** @brief Zero the IMU heading via BNO085 hardware tare. */
+  bool tare();
+
  private:
   void initCovariances();
 
@@ -57,6 +61,13 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   // Orientation covariance (BNO085 Game Rotation Vector: ~2 deg accuracy)
   static constexpr double kOrientationVariance = 0.001;
+
+  // Tare service
+  rcl_service_t tare_srv_{};
+  mcu_msgs__srv__Reset_Request tare_req_{};
+  mcu_msgs__srv__Reset_Response tare_res_{};
+
+  static void tareCallback(const void* req, void* res, void* ctx);
 
   bool data_ready_ = false;
   Threads::Mutex data_mutex_;

@@ -105,6 +105,9 @@ class BNO085Driver : public Classes::BaseDriver {
   float calculateYaw(float qx, float qy, float qz, float qw);
   bool enableReports();
 
+  /** @brief Zero the IMU heading using BNO085 hardware tare (Z-axis only). */
+  bool tare();
+
   volatile uint32_t resetCount_ = 0;
 
   /// DMA stub, BNO085 SHTP requires multi-step variable-length I2C

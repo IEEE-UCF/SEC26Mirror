@@ -86,22 +86,15 @@ void BNO085Driver::update() {
 
   I2CBus::Lock lock(setup_.wire_);
 
-  // Disable ALL interrupts for the entire I2C transaction so the BNO085
-  // read cannot be preempted mid-transfer by TeensyThreads or anything else.
-  __disable_irq();
-
   bool wasRst = imu_.wasReset();
 
   if (wasRst) {
-    __enable_irq();
     ++resetCount_;
     DEBUG_PRINTF("[BNO085] Reset detected (#%lu) — waiting 300ms\n", resetCount_);
     lock.unlock();
     delay(300);
     lock.relock();
-    __disable_irq();
     if (!enableReports()) {
-      __enable_irq();
       DEBUG_PRINTLN("[BNO085] WARNING: enableReports failed after reset");
       return;
     }
@@ -136,8 +129,6 @@ void BNO085Driver::update() {
         break;
     }
   }
-
-  __enable_irq();
 
   if (eventsRead >= kMaxEventsPerUpdate) {
     DEBUG_PRINTLN("[BNO085] WARNING: hit max events per update — possible I2C issue");

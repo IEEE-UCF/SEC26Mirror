@@ -6,8 +6,8 @@
 #include <micro_ros_utilities/type_utilities.h>
 #include <uxr/client/util/time.h>
 
-#ifdef USE_TEENSYTHREADS
-Threads::Mutex g_microros_mutex;
+#ifdef USE_FREERTOS
+FRMutex g_microros_mutex;
 #endif
 
 namespace Subsystem {
@@ -107,8 +107,8 @@ void MicrorosManager::begin() {
 }
 
 void MicrorosManager::update() {
-#ifdef USE_TEENSYTHREADS
-  Threads::Scope guard(g_microros_mutex);
+#ifdef USE_FREERTOS
+  FRMutex::ScopedLock guard(g_microros_mutex);
 #else
   std::lock_guard<std::mutex> guard(mutex_);
 #endif
@@ -183,22 +183,21 @@ void MicrorosManager::registerParticipant(IMicroRosParticipant* participant) {
   }
 }
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
 void MicrorosManager::taskFunction(void* pvParams) {
   auto* self = static_cast<MicrorosManager*>(pvParams);
   self->begin();
   while (true) {
     self->update();
-    threads.delay(10);
+    frDelay(10);
   }
 }
 
 void MicrorosManager::beginThreaded(uint32_t stackSize, int priority) {
-  int id = threads.addThread(taskFunction, this, stackSize);
-  threads.setTimeSlice(id, priority);
+  frCreateTask(taskFunction, "uROS", stackSize, this, priority, &task_handle_);
 }
 
-Threads::Mutex& MicrorosManager::getMutex() { return mutex_; }
+FRMutex& MicrorosManager::getMutex() { return mutex_; }
 #else
 std::mutex& MicrorosManager::getMutex() { return mutex_; }
 #endif
@@ -208,9 +207,9 @@ bool MicrorosManager::isConnected() const { return state_ == AGENT_CONNECTED; }
 void MicrorosManager::debugLog(const char* text) {
   if (!debug_pub_.impl || state_ != AGENT_CONNECTED) return;
   debug_msg_.data = micro_ros_string_utilities_set(debug_msg_.data, text);
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   {
-    Threads::Scope guard(g_microros_mutex);
+    FRMutex::ScopedLock guard(g_microros_mutex);
     (void)rcl_publish(&debug_pub_, &debug_msg_, NULL);
   }
 #else

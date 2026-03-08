@@ -1,9 +1,9 @@
 /**
  * @file I2CBusLock.h
- * @brief TeensyThreads mutex guards for the three I2C buses on Teensy 4.1.
+ * @brief FreeRTOS mutex guards for the three I2C buses on Teensy 4.1.
  *
- * Uses Threads::Mutex from TeensyThreads — cooperative with the scheduler
- * and avoids a raw busy-wait.  Each bus has a dedicated mutex so Wire0,
+ * Uses FRMutex (FreeRTOS semaphore with priority inheritance) for
+ * thread-safe bus access.  Each bus has a dedicated mutex so Wire0,
  * Wire1, and Wire2 can be driven concurrently by separate tasks.
  *
  * Hardware layout (Teensy 4.1):
@@ -18,29 +18,29 @@
  *     sensor_.read();
  *   }                                    // lock released here
  * @endcode
- *
- * initLocks() is a no-op — Threads::Mutex is default-constructible — but
- * existing call sites in setup() may remain for documentation clarity.
  */
 
 #pragma once
 
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <Wire.h>
 
 namespace I2CBus {
 
-extern Threads::Mutex wire0;  ///< Wire  — TCA9548A, TCA9555, INA219
-extern Threads::Mutex wire1;  ///< Wire1 — BNO085
-extern Threads::Mutex wire2;  ///< Wire2 — PCA9685 #1 & #2
+extern FRMutex wire0;  ///< Wire  — TCA9548A, TCA9555, INA219
+extern FRMutex wire1;  ///< Wire1 — BNO085
+extern FRMutex wire2;  ///< Wire2 — PCA9685 #1 & #2
 
-/// No-op: Threads::Mutex is self-initialising. Kept so existing call sites
-/// compile.
-inline void initLocks() {}
+/// Explicitly initialise the mutexes (safe to call before scheduler starts).
+inline void initLocks() {
+  wire0.init();
+  wire1.init();
+  wire2.init();
+}
 
 /// Return the mutex for the given Wire bus instance.
 /// Falls back to wire0 for any unrecognised bus.
-Threads::Mutex& mutexFor(TwoWire& wire);
+FRMutex& mutexFor(TwoWire& wire);
 
 /// RAII scoped lock for an I2C bus.
 struct Lock {
@@ -56,7 +56,7 @@ struct Lock {
   Lock& operator=(const Lock&) = delete;
 
  private:
-  Threads::Mutex& m_;
+  FRMutex& m_;
   bool locked_ = false;
 };
 

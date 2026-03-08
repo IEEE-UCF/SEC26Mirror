@@ -14,8 +14,8 @@
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 namespace Subsystem {
@@ -49,12 +49,11 @@ class ImuSubsystem : public IMicroRosParticipant,
   /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (atomic float read). */
   float getYaw() const { return yaw_rad_; }
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "IMU", stackSize, this, priority, &task_handle_);
   }
 
  private:
@@ -63,10 +62,11 @@ class ImuSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 20;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 
  private:
@@ -102,8 +102,8 @@ class ImuSubsystem : public IMicroRosParticipant,
   static constexpr int kCalibrationDelayMs = 50;
 
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 
  public:

@@ -30,8 +30,8 @@
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 namespace Subsystem {
@@ -132,9 +132,9 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     uint32_t now_ms = millis();
     if (now_ms - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now_ms;
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
       {
-        Threads::Scope lock(data_mutex_);
+        FRMutex::ScopedLock lock(data_mutex_);
         for (uint8_t i = 0; i < setup_.numMotors_; i++)
           pub_data_[i] = speeds_[i];
         pub_msg_.data.size = setup_.numMotors_;
@@ -239,12 +239,11 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     if (setup_.oePin_ != 255) digitalWrite(setup_.oePin_, HIGH);
   }
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 50) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "Motor", stackSize, this, priority, &task_handle_);
   }
 
  private:
@@ -253,10 +252,11 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 50;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 
  private:
@@ -282,8 +282,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
-    Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+    FRMutex::ScopedLock lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &pub_msg_, NULL);
     data_ready_ = false;
@@ -330,8 +330,8 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 };
 

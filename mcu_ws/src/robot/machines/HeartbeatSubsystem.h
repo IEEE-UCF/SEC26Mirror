@@ -15,8 +15,8 @@
 #include <std_msgs/msg/string.h>
 #include <uxr/client/util/time.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 namespace Subsystem {
@@ -36,8 +36,8 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   void begin() override {}
   void update() override {
     if (!pub_.impl) return;
-#ifdef USE_TEENSYTHREADS
-    Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+    FRMutex::ScopedLock lock(data_mutex_);
 #endif
     data_ready_ = true;
   }
@@ -71,12 +71,11 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
     node_ = nullptr;
   }
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 200) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "HB", stackSize, this, priority, &task_handle_);
   }
 
  private:
@@ -85,16 +84,17 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 200;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
-    Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+    FRMutex::ScopedLock lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &msg_, NULL);
     data_ready_ = false;
@@ -107,8 +107,8 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   std_msgs__msg__String msg_{};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 };
 

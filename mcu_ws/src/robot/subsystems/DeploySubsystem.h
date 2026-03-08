@@ -32,8 +32,8 @@
 #include "robot/subsystems/LEDSubsystem.h"
 #include "robot/subsystems/OLEDSubsystem.h"
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 namespace Subsystem {
@@ -192,12 +192,11 @@ class DeploySubsystem : public IMicroRosParticipant,
 
   State getState() const { return state_; }
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "Deploy", stackSize, this, priority, &task_handle_);
   }
 
  private:
@@ -206,10 +205,11 @@ class DeploySubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 20;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 
  private:
@@ -260,9 +260,9 @@ class DeploySubsystem : public IMicroRosParticipant,
     trigger_msg_.data.size = strlen(trigger_buf_);
     trigger_msg_.data.capacity = sizeof(trigger_buf_);
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
     {
-      Threads::Scope lock(data_mutex_);
+      FRMutex::ScopedLock lock(data_mutex_);
       data_ready_ = true;
     }
 #else
@@ -420,8 +420,8 @@ class DeploySubsystem : public IMicroRosParticipant,
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
-    Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+    FRMutex::ScopedLock lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &trigger_msg_, NULL);
     data_ready_ = false;
@@ -437,8 +437,8 @@ class DeploySubsystem : public IMicroRosParticipant,
   char trigger_buf_[64] = {};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 };
 

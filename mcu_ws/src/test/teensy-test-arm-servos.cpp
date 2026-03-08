@@ -19,7 +19,8 @@
  */
 
 #include <Arduino.h>
-#include <TeensyThreads.h>
+#include <FreeRTOS_TEENSY4.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include "I2CBusLock.h"
@@ -51,7 +52,7 @@ static ServoSubsystem g_servo(g_servo_setup);
 static void pca_task(void*) {
   while (true) {
     g_pca_mgr.update();
-    threads.delay(20);
+    frDelay(20);
   }
 }
 
@@ -60,9 +61,9 @@ static void blink_task(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
     digitalWriteFast(LED_BUILTIN, HIGH);
-    threads.delay(500);
+    frDelay(500);
     digitalWriteFast(LED_BUILTIN, LOW);
-    threads.delay(500);
+    frDelay(500);
   }
 }
 
@@ -75,7 +76,7 @@ static void print_task(void*) {
       Serial.printf(" %.0f", g_servo.getAngle(i));
     }
     Serial.println();
-    threads.delay(2000);
+    frDelay(2000);
   }
 }
 
@@ -99,11 +100,13 @@ void setup() {
   //                                     stack  pri  rate(ms)
   g_mr.beginThreaded(8192, 4);                // ROS agent
   g_servo.beginThreaded(1024, 2, 50);         // 20 Hz state pub
-  threads.addThread(pca_task, nullptr, 512);  // PWM flush @ 50 Hz
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  frCreateTask(pca_task, "PCA", 512, nullptr, 3, nullptr);   // PWM flush @ 50 Hz
+  frCreateTask(print_task, "Print", 1024, nullptr, 2, nullptr);
+  frCreateTask(blink_task, "Blink", 512, nullptr, 2, nullptr);
 
   Serial.println(PSTR("setup(): arm servo test threads started."));
+
+  vTaskStartScheduler();
 }
 
-void loop() { threads.delay(100); }
+void loop() { frDelay(100); }

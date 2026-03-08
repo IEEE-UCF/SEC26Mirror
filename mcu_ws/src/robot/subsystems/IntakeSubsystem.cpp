@@ -61,9 +61,9 @@ void IntakeSubsystem::update() {
 
   // Publish state at ~20 Hz
   if (everyMs(50)) {
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
     {
-      Threads::Scope lock(data_mutex_);
+      FRMutex::ScopedLock lock(data_mutex_);
       publishState();
       data_ready_ = true;
     }
@@ -423,8 +423,8 @@ void IntakeSubsystem::publishState() {
 }
 
 void IntakeSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
-  Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+  FRMutex::ScopedLock lock(data_mutex_);
   if (!data_ready_ || !state_pub_.impl) return;
   (void)rcl_publish(&state_pub_, &state_msg_, NULL);
   data_ready_ = false;

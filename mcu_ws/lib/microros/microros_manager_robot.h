@@ -18,8 +18,8 @@
 #include <std_msgs/msg/string.h>
 #include <stdio.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #else
 #include <mutex>
 #endif
@@ -82,17 +82,17 @@ class MicrorosManager : public Classes::BaseSubsystem {
   // Register a participant; it will be created/destroyed with the manager
   void registerParticipant(IMicroRosParticipant* participant);
 
-#ifdef USE_TEENSYTHREADS
-  // TeensyThreads task entry point — pass `this` as pvParams
+#ifdef USE_FREERTOS
+  // FreeRTOS task entry point — pass `this` as pvParams
   static void taskFunction(void* pvParams);
 
-  // Create and start the micro-ROS thread
+  // Create and start the micro-ROS task
   void beginThreaded(uint32_t stackSize, int priority = 1);
 #endif
 
   // Mutex for thread-safe access to the executor
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex& getMutex();
+#ifdef USE_FREERTOS
+  FRMutex& getMutex();
 #else
   std::mutex& getMutex();
 #endif
@@ -138,8 +138,9 @@ class MicrorosManager : public Classes::BaseSubsystem {
   } state_;
 
   static MicrorosManager* s_instance_;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex mutex_;
+#ifdef USE_FREERTOS
+  FRMutex mutex_;
+  TaskHandle_t task_handle_ = nullptr;
 #else
   std::mutex mutex_;
 #endif
@@ -160,8 +161,8 @@ class MicrorosManager : public Classes::BaseSubsystem {
 // The XRCE-DDS session is NOT thread-safe: concurrent rcl_publish, ping,
 // and executor-spin calls corrupt the serial stream.  All code that touches
 // the session must hold this mutex.
-#ifdef USE_TEENSYTHREADS
-extern Threads::Mutex g_microros_mutex;
+#ifdef USE_FREERTOS
+extern FRMutex g_microros_mutex;
 #endif
 
 #endif

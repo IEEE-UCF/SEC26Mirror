@@ -9,13 +9,14 @@
 #include <Arduino.h>
 #include <BaseSubsystem.h>
 #include <IBusBM.h>
+#include <functional>
 #include <mcu_msgs/msg/rc.h>
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 namespace Subsystem {
@@ -77,12 +78,16 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   /** @brief Access raw RC channel data (updated every loop cycle). */
   const RCSubsystemData& getData() const { return data_; }
 
-#ifdef USE_TEENSYTHREADS
+  /** @brief Register a callback invoked after each RC data update.
+   *  Useful for forwarding stick inputs to drive control. */
+  using DataCallback = std::function<void(const RCSubsystemData&)>;
+  void setDataCallback(DataCallback cb) { data_cb_ = std::move(cb); }
+
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 5) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "RC", stackSize, this, priority, &task_handle_);
   }
 
  private:
@@ -91,10 +96,11 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 5;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 
  private:
@@ -114,8 +120,9 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+  DataCallback data_cb_ = nullptr;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 };
 

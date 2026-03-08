@@ -16,7 +16,8 @@
  */
 
 #include <Arduino.h>
-#include <TeensyThreads.h>
+#include <FreeRTOS_TEENSY4.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include "BNO085.h"
@@ -61,6 +62,8 @@ void setup() {
   g_mr.beginThreaded(8192, 4);        // micro-ROS agent (highest priority)
   g_imu.beginThreaded(8192, 3, 30);   // IMU ~33 Hz
   Serial.println("[INIT] Threads started — entering main loop");
+
+  vTaskStartScheduler();
 }
 
 void loop() {

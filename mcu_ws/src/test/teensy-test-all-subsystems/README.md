@@ -46,7 +46,7 @@ ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
 **Expected serial output:**
 
 ```
-SEC26 Robot — All Subsystems Test (TeensyThreads)
+SEC26 Robot — All Subsystems Test (FreeRTOS)
 setup(): all subsystem threads started.
 ```
 

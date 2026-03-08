@@ -12,7 +12,8 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <TeensyThreads.h>
+#include <FreeRTOS_TEENSY4.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include "robot/RobotConstants.h"
@@ -146,7 +147,7 @@ static bool pca_thread_started = false;
 static void pca_task(void*) {
   while (true) {
     g_pca_mgr.update();
-    threads.delay(20);
+    frDelay(20);
   }
 }
 
@@ -223,7 +224,7 @@ static void step_rc() {
 
 static void step_pca9685() {
   g_pca_mgr.init();
-  threads.addThread(pca_task, nullptr, 1024);
+  frCreateTask(pca_task, "PCA", 1024, nullptr, 3, nullptr);
   pca_thread_started = true;
   announce("+ PCA9685 flush (50 Hz)");
 }
@@ -370,6 +371,8 @@ void setup() {
   g_oled.beginThreaded(2048, 1, 50);
 
   printMenu();
+
+  vTaskStartScheduler();
 }
 
 static uint32_t last_tick = 0;

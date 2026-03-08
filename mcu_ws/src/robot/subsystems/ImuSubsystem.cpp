@@ -57,10 +57,10 @@ void ImuSubsystem::update() {
   if (!pub_.impl) return;
 
   // Populate message under data_mutex_ for deferred publishing
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   {
     uint32_t t_m0 = micros();
-    Threads::Scope lock(data_mutex_);
+    FRMutex::ScopedLock lock(data_mutex_);
     uint32_t t_m1 = micros();
     publishData();
     data_ready_ = true;
@@ -184,8 +184,8 @@ void ImuSubsystem::publishData() {
 }
 
 void ImuSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
-  Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+  FRMutex::ScopedLock lock(data_mutex_);
   if (!data_ready_ || !pub_.impl) return;
   rcl_ret_t rc = rcl_publish(&pub_, &msg_, NULL);
   data_ready_ = false;

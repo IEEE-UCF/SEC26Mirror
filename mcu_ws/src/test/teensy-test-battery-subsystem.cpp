@@ -19,7 +19,8 @@
 #include <Arduino.h>
 #include <I2CBusLock.h>
 #include <I2CMuxDriver.h>
-#include <TeensyThreads.h>
+#include <FreeRTOS_TEENSY4.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 #include <robot/subsystems/BatterySubsystem.h>
 
@@ -55,9 +56,9 @@ static void blink_task(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
     digitalWriteFast(LED_BUILTIN, HIGH);
-    threads.delay(500);
+    frDelay(500);
     digitalWriteFast(LED_BUILTIN, LOW);
-    threads.delay(500);
+    frDelay(500);
   }
 }
 
@@ -73,7 +74,7 @@ static void print_task(void*) {
              g_power_driver.getCurrentmA(), g_power_driver.getPowermW());
     Serial.println(buf);
     ++tick;
-    threads.delay(5000);
+    frDelay(5000);
   }
 }
 
@@ -88,7 +89,7 @@ void setup() {
     Serial.flush();
   }
 
-  Serial.println(PSTR("\r\nBattery subsystem test — TeensyThreads\r\n"));
+  Serial.println(PSTR("\r\nBattery subsystem test — FreeRTOS\r\n"));
   Serial.println(PSTR("Hardware: INA219 on TCA9548A mux ch0"));
 
   I2CBus::initLocks();
@@ -109,11 +110,13 @@ void setup() {
   //                            stackSize  priority  rateMs
   g_mr.beginThreaded(8192, 4);
   g_battery.beginThreaded(1024, 1, 100);
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  frCreateTask(print_task, "Print", 1024, nullptr, 2, nullptr);
+  frCreateTask(blink_task, "Blink", 512, nullptr, 2, nullptr);
 
   Serial.println(PSTR("setup(): threads started."));
   Serial.flush();
+
+  vTaskStartScheduler();
 }
 
-void loop() { threads.delay(100); }
+void loop() { frDelay(100); }

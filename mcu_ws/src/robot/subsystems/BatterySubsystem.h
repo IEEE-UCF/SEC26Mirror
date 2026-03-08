@@ -26,8 +26,8 @@
 #include <mcu_msgs/msg/battery_health.h>
 #include <microros_manager_robot.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 namespace Subsystem {
@@ -71,12 +71,11 @@ class BatterySubsystem : public IMicroRosParticipant,
   /** Get current draw in amps. */
   float getCurrentA() const { return setup_.driver_ ? setup_.driver_->getCurrentmA() / 1000.0f : 0.0f; }
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 100) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "Battery", stackSize, this, priority, &task_handle_);
   }
 #endif
 
@@ -88,20 +87,21 @@ class BatterySubsystem : public IMicroRosParticipant,
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   static void taskFunction(void* pvParams) {
     auto* self = static_cast<BatterySubsystem*>(pvParams);
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 100;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 };
 

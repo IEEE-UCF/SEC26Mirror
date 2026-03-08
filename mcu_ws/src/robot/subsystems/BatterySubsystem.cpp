@@ -43,9 +43,9 @@ void BatterySubsystem::update() {
   uint32_t now = millis();
   if (now - last_publish_ms_ >= 1000) {
     last_publish_ms_ = now;
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
     {
-      Threads::Scope lock(data_mutex_);
+      FRMutex::ScopedLock lock(data_mutex_);
       publishData();
       data_ready_ = true;
     }
@@ -101,8 +101,8 @@ void BatterySubsystem::publishData() {
 }
 
 void BatterySubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
-  Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+  FRMutex::ScopedLock lock(data_mutex_);
   if (!data_ready_ || !pub_.impl) return;
   (void)rcl_publish(&pub_, &msg_, NULL);
   data_ready_ = false;

@@ -92,7 +92,7 @@ pio device monitor -e teensy-test-battery-subsystem
 **Expected output:**
 
 ```
-Battery subsystem test — TeensyThreads
+Battery subsystem test — FreeRTOS
 Hardware: INA219 on TCA9548A mux ch0
 setup(): threads started.
 [ROS:--  #0] V=12.340V  I=150.2mA  P=1854.1mW

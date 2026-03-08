@@ -29,9 +29,9 @@ void SensorSubsystem::update() {
 
   if (!pub_.impl || !msg_.data.data) return;
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   {
-    Threads::Scope lock(data_mutex_);
+    FRMutex::ScopedLock lock(data_mutex_);
     publishData();
     data_ready_ = true;
   }
@@ -106,8 +106,8 @@ void SensorSubsystem::publishData() {
 }
 
 void SensorSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
-  Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+  FRMutex::ScopedLock lock(data_mutex_);
   if (!data_ready_ || !pub_.impl) return;
   (void)rcl_publish(&pub_, &msg_, NULL);
   data_ready_ = false;

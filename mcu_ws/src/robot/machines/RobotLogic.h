@@ -2,7 +2,7 @@
  * @file RobotLogic.h
  * @date 12/16/25
  * @author Aldem Pido
- * @brief Main logic for the SEC26 robot — TeensyThreads-based scheduling.
+ * @brief Main logic for the SEC26 robot — FreeRTOS-based scheduling.
  *
  * I2C bus layout:
  *   Wire  (Wire0) — TCA9548A mux (0x70), TCA9555 GPIO expander (0x20),
@@ -15,7 +15,8 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <TeensyThreads.h>
+#include <FreeRTOS_TEENSY4.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include <math_utils.h>
@@ -290,7 +291,7 @@ static KeypadSubsystem g_keypad(g_keypad_setup);
 static void pca_task(void*) {
   while (true) {
     g_pca_mgr.update();
-    threads.delay(20);
+    frDelay(20);
   }
 }
 
@@ -309,7 +310,7 @@ void setup() {
     DEBUG_FLUSH();
   }
 
-  Serial.println(PSTR("\r\nSEC26 Robot — TeensyThreads\r\n"));
+  Serial.println(PSTR("\r\nSEC26 Robot — FreeRTOS\r\n"));
   DEBUG_PRINTLN("\r\n=== SEC26 Robot — Debug Console (SerialUSB1) ===\r\n");
 
   // 0. I2C bus mutexes
@@ -414,54 +415,48 @@ void setup() {
   g_reset.addTarget(&g_keypad);
   DEBUG_PRINTF("[INIT] Registered %d participants\n", 20);
 
-  // 4. Start threaded tasks
-  DEBUG_PRINTLN("[INIT] --- Starting threads ---");
-  //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);       // ROS agent
-  g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (I2C + mutex overhead adds ~20ms per cycle)
-  // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 100);    // 10 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(1024, 2, 50);  // 20 Hz encoder reading
-  g_oled.beginThreaded(2048, 1, 100);     // 10 Hz display
-  g_battery.beginThreaded(1024, 1, 2000); // 0.5 Hz
-  g_sensor.beginThreaded(1024, 1, 500);   // 2 Hz TOF
-  g_dip.beginThreaded(1024, 1, 2000);     // 0.5 Hz
-  g_btn.beginThreaded(1024, 1, 100);      // 10 Hz
-  g_led.beginThreaded(1024, 1, 200);      // 5 Hz
-  g_hb.beginThreaded(1024, 1, 1000);      // 1 Hz
-  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
-  g_arm.beginThreaded(1024, 2, 50);       // 20 Hz arm
-  g_intake.beginThreaded(1024, 2, 50);    // 20 Hz intake
-  g_deploy.beginThreaded(1024, 1, 100);   // 10 Hz deploy button
-  g_crank.beginThreaded(1024, 1, 200);    // 5 Hz crank
-  g_keypad.beginThreaded(1024, 1, 200);   // 5 Hz keypad
-  g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
-  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
-  DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
+  // 3b. Wire RC → Drive (manual control when DIP 0 OFF)
+  g_rc.setDataCallback([](const RCSubsystemData& rc) {
+    if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
+      float throttle = rc.channels[1] / 255.0f;  // right stick Y
+      float steering = rc.channels[0] / 255.0f;  // right stick X
+      g_drive.rcDrive(throttle, steering);
+    }
+  });
+
+  // 4. Start FreeRTOS tasks
+  // Priority mapping:
+  //   3 = hardware bus threads (I2C, SPI, Serial — same priority = round-robin)
+  //   2 = logic/control threads (no direct bus I/O)
+  //   1 = micro-ROS manager (lowest real task — uses leftover CPU)
+  //   0 = idle task (calls loop() via vApplicationIdleHook)
+  DEBUG_PRINTLN("[INIT] --- Creating FreeRTOS tasks ---");
+  g_mr.beginThreaded(8192, 1);            // ROS agent — cycle eater
+  g_imu.beginThreaded(8192, 3, 30);       // I2C bus level
+  g_rc.beginThreaded(1024, 3, 5);         // Serial8 hardware — bus level
+  g_servo.beginThreaded(1024, 3, 100);    // I2C bus level
+  g_motor.beginThreaded(1024, 3, 1);      // I2C bus level — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(1024, 3, 50);  // hardware read level
+  g_oled.beginThreaded(2048, 3, 100);     // SPI bus level
+  g_battery.beginThreaded(1024, 3, 2000); // I2C bus level
+  g_sensor.beginThreaded(1024, 3, 500);   // I2C bus level
+  g_dip.beginThreaded(1024, 3, 2000);     // I2C bus level
+  g_btn.beginThreaded(1024, 3, 100);      // I2C bus level
+  g_led.beginThreaded(1024, 2, 200);      // GPIO — logic level
+  g_hb.beginThreaded(1024, 2, 1000);      // logic level
+  if (uwb_enabled) g_uwb.beginThreaded(2048, 3, 200);  // SPI bus level
+  g_arm.beginThreaded(1024, 2, 50);       // logic level
+  g_intake.beginThreaded(1024, 2, 50);    // logic level
+  g_deploy.beginThreaded(1024, 2, 100);   // logic level
+  g_crank.beginThreaded(1024, 2, 200);    // logic level
+  g_keypad.beginThreaded(1024, 2, 200);   // logic level
+  g_drive.beginThreaded(4096, 2, 20);     // logic/control level
+  frCreateTask(pca_task, "PCA", 1024, nullptr, 3, nullptr);  // 50 Hz PWM flush
+  DEBUG_PRINTLN("[INIT] All tasks created — starting FreeRTOS scheduler");
+  vTaskStartScheduler();
 }
 
-// RC polled from main loop — IBusBM NOTIMER doesn't work from TeensyThreads
+// loop() is called from FreeRTOS idle task (priority 0) via vApplicationIdleHook.
+// RC is now its own FreeRTOS task — no polling needed here.
 void loop() {
-  g_rc.update();
-
-  // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
-  if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
-    // MCU/RC mode — RC stick drives motors
-    const auto& rc = g_rc.getData();
-    bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
-
-    if (swa_high) {
-      float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
-      float steering = static_cast<float>(rc.channels[3]) / 255.0f;
-      g_drive.rcDrive(throttle, steering);
-    } else {
-      if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
-        g_drive.stop();
-      }
-    }
-  }
-  // DIP 1 ON — ROS2 controls drive via drive_base/command subscription
-
-  delay(5);
 }

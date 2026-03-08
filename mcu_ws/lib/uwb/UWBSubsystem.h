@@ -15,8 +15,8 @@
 #include <rclc/rclc.h>
 #include <stdio.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 #include "TimedSubsystem.h"
@@ -70,12 +70,11 @@ class UWBSubsystem : public IMicroRosParticipant,
   /** Access UWB driver data (range count, status, etc.). */
   const Drivers::UWBDriverData& getDriverData() const { return setup_.driver->getData(); }
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 10) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "UWB", stackSize, this, priority, &task_handle_);
   }
 
  private:
@@ -84,10 +83,11 @@ class UWBSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 10;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 
  private:
@@ -120,8 +120,8 @@ class UWBSubsystem : public IMicroRosParticipant,
   uint8_t num_peer_pubs_ = 0;
 
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 };
 

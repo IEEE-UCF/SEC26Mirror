@@ -31,8 +31,8 @@
 #include <pid_controller.h>
 #include <traj_controller.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 #include "TimedSubsystem.h"
@@ -258,9 +258,9 @@ class DriveSubsystem : public IMicroRosParticipant,
     publishCounter_++;
     if (publishCounter_ >= setup_.publishDivider) {
       publishCounter_ = 0;
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
       {
-        Threads::Scope lock(data_mutex_);
+        FRMutex::ScopedLock lock(data_mutex_);
         publishStatus();
         data_ready_ = true;
       }
@@ -519,12 +519,11 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   // ── Threading ──────────────────────────────────────────────────────────
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "Drive", stackSize, this, priority, &task_handle_);
   }
 
  private:
@@ -533,10 +532,11 @@ class DriveSubsystem : public IMicroRosParticipant,
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
   uint32_t task_delay_ms_ = 20;
+  TaskHandle_t task_handle_ = nullptr;
 #endif
 
  private:
@@ -858,15 +858,15 @@ class DriveSubsystem : public IMicroRosParticipant,
     // Clear path in status (we don't echo it back)
     status_msg_.goal_path.poses.size = 0;
 
-#ifndef USE_TEENSYTHREADS
+#ifndef USE_FREERTOS
     (void)rcl_publish(&status_pub_, &status_msg_, NULL);
 #endif
   }
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
-    Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+    FRMutex::ScopedLock lock(data_mutex_);
     if (!data_ready_ || !status_pub_.impl) return;
     (void)rcl_publish(&status_pub_, &status_msg_, NULL);
     data_ready_ = false;
@@ -933,8 +933,8 @@ class DriveSubsystem : public IMicroRosParticipant,
   micro_ros_utilities_memory_conf_t cmd_mem_conf_{};
 
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
-  Threads::Mutex data_mutex_;
+#ifdef USE_FREERTOS
+  FRMutex data_mutex_;
 #endif
 };
 

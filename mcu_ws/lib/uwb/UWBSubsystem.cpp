@@ -57,9 +57,9 @@ void UWBSubsystem::update() {
   // Publish ranging data if in tag mode
   if (is_tag_mode_ && pub_.impl) {
     if (everyMs(PUBLISH_INTERVAL_MS)) {
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
       {
-        Threads::Scope lock(data_mutex_);
+        FRMutex::ScopedLock lock(data_mutex_);
         updateRangingMessage();
         data_ready_ = true;
       }
@@ -72,9 +72,9 @@ void UWBSubsystem::update() {
   // Publish inter-beacon peer ranges at 2 Hz
   if (has_peer_ranging_) {
     if (everyMs(PEER_PUBLISH_INTERVAL_MS, 1)) {
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
       {
-        Threads::Scope lock(data_mutex_);
+        FRMutex::ScopedLock lock(data_mutex_);
         updatePeerMessages();
         data_ready_ = true;
       }
@@ -281,8 +281,8 @@ void UWBSubsystem::publishRanging() {
 }
 
 void UWBSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
-  Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+  FRMutex::ScopedLock lock(data_mutex_);
   if (!data_ready_) return;
 
   // Publish tag ranging if applicable

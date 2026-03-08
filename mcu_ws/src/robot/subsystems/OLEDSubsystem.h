@@ -33,8 +33,8 @@
 #include <std_msgs/msg/int8.h>
 #include <std_msgs/msg/string.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#ifdef USE_FREERTOS
+#include <FreeRTOSCompat.h>
 #endif
 
 namespace Subsystem {
@@ -129,12 +129,11 @@ class OLEDSubsystem : public IMicroRosParticipant,
   void setDashboardSources(DipSwitchSubsystem* dip, BatterySubsystem* battery,
                            ImuSubsystem* imu, UWBSubsystem* uwb);
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 50) {
     task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
+    frCreateTask(taskFunction, "OLED", stackSize, this, priority, &task_handle_);
   }
 #endif
 
@@ -168,18 +167,19 @@ class OLEDSubsystem : public IMicroRosParticipant,
   std_msgs__msg__Int8 scroll_msg_ = {};
   rcl_subscription_t scroll_sub_ = {};
 
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
   static void taskFunction(void* pv) {
     auto* self = static_cast<OLEDSubsystem*>(pv);
     self->begin();
     while (true) {
       self->update();
-      threads.delay(self->task_delay_ms_);
+      frDelay(self->task_delay_ms_);
     }
   }
 
-  Threads::Mutex mutex_;
+  FRMutex mutex_;
   uint32_t task_delay_ms_ = 50;
+  TaskHandle_t task_handle_ = nullptr;
 
   bool takeMutex() {
     mutex_.lock();

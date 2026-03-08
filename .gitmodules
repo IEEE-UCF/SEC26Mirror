@@ -6,3 +6,11 @@
 	path = mcu_ws/libs_external/teensy/micro_ros_platformio
 	url = https://github.com/IEEE-UCF/micro_ros_platformio.git
 	branch = new
+[submodule "mcu_ws/lib_external/FreeRTOS-Teensy4"]
+	path = mcu_ws/lib_external/FreeRTOS-Teensy4
+	url = https://github.com/juliandesvignes/FreeRTOS-Teensy4
+	branch = master
+[submodule "mcu_ws/libs_external/teensy/FreeRTOS-Teensy4"]
+	path = mcu_ws/libs_external/teensy/FreeRTOS-Teensy4
+	url = https://github.com/juliandesvignes/FreeRTOS-Teensy4
+	branch = master

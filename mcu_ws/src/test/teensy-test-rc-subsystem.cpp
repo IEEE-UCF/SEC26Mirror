@@ -14,7 +14,8 @@
  */
 
 #include <Arduino.h>
-#include <TeensyThreads.h>
+#include <FreeRTOS_TEENSY4.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include "robot/RobotPins.h"
@@ -35,9 +36,9 @@ static void blink_task(void*) {
   pinMode(LED_BUILTIN, OUTPUT);
   while (true) {
     digitalWriteFast(LED_BUILTIN, HIGH);
-    threads.delay(500);
+    frDelay(500);
     digitalWriteFast(LED_BUILTIN, LOW);
-    threads.delay(500);
+    frDelay(500);
   }
 }
 
@@ -46,7 +47,7 @@ static void print_task(void*) {
   while (true) {
     Serial.printf("RC test running — agent %s\r\n",
                   g_mr.isConnected() ? "CONNECTED" : "waiting...");
-    threads.delay(2000);
+    frDelay(2000);
   }
 }
 
@@ -65,10 +66,12 @@ void setup() {
   // 3. Start threads
   g_mr.beginThreaded(8192, 4);     // ROS agent (highest priority)
   g_rc.beginThreaded(1024, 3, 5);  // IBUS polling @ 200 Hz
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  frCreateTask(print_task, "Print", 1024, nullptr, 2, nullptr);
+  frCreateTask(blink_task, "Blink", 512, nullptr, 2, nullptr);
 
   Serial.println(PSTR("setup(): RC test threads started."));
+
+  vTaskStartScheduler();
 }
 
-void loop() { threads.delay(100); }
+void loop() { frDelay(100); }

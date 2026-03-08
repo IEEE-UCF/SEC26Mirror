@@ -30,14 +30,17 @@ void RCSubsystem::update() {
   // Update RC data from receiver
   updateRCData();
 
+  // Notify listener (e.g. drive subsystem for RC manual control)
+  if (data_cb_) data_cb_(data_);
+
   // Publish RC data at regular intervals
   if (!pub_.impl) return;
   uint32_t now = millis();
   if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
     last_publish_ms_ = now;
-#ifdef USE_TEENSYTHREADS
+#ifdef USE_FREERTOS
     {
-      Threads::Scope lock(data_mutex_);
+      FRMutex::ScopedLock lock(data_mutex_);
       updateRCMessage();
       data_ready_ = true;
     }
@@ -143,8 +146,8 @@ void RCSubsystem::publishRC() {
 }
 
 void RCSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
-  Threads::Scope lock(data_mutex_);
+#ifdef USE_FREERTOS
+  FRMutex::ScopedLock lock(data_mutex_);
   if (!data_ready_ || !pub_.impl) return;
   (void)rcl_publish(&pub_, &msg_, NULL);
   data_ready_ = false;

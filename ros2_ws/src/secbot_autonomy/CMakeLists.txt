@@ -73,6 +73,16 @@ ament_target_dependencies(mission_node
   mcu_msgs
 )
 
+# Drive test node executable
+add_executable(drive_test_node
+  src/drive_test_node.cpp
+)
+
+ament_target_dependencies(drive_test_node
+  rclcpp
+  mcu_msgs
+)
+
 # Install targets
 install(TARGETS
   secbot_tasks
@@ -84,6 +94,7 @@ install(TARGETS
 install(TARGETS
   autonomy_node
   mission_node
+  drive_test_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

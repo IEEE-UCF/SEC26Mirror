@@ -91,7 +91,7 @@ static MiniBotIMUSubsystem g_imu(g_imu_setup);
 // ── Arduino Entry Points ──
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(921600);
   delay(2000);
   Serial.println("Minibot starting...");
 
@@ -118,12 +118,12 @@ void setup() {
 
   // Init all subsystems
   bool ok = true;
-  ok = ok && g_mr.init();
-  ok = ok && g_uwb.init();
-  ok = ok && g_left_motor.init();
-  ok = ok && g_right_motor.init();
-  ok = ok && g_drive.init();
-  ok = ok && g_imu.init();
+  ok &= g_mr.init();
+  ok &= g_uwb.init();
+  ok &= g_left_motor.init();
+  ok &= g_right_motor.init();
+  ok &= g_drive.init();
+  ok &= g_imu.init();
 
   if (!ok) {
     Serial.println("ERROR: One or more subsystems failed init!");

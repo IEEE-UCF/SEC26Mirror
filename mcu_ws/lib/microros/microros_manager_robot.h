@@ -7,7 +7,7 @@
 
 #ifndef MICROROS_MANAGER_H
 #define MICROROS_MANAGER_H
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 // microros includes
 #include <micro_ros_utilities/string_utilities.h>
 #include <rcl/error_handling.h>
@@ -18,8 +18,8 @@
 #include <std_msgs/msg/string.h>
 #include <stdio.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#if defined(USE_FREERTOS)
+#include "FreeRTOSCompat.h"
 #else
 #include <mutex>
 #endif
@@ -67,11 +67,11 @@ class MicrorosManagerSetup : public Classes::BaseSetup {
  public:
   MicrorosManagerSetup(const char* _id) : Classes::BaseSetup(_id){};
 };
-class MicrorosManager : public Classes::BaseSubsystem {
+class MicrorosManager : public Subsystem::RTOSSubsystem {
  public:
   ~MicrorosManager() override = default;
   MicrorosManager(const MicrorosManagerSetup& setup)
-      : BaseSubsystem(setup), setup_(setup){};
+      : Subsystem::RTOSSubsystem(setup), setup_(setup){};
 
   bool init() override;
   void update() override;
@@ -82,16 +82,9 @@ class MicrorosManager : public Classes::BaseSubsystem {
   // Register a participant; it will be created/destroyed with the manager
   void registerParticipant(IMicroRosParticipant* participant);
 
-#ifdef USE_TEENSYTHREADS
-  // TeensyThreads task entry point — pass `this` as pvParams
-  static void taskFunction(void* pvParams);
-
-  // Create and start the micro-ROS thread
-  void beginThreaded(uint32_t stackSize, int priority = 1);
-#endif
 
   // Mutex for thread-safe access to the executor
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
   Threads::Mutex& getMutex();
 #else
   std::mutex& getMutex();
@@ -138,7 +131,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
   } state_;
 
   static MicrorosManager* s_instance_;
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
   Threads::Mutex mutex_;
 #else
   std::mutex mutex_;
@@ -160,7 +153,7 @@ class MicrorosManager : public Classes::BaseSubsystem {
 // The XRCE-DDS session is NOT thread-safe: concurrent rcl_publish, ping,
 // and executor-spin calls corrupt the serial stream.  All code that touches
 // the session must hold this mutex.
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
 extern Threads::Mutex g_microros_mutex;
 #endif
 

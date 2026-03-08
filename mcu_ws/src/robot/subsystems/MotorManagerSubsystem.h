@@ -22,17 +22,13 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <PCA9685Driver.h>
 #include <QTimerEncoder.h>
 #include "DebugLog.h"
 #include <mcu_msgs/srv/set_motor.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -68,7 +64,7 @@ class MotorManagerSubsystemSetup : public Classes::BaseSetup {
 };
 
 class MotorManagerSubsystem : public IMicroRosParticipant,
-                              public Classes::BaseSubsystem {
+                              public Subsystem::RTOSSubsystem {
  public:
   static constexpr uint8_t MAX_MOTORS = 8;
   static constexpr uint16_t MAX_PWM = 4095;
@@ -81,7 +77,7 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   static constexpr uint16_t NFPSHOP_REVERSE_DUTY = 5 * (MAX_PWM / 255);
 
   explicit MotorManagerSubsystem(const MotorManagerSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override {
     if (setup_.oePin_ != 255) {
@@ -132,7 +128,6 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     uint32_t now_ms = millis();
     if (now_ms - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now_ms;
-#ifdef USE_TEENSYTHREADS
       {
         Threads::Scope lock(data_mutex_);
         for (uint8_t i = 0; i < setup_.numMotors_; i++)
@@ -140,9 +135,6 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
         pub_msg_.data.size = setup_.numMotors_;
         data_ready_ = true;
       }
-#else
-      publishState();
-#endif
     }
   }
 
@@ -239,26 +231,6 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
     if (setup_.oePin_ != 255) digitalWrite(setup_.oePin_, HIGH);
   }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 50) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<MotorManagerSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 50;
-#endif
-
  private:
   /** Get the PWM channel for a motor (swapped for motors 4-7). */
   static uint8_t pwmChannel(uint8_t motor) {
@@ -282,12 +254,10 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &pub_msg_, NULL);
     data_ready_ = false;
-#endif
   }
 
  private:
@@ -330,9 +300,7 @@ class MotorManagerSubsystem : public IMicroRosParticipant,
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

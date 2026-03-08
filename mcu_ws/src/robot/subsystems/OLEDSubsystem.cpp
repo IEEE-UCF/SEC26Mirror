@@ -15,7 +15,7 @@ namespace Subsystem {
 // ───────────────────────────────────────────────────────────────
 
 OLEDSubsystem::OLEDSubsystem(const OLEDSubsystemSetup& setup)
-    : Classes::BaseSubsystem(setup),
+    : Subsystem::RTOSSubsystem(setup),
       setup_(setup),
       display_(DISPLAY_W, DISPLAY_H, setup.spi_, setup.dc_pin_, setup.rst_pin_,
                setup.cs_pin_, setup.bitrate_) {}

@@ -1,10 +1,7 @@
 /**
  * @file main.cpp
- * @brief Drone ESP32 firmware with WiFi, micro-ROS, and ArduinoOTA.
+ * @brief Drone ESP32 firmware with WiFi, micro-ROS, BNO085 IMU, and ArduinoOTA.
  * @date 2026-02-26
- *
- * Extends the base drone with WiFi connectivity for micro-ROS telemetry
- * and ArduinoOTA for wireless firmware updates.
  *
  * Static IP: 192.168.4.25 (configured via platformio.ini build flags)
  */
@@ -13,9 +10,11 @@
 #include <ArduinoOTA.h>
 #include <ESP32WifiSubsystem.h>
 #include <WiFi.h>
+#include <Wire.h>
 #include <microros_manager_robot.h>
 
 #include "robot/machines/HeartbeatSubsystem.h"
+#include "drone/subsystems/GyroSubsystem.h"
 
 using namespace Subsystem;
 
@@ -37,12 +36,22 @@ static MicrorosManager g_mr(g_mr_setup);
 static HeartbeatSubsystemSetup g_hb_setup("heartbeat_subsystem");
 static HeartbeatSubsystem g_hb(g_hb_setup);
 
+// --- IMU (BNO085 via shared driver) ---
+static Drone::GyroConfig g_gyro_cfg = {
+    .i2c_addr = 0x4A,
+    .reset_pin = 255,
+    .int_pin = -1,
+    .rotation_report_us = 5000,   // 200 Hz quaternion
+    .gyro_report_us = 2500,       // 400 Hz gyro rates
+};
+static Drone::GyroSubsystem g_gyro(g_gyro_cfg);
+
 void setup() {
   Serial.begin(921600);
   delay(2000);
   Serial.println("Drone starting...");
 
-  // Step 1: WiFi connection (managed by ESP32WifiSubsystem with auto-reconnect)
+  // WiFi connection (managed by ESP32WifiSubsystem with auto-reconnect)
   g_wifi.init();
   g_wifi.begin();
   Serial.println("Waiting for WiFi...");
@@ -57,26 +66,34 @@ void setup() {
   ArduinoOTA.begin();
   Serial.println("[OTA] Ready as sec26-drone");
 
-  // micro-ROS transport (registers UDP callbacks, no WiFi.begin())
-  g_mr.init();
+  // I2C for BNO085 IMU
+  Wire.begin();
 
-  // Initialize subsystems
-  g_hb.init();
+  // Init subsystems
+  bool ok = true;
+  ok &= g_mr.init();
+  ok &= g_hb.init();
+  ok &= g_gyro.init();
+
+  if (!ok) {
+    Serial.println("ERROR: One or more subsystems failed init!");
+  }
 
   // Register micro-ROS participants
   g_mr.registerParticipant(&g_hb);
 
-  g_mr.begin();  // Registers UDP transport only
+  g_mr.begin();
   g_hb.begin();
 
   Serial.println("Drone initialized!");
 }
 
 void loop() {
-  g_wifi.update();  // WiFi reconnection monitoring
+  g_wifi.update();
   ArduinoOTA.handle();
   g_mr.update();
   g_hb.update();
+  g_gyro.update();
 
   delay(1);
 }

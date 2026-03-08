@@ -6,7 +6,7 @@
  */
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <micro_ros_utilities/string_utilities.h>
 #include "DebugLog.h"
 #include <microros_manager_robot.h>
@@ -15,8 +15,8 @@
 #include <std_msgs/msg/string.h>
 #include <uxr/client/util/time.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
+#if defined(USE_FREERTOS)
+#include "FreeRTOSCompat.h"
 #endif
 
 namespace Subsystem {
@@ -27,19 +27,21 @@ class HeartbeatSubsystemSetup : public Classes::BaseSetup {
 };
 
 class HeartbeatSubsystem : public IMicroRosParticipant,
-                           public Classes::BaseSubsystem {
+                           public Subsystem::RTOSSubsystem {
  public:
   explicit HeartbeatSubsystem(const HeartbeatSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override { return true; }
   void begin() override {}
   void update() override {
     if (!pub_.impl) return;
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
     Threads::Scope lock(data_mutex_);
-#endif
     data_ready_ = true;
+#else
+    (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
   }
   void pause() override {}
   void reset() override { pause(); }
@@ -71,29 +73,9 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
     node_ = nullptr;
   }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 200) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<HeartbeatSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 200;
-#endif
-
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &msg_, NULL);
@@ -107,7 +89,7 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   std_msgs__msg__String msg_{};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
   Threads::Mutex data_mutex_;
 #endif
 };

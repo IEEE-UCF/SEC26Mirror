@@ -13,15 +13,11 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <TCA9555Driver.h>
 #include "DebugLog.h"
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/u_int8.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -40,7 +36,7 @@ class DipSwitchSubsystemSetup : public Classes::BaseSetup {
 };
 
 class DipSwitchSubsystem : public IMicroRosParticipant,
-                           public Classes::BaseSubsystem {
+                           public Subsystem::RTOSSubsystem {
  public:
   // Named DIP switch bit positions (bit 0 = physical switch 1)
   static constexpr uint8_t DIP_ROS2_ENABLE     = 0;  // ON = ROS2 control, OFF = MCU/RC control
@@ -53,7 +49,7 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
   static constexpr uint8_t DIP_DEPLOY_TARGET   = 7;  // ON = deploy target
 
   explicit DipSwitchSubsystem(const DipSwitchSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override {
     if (!setup_.driver_) {
@@ -75,16 +71,11 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-#ifdef USE_TEENSYTHREADS
       {
         Threads::Scope lock(data_mutex_);
         msg_.data = fixGPIO(setup_.driver_->readPort(0));
         data_ready_ = true;
       }
-#else
-      msg_.data = fixGPIO(setup_.driver_->readPort(0));
-      (void)rcl_publish(&pub_, &msg_, NULL);
-#endif
     }
   }
 
@@ -117,26 +108,6 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
   /** Check if a specific DIP switch bit is ON (active-high after fixGPIO). */
   bool isSwitchOn(uint8_t bit) const { return (getState() >> bit) & 0x01; }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 500) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<DipSwitchSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 500;
-#endif
-
  private:
   // Hardware is active-low and bit-reversed (switch 0 appears at bit 7).
   // Reverse bits and invert so bit 0 = switch 0, 1 = ON.
@@ -149,12 +120,10 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &msg_, NULL);
     data_ready_ = false;
-#endif
   }
 
  private:
@@ -165,9 +134,7 @@ class DipSwitchSubsystem : public IMicroRosParticipant,
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

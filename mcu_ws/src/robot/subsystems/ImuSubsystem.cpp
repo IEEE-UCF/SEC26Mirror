@@ -16,27 +16,6 @@ bool ImuSubsystem::init() {
     return false;
   }
 
-  // Calibrates the gyroscope by averaging samples at rest
-  // This removes static bias from gyro readings!!!
-  DEBUG_PRINTF("[IMU] Calibrating gyro (%d samples)...\n", kCalibrationSamples);
-  float sum_x = 0.0f, sum_y = 0.0f, sum_z = 0.0f;
-
-  for (int i = 0; i < kCalibrationSamples; i++) {
-    setup_.driver_->update();
-    Drivers::BNO085DriverData data = setup_.driver_->getData();
-    sum_x += data.gyro_x;
-    sum_y += data.gyro_y;
-    sum_z += data.gyro_z;
-    delay(kCalibrationDelayMs);
-  }
-
-  gyro_offset_x_ = sum_x / kCalibrationSamples;
-  gyro_offset_y_ = sum_y / kCalibrationSamples;
-  gyro_offset_z_ = sum_z / kCalibrationSamples;
-  calibrated_ = true;
-
-  DEBUG_PRINTF("[IMU] Calibration done: offset=(%.4f, %.4f, %.4f)\n",
-               gyro_offset_x_, gyro_offset_y_, gyro_offset_z_);
   return true;
 }
 
@@ -49,7 +28,7 @@ void ImuSubsystem::update() {
   DEBUG_PRINTF("[IMU] driver->update() took %lu us\n", t_drv - t0);
 
   // Cache yaw for cross-thread access (e.g., DriveSubsystem localization)
-  yaw_rad_ = setup_.driver_->getData().yaw;
+  yaw_rad_.store(setup_.driver_->getData().yaw, std::memory_order_relaxed);
 
   ++diag_update_count_;
   diag_last_update_ms_ = millis();
@@ -57,7 +36,6 @@ void ImuSubsystem::update() {
   if (!pub_.impl) return;
 
   // Populate message under data_mutex_ for deferred publishing
-#ifdef USE_TEENSYTHREADS
   {
     uint32_t t_m0 = micros();
     Threads::Scope lock(data_mutex_);
@@ -67,9 +45,6 @@ void ImuSubsystem::update() {
     DEBUG_PRINTF("[IMU] data_mutex + publishData took %lu us (lock wait %lu us)\n",
                  micros() - t_m0, t_m1 - t_m0);
   }
-#else
-  publishData();
-#endif
 }
 
 void ImuSubsystem::reset() { pause(); }
@@ -125,18 +100,14 @@ void ImuSubsystem::initCovariances() {
   }
 
   // Set diagonal elements with variance values
-  // BNO085 provides orientation, so we set valid covariances!
+  // BNO085 provides orientation via Game Rotation Vector
   msg_.orientation_covariance[0] = kOrientationVariance;  // x
   msg_.orientation_covariance[4] = kOrientationVariance;  // y
   msg_.orientation_covariance[8] = kOrientationVariance;  // z
 
-  msg_.angular_velocity_covariance[0] = kAngularVelocityVariance;  // x
-  msg_.angular_velocity_covariance[4] = kAngularVelocityVariance;  // y
-  msg_.angular_velocity_covariance[8] = kAngularVelocityVariance;  // z
-
-  msg_.linear_acceleration_covariance[0] = kLinearAccelerationVariance;  // x
-  msg_.linear_acceleration_covariance[4] = kLinearAccelerationVariance;  // y
-  msg_.linear_acceleration_covariance[8] = kLinearAccelerationVariance;  // z
+  // Gyro and accel reports are not enabled — mark as unknown per ROS convention
+  msg_.angular_velocity_covariance[0] = -1.0;
+  msg_.linear_acceleration_covariance[0] = -1.0;
 }
 
 void ImuSubsystem::publishData() {
@@ -156,35 +127,14 @@ void ImuSubsystem::publishData() {
   msg_.header.frame_id.size = 8;
   msg_.header.frame_id.capacity = 9;
 
-  // Orientation quaternion (Looking at the documentation and I think the BNO085
-  // provides this directly)
+  // Orientation quaternion from Game Rotation Vector
   msg_.orientation.x = data.qx;
   msg_.orientation.y = data.qy;
   msg_.orientation.z = data.qz;
   msg_.orientation.w = data.qw;
-
-  // Angular velocity with calibration offset and dead zone filter
-  // BNO085 already outputs in rad/s (SI units)
-  float gyro_x = data.gyro_x - gyro_offset_x_;
-  float gyro_y = data.gyro_y - gyro_offset_y_;
-  float gyro_z = data.gyro_z - gyro_offset_z_;
-
-  // Apply dead zone filter to reduce noise near zero
-  msg_.angular_velocity.x =
-      (gyro_x > -kGyroDeadZone && gyro_x < kGyroDeadZone) ? 0.0f : gyro_x;
-  msg_.angular_velocity.y =
-      (gyro_y > -kGyroDeadZone && gyro_y < kGyroDeadZone) ? 0.0f : gyro_y;
-  msg_.angular_velocity.z =
-      (gyro_z > -kGyroDeadZone && gyro_z < kGyroDeadZone) ? 0.0f : gyro_z;
-
-  // Linear acceleration (BNO085 already outputs in m/s^2...)
-  msg_.linear_acceleration.x = data.accel_x;
-  msg_.linear_acceleration.y = data.accel_y;
-  msg_.linear_acceleration.z = data.accel_z;
 }
 
 void ImuSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
   Threads::Scope lock(data_mutex_);
   if (!data_ready_ || !pub_.impl) return;
   rcl_ret_t rc = rcl_publish(&pub_, &msg_, NULL);
@@ -193,7 +143,6 @@ void ImuSubsystem::publishAll() {
   if (rc != RCL_RET_OK) {
     DEBUG_PRINTF("[IMU] pub FAIL: rc=%d\n", (int)rc);
   }
-#endif
 }
 
 }  // namespace Subsystem

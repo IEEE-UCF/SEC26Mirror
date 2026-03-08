@@ -2,7 +2,7 @@
  * @file RobotLogic.h
  * @date 12/16/25
  * @author Aldem Pido
- * @brief Main logic for the SEC26 robot — TeensyThreads-based scheduling.
+ * @brief Main logic for the SEC26 robot — FreeRTOS-based scheduling.
  *
  * I2C bus layout:
  *   Wire  (Wire0) — TCA9548A mux (0x70), TCA9555 GPIO expander (0x20),
@@ -15,7 +15,6 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <TeensyThreads.h>
 #include <microros_manager_robot.h>
 
 #include <math_utils.h>
@@ -104,7 +103,7 @@ static SensorSubsystem g_sensor(g_sensor_setup);
 
 // --- Wire1: IMU (BNO085) ---
 static Drivers::BNO085DriverSetup g_imu_driver_setup("imu_driver", PIN_GYRO_RST,
-                                                     Wire1);
+                                                     Wire1, 0x4B, PIN_GYRO_INT);
 static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
@@ -302,13 +301,13 @@ static void wire0_dma_task(void*) {
     g_gpio.queueDMARead();
 
     if (g_dma_wire0.fire()) {
-      while (!g_dma_wire0.isComplete()) threads.yield();
+      while (!g_dma_wire0.isComplete()) vTaskDelay(1);
       g_dma_wire0.dispatch();
       g_power_driver.processDMAResults();
       g_gpio.processDMAResults();
     }
 
-    threads.delay(20);
+    vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
 
@@ -320,7 +319,33 @@ static void pca_task(void*) {
       g_pca_mgr.buildInto();
       g_wire2_dma.fire();
     }
-    threads.delay(1);
+    vTaskDelay(pdMS_TO_TICKS(1));
+  }
+}
+
+// --- RC + drive task (IBusBM NOTIMER needs its own task, not idle) ---
+static void rc_drive_task(void*) {
+  while (true) {
+    g_rc.update();
+
+    // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
+    if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
+      const auto& rc = g_rc.getData();
+      bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
+
+      if (swa_high) {
+        float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
+        float steering = static_cast<float>(rc.channels[3]) / 255.0f;
+        g_drive.rcDrive(throttle, steering);
+      } else {
+        if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
+          g_drive.stop();
+        }
+      }
+    }
+    // DIP 1 ON — ROS2 controls drive via drive_base/command subscription
+
+    vTaskDelay(pdMS_TO_TICKS(5));
   }
 }
 
@@ -339,7 +364,7 @@ void setup() {
     DEBUG_FLUSH();
   }
 
-  Serial.println(PSTR("\r\nSEC26 Robot — TeensyThreads\r\n"));
+  Serial.println(PSTR("\r\nSEC26 Robot — FreeRTOS\r\n"));
   DEBUG_PRINTLN("\r\n=== SEC26 Robot — Debug Console (SerialUSB1) ===\r\n");
 
   // 0. I2C bus mutexes
@@ -456,52 +481,33 @@ void setup() {
   // 4. Start threaded tasks
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);       // ROS agent
-  g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (I2C + mutex overhead adds ~20ms per cycle)
-  // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 100);    // 10 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(1024, 2, 50);  // 20 Hz encoder reading
+  g_mr.beginThreaded(8192, 4, 10);   // ROS agent
+  g_imu.beginThreaded(8192, 3, 10);  // 100Hz poll — INT pin skips I2C when no data ready
+  g_servo.beginThreaded(2048, 2, 100);    // 10 Hz state pub
+  g_motor.beginThreaded(2048, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(2048, 2, 50);  // 20 Hz encoder reading
   g_oled.beginThreaded(2048, 1, 100);     // 10 Hz display
-  g_battery.beginThreaded(1024, 1, 2000); // 0.5 Hz
-  g_sensor.beginThreaded(1024, 1, 500);   // 2 Hz TOF
-  g_dip.beginThreaded(1024, 1, 2000);     // 0.5 Hz
-  g_btn.beginThreaded(1024, 1, 100);      // 10 Hz
-  g_led.beginThreaded(1024, 1, 200);      // 5 Hz
-  g_hb.beginThreaded(1024, 1, 1000);      // 1 Hz
+  g_battery.beginThreaded(2048, 1, 2000); // 0.5 Hz
+  g_sensor.beginThreaded(2048, 1, 500);   // 2 Hz TOF
+  g_dip.beginThreaded(2048, 1, 2000);     // 0.5 Hz
+  g_btn.beginThreaded(2048, 1, 100);      // 10 Hz
+  g_led.beginThreaded(2048, 1, 200);      // 5 Hz
+  g_hb.beginThreaded(2048, 1, 1000);      // 1 Hz
   if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
-  g_arm.beginThreaded(1024, 2, 50);       // 20 Hz arm
-  g_intake.beginThreaded(1024, 2, 50);    // 20 Hz intake
-  g_deploy.beginThreaded(1024, 1, 100);   // 10 Hz deploy button
-  g_crank.beginThreaded(1024, 1, 200);    // 5 Hz crank
-  g_keypad.beginThreaded(1024, 1, 200);   // 5 Hz keypad
+  g_arm.beginThreaded(2048, 2, 50);       // 20 Hz arm
+  g_intake.beginThreaded(2048, 2, 50);    // 20 Hz intake
+  g_deploy.beginThreaded(2048, 1, 100);   // 10 Hz deploy button
+  g_crank.beginThreaded(2048, 1, 200);    // 5 Hz crank
+  g_keypad.beginThreaded(2048, 1, 200);   // 5 Hz keypad
   g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
-  threads.addThread(wire0_dma_task, nullptr, 1024);  // 50 Hz Wire0 DMA
-  threads.addThread(pca_task, nullptr, 1024);         // 1000 Hz Wire2 DMA (PWM)
+  threads.addThread(wire0_dma_task, nullptr, 2048);  // 50 Hz Wire0 DMA
+  threads.addThread(pca_task, nullptr, 2048);         // 1000 Hz Wire2 DMA (PWM)
+  threads.addThread(rc_drive_task, nullptr, 2048);  // RC polling + manual drive
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 
-// RC polled from main loop — IBusBM NOTIMER doesn't work from TeensyThreads
+// loop() is kept minimal — RC and drive are handled by rc_drive_task.
+// The tsandmann/freertos-teensy platform runs loop() as a FreeRTOS task.
 void loop() {
-  g_rc.update();
-
-  // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
-  if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
-    // MCU/RC mode — RC stick drives motors
-    const auto& rc = g_rc.getData();
-    bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
-
-    if (swa_high) {
-      float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
-      float steering = static_cast<float>(rc.channels[3]) / 255.0f;
-      g_drive.rcDrive(throttle, steering);
-    } else {
-      if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
-        g_drive.stop();
-      }
-    }
-  }
-  // DIP 1 ON — ROS2 controls drive via drive_base/command subscription
-
-  delay(5);
+  vTaskDelay(pdMS_TO_TICKS(1000));
 }

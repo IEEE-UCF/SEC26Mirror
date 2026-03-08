@@ -25,7 +25,6 @@ bool TCA9555Driver::writeReg(uint8_t reg, uint8_t value) {
 }
 
 bool TCA9555Driver::readReg(uint8_t reg, uint8_t* value) {
-bool TCA9555Driver::readReg(uint8_t reg, uint8_t* value) {
   setup_.wire_.beginTransmission(setup_.address_);
   setup_.wire_.write(reg);
   if (setup_.wire_.endTransmission(false) != 0) return false;

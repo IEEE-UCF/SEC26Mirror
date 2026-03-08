@@ -64,6 +64,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Reset.srv"
   "srv/SetServo.srv"
   "srv/SetMotor.srv"
+  "srv/UWBCalibrationStatus.srv"
   DEPENDENCIES std_msgs geometry_msgs nav_msgs
 )
 

@@ -7,16 +7,20 @@
 #include <array>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <vector>
 
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "mcu_msgs/msg/uwb_range.hpp"
 #include "mcu_msgs/msg/uwb_ranging.hpp"
+#include "mcu_msgs/srv/uwb_calibration_status.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "secbot_uwb/beacon_config.hpp"
 
 namespace secbot_uwb {
+
+typedef enum { WAITING, CALIBRATING, TRACKING } uwb_state_t;
 
 class UWBPositioningNode : public rclcpp::Node {
  public:
@@ -34,13 +38,17 @@ class UWBPositioningNode : public rclcpp::Node {
 
   // Positioning algorithms
   std::array<double, 3> getBeaconPosition(int beacon_id) const;
-  bool trilaterate(const std::map<int, double> &ranges, bool enable_3d,
-                   std::array<double, 3> &position, double &residual);
+  bool trilaterate(const std::map<int, double>& ranges, bool enable_3d,
+                   std::array<double, 3>& position, double& residual);
 
-  void publishPose(int tag_id, const std::array<double, 3> &position,
+  void publishPose(int tag_id, const std::array<double, 3>& position,
                    double residual,
-                   const builtin_interfaces::msg::Time &timestamp,
-                   const TagConfig &tag_config);
+                   const builtin_interfaces::msg::Time& timestamp,
+                   const TagConfig& tag_config);
+
+  void tryCalibrate();
+  void interBeaconRangeCallback(int from_id, int to_id,
+                                const mcu_msgs::msg::UWBRange::SharedPtr msg);
 
   // Parameters
   std::string map_frame_;
@@ -68,6 +76,17 @@ class UWBPositioningNode : public rclcpp::Node {
 
   // Data storage
   std::map<int, std::map<int, double>> tag_ranges_;
+
+  // UWB status service
+  rclcpp::Service<mcu_msgs::srv::UWBCalibrationStatus>::SharedPtr status_srv_;
+  float calibration_residual_;
+  uwb_state_t current_state_ = WAITING;
+  std::map<std::pair<int, int>, std::vector<double>> calibration_samples_;
+  std::map<int, std::array<double, 3>> calibrated_positions_;
+  static const int MIN_CALIBRATION_SAMPLES = 60;
+  rclcpp::Subscription<mcu_msgs::msg::UWBRange>::SharedPtr range_10_11_sub_;
+  rclcpp::Subscription<mcu_msgs::msg::UWBRange>::SharedPtr range_10_12_sub_;
+  rclcpp::Subscription<mcu_msgs::msg::UWBRange>::SharedPtr range_11_12_sub_;
 };
 }  // namespace secbot_uwb
 

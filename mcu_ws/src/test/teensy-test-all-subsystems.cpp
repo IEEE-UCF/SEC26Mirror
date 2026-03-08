@@ -508,7 +508,7 @@ void setup() {
   // ─── Start threaded tasks ─────────────────────────────────────────────
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);       // ROS agent
+  g_mr.beginThreaded(8192, 4, 10);   // ROS agent
   g_hb.beginThreaded(1024, 1, 1000); // 1 Hz
 
 #if DEBUG_STAGE >= 2

@@ -184,19 +184,6 @@ void MicrorosManager::registerParticipant(IMicroRosParticipant* participant) {
 }
 
 #ifdef USE_TEENSYTHREADS
-void MicrorosManager::taskFunction(void* pvParams) {
-  auto* self = static_cast<MicrorosManager*>(pvParams);
-  self->begin();
-  while (true) {
-    self->update();
-    threads.delay(10);
-  }
-}
-
-void MicrorosManager::beginThreaded(uint32_t stackSize, int /*priority*/) {
-  threads.addThread(taskFunction, this, stackSize);
-}
-
 Threads::Mutex& MicrorosManager::getMutex() { return mutex_; }
 #else
 std::mutex& MicrorosManager::getMutex() { return mutex_; }

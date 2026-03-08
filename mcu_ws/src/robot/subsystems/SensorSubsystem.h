@@ -8,16 +8,12 @@
 #ifndef SENSORSUBSYSTEM_H
 #define SENSORSUBSYSTEM_H
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <TOF.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
 
 #include <vector>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 class SensorSubsystemSetup : public Classes::BaseSetup {
@@ -29,10 +25,10 @@ class SensorSubsystemSetup : public Classes::BaseSetup {
 };
 
 class SensorSubsystem : public IMicroRosParticipant,
-                        public Classes::BaseSubsystem {
+                        public Subsystem::RTOSSubsystem {
  public:
   explicit SensorSubsystem(const SensorSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}
@@ -47,34 +43,13 @@ class SensorSubsystem : public IMicroRosParticipant,
 
   void publishData();
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 100) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<SensorSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 100;
-#endif
-
  private:
   const SensorSubsystemSetup setup_;
   rcl_publisher_t pub_{};
   std_msgs__msg__Float32MultiArray msg_{};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 }  // namespace Subsystem
 

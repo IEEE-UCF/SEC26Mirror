@@ -29,15 +29,11 @@ void SensorSubsystem::update() {
 
   if (!pub_.impl || !msg_.data.data) return;
 
-#ifdef USE_TEENSYTHREADS
   {
     Threads::Scope lock(data_mutex_);
     publishData();
     data_ready_ = true;
   }
-#else
-  publishData();
-#endif
 }
 
 void SensorSubsystem::reset() { pause(); }
@@ -106,12 +102,10 @@ void SensorSubsystem::publishData() {
 }
 
 void SensorSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
   Threads::Scope lock(data_mutex_);
   if (!data_ready_ || !pub_.impl) return;
   (void)rcl_publish(&pub_, &msg_, NULL);
   data_ready_ = false;
-#endif
 }
 
 }  // namespace Subsystem

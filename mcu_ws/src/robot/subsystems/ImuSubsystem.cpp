@@ -54,15 +54,11 @@ void ImuSubsystem::update() {
   if (!pub_.impl) return;
 
   // Populate message under data_mutex_ for deferred publishing
-#ifdef USE_TEENSYTHREADS
   {
     Threads::Scope lock(data_mutex_);
     publishData();
     data_ready_ = true;
   }
-#else
-  publishData();
-#endif
 }
 
 void ImuSubsystem::reset() { pause(); }
@@ -177,7 +173,6 @@ void ImuSubsystem::publishData() {
 }
 
 void ImuSubsystem::publishAll() {
-#ifdef USE_TEENSYTHREADS
   Threads::Scope lock(data_mutex_);
   if (!data_ready_ || !pub_.impl) return;
   rcl_ret_t rc = rcl_publish(&pub_, &msg_, NULL);
@@ -186,7 +181,6 @@ void ImuSubsystem::publishAll() {
   if (rc != RCL_RET_OK) {
     DEBUG_PRINTF("[IMU] pub FAIL: rc=%d\n", (int)rc);
   }
-#endif
 }
 
 }  // namespace Subsystem

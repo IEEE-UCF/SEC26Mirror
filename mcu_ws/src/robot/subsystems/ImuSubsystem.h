@@ -10,13 +10,9 @@
 #define IMUSUBSYSTEM_H
 
 #include <BNO085.h>
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -28,10 +24,10 @@ class ImuSubsystemSetup : public Classes::BaseSetup {
 };
 
 class ImuSubsystem : public IMicroRosParticipant,
-                     public Classes::BaseSubsystem {
+                     public Subsystem::RTOSSubsystem {
  public:
   explicit ImuSubsystem(const ImuSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}
@@ -48,25 +44,6 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (atomic float read). */
   float getYaw() const { return yaw_rad_; }
-
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<ImuSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
 
  private:
   void initCovariances();
@@ -101,9 +78,7 @@ class ImuSubsystem : public IMicroRosParticipant,
   static constexpr int kCalibrationDelayMs = 50;
 
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 
  public:
   // Diagnostic counters (for external monitoring / debug)

@@ -107,7 +107,7 @@ void setup() {
   g_mr.registerParticipant(&g_battery);
 
   //                            stackSize  priority  rateMs
-  g_mr.beginThreaded(8192, 4);
+  g_mr.beginThreaded(8192, 4, 10);
   g_battery.beginThreaded(1024, 1, 100);
   threads.addThread(print_task, nullptr, 1024);
   threads.addThread(blink_task, nullptr, 512);

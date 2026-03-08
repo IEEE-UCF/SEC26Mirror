@@ -15,7 +15,6 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <TeensyThreads.h>
 #include <microros_manager_robot.h>
 
 #include <math_utils.h>
@@ -417,7 +416,7 @@ void setup() {
   // 4. Start threaded tasks
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);       // ROS agent
+  g_mr.beginThreaded(8192, 4, 10);   // ROS agent
   g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (I2C + mutex overhead adds ~20ms per cycle)
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
   g_servo.beginThreaded(1024, 2, 100);    // 10 Hz state pub

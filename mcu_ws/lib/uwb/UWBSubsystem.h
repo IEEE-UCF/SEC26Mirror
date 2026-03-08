@@ -70,25 +70,6 @@ class UWBSubsystem : public IMicroRosParticipant,
   /** Access UWB driver data (range count, status, etc.). */
   const Drivers::UWBDriverData& getDriverData() const { return setup_.driver->getData(); }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 10) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<UWBSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 10;
-#endif
-
  private:
   void publishRanging();
   void updateRangingMessage();

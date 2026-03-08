@@ -172,7 +172,7 @@ static void announce(const char* msg) {
 static void step_microros() {
   g_mr.init();
   g_mr.registerParticipant(&g_oled);
-  g_mr.beginThreaded(8192, 4);
+  g_mr.beginThreaded(8192, 4, 10);
   announce("+ micro-ROS manager");
 }
 

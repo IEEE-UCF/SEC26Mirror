@@ -15,15 +15,11 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <FastLED.h>
 #include "DebugLog.h"
 #include <mcu_msgs/msg/led_color.h>
 #include <microros_manager_robot.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -48,10 +44,10 @@ class LEDSubsystemSetup : public Classes::BaseSetup {
 };
 
 class LEDSubsystem : public IMicroRosParticipant,
-                     public Classes::BaseSubsystem {
+                     public Subsystem::RTOSSubsystem {
  public:
   explicit LEDSubsystem(const LEDSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override {
     num_leds_ =
@@ -73,16 +69,12 @@ class LEDSubsystem : public IMicroRosParticipant,
 
   void update() override {
     if (dirty_) {
-#ifdef USE_TEENSYTHREADS
       // WS2812B bit-bang requires precise timing (~1.25µs per bit).
       // A TeensyThreads context switch mid-show() corrupts the signal.
       // Briefly disable interrupts for the duration of show() (~30µs/LED).
       noInterrupts();
       FastLED.show();
       interrupts();
-#else
-      FastLED.show();
-#endif
       dirty_ = false;
     }
   }
@@ -133,25 +125,6 @@ class LEDSubsystem : public IMicroRosParticipant,
       dirty_ = true;
     }
   }
-
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 50) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<LEDSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 50;
-#endif
 
  private:
   static void ledCallback(const void* msg, void* ctx) {

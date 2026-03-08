@@ -64,9 +64,9 @@ void setup() {
 
   // 3. Start threads
   g_mr.beginThreaded(8192, 4, 10); // ROS agent (highest priority)
-  g_rc.beginThreaded(1024, 3, 5);  // IBUS polling @ 200 Hz
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  g_rc.beginThreaded(2048, 3, 5);  // IBUS polling @ 200 Hz
+  threads.addThread(print_task, nullptr, 2048);
+  threads.addThread(blink_task, nullptr, 1024);
 
   Serial.println(PSTR("setup(): RC test threads started."));
 }

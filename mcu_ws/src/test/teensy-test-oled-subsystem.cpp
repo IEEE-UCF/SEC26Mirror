@@ -179,7 +179,7 @@ static void step_microros() {
 static void step_heartbeat() {
   g_hb.init();
   g_mr.registerParticipant(&g_hb);
-  g_hb.beginThreaded(1024, 1, 200);
+  g_hb.beginThreaded(2048, 1, 200);
   announce("+ Heartbeat (5 Hz)");
 }
 
@@ -196,14 +196,14 @@ static void step_battery() {
   g_battery.init();
   g_battery.setOLED(&g_oled);
   g_mr.registerParticipant(&g_battery);
-  g_battery.beginThreaded(1024, 1, 100);
+  g_battery.beginThreaded(2048, 1, 100);
   announce("+ Battery (10 Hz)");
 }
 
 static void step_sensor() {
   g_sensor.init();
   g_mr.registerParticipant(&g_sensor);
-  g_sensor.beginThreaded(1024, 1, 100);
+  g_sensor.beginThreaded(2048, 1, 100);
   announce("+ Sensor/TOF (10 Hz)");
 }
 
@@ -217,13 +217,13 @@ static void step_imu() {
 static void step_rc() {
   g_rc.init();
   g_mr.registerParticipant(&g_rc);
-  g_rc.beginThreaded(1024, 3, 5);
+  g_rc.beginThreaded(2048, 3, 5);
   announce("+ RC (200 Hz, pri 3)");
 }
 
 static void step_pca9685() {
   g_pca_mgr.init();
-  threads.addThread(pca_task, nullptr, 1024);
+  threads.addThread(pca_task, nullptr, 2048);
   pca_thread_started = true;
   announce("+ PCA9685 flush (50 Hz)");
 }
@@ -231,28 +231,28 @@ static void step_pca9685() {
 static void step_servo() {
   g_servo.init();
   g_mr.registerParticipant(&g_servo);
-  g_servo.beginThreaded(1024, 2, 50);
+  g_servo.beginThreaded(2048, 2, 50);
   announce("+ Servo (20 Hz, pri 2)");
 }
 
 static void step_motor() {
   g_motor.init();
   g_mr.registerParticipant(&g_motor);
-  g_motor.beginThreaded(1024, 2, 50);
+  g_motor.beginThreaded(2048, 2, 50);
   announce("+ Motor (20 Hz, pri 2)");
 }
 
 static void step_dip_switch() {
   g_dip.init();
   g_mr.registerParticipant(&g_dip);
-  g_dip.beginThreaded(1024, 1, 500);
+  g_dip.beginThreaded(2048, 1, 500);
   announce("+ DipSwitch (2 Hz)");
 }
 
 static void step_button() {
   g_btn.init();
   g_mr.registerParticipant(&g_btn);
-  g_btn.beginThreaded(1024, 1, 20);
+  g_btn.beginThreaded(2048, 1, 20);
   announce("+ Button (50 Hz)");
 }
 
@@ -261,7 +261,7 @@ static void step_led() {
   g_led.setAll(0, 32, 0);
   FastLED.show();
   g_mr.registerParticipant(&g_led);
-  g_led.beginThreaded(1024, 1, 50);
+  g_led.beginThreaded(2048, 1, 50);
   announce("+ LED/WS2812B (20 Hz)");
 }
 

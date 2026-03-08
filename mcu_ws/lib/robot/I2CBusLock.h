@@ -1,10 +1,11 @@
 /**
  * @file I2CBusLock.h
- * @brief TeensyThreads mutex guards for the three I2C buses on Teensy 4.1.
+ * @brief RTOS mutex guards for the three I2C buses on Teensy 4.1.
  *
- * Uses Threads::Mutex from TeensyThreads — cooperative with the scheduler
- * and avoids a raw busy-wait.  Each bus has a dedicated mutex so Wire0,
- * Wire1, and Wire2 can be driven concurrently by separate tasks.
+ * Uses Threads::Mutex (FreeRTOS recursive mutex or TeensyThreads mutex)
+ * which is cooperative with the scheduler and avoids a raw busy-wait.
+ * Each bus has a dedicated mutex so Wire0, Wire1, and Wire2 can be
+ * driven concurrently by separate tasks.
  *
  * Hardware layout (Teensy 4.1):
  *   Wire  (Wire0) — TCA9548A mux, TCA9555 GPIO expander, INA219 (via mux)

@@ -108,9 +108,9 @@ void setup() {
 
   //                            stackSize  priority  rateMs
   g_mr.beginThreaded(8192, 4, 10);
-  g_battery.beginThreaded(1024, 1, 100);
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  g_battery.beginThreaded(2048, 1, 100);
+  threads.addThread(print_task, nullptr, 2048);
+  threads.addThread(blink_task, nullptr, 1024);
 
   Serial.println(PSTR("setup(): threads started."));
   Serial.flush();

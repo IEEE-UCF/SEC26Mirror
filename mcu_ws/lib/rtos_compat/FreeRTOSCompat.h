@@ -5,7 +5,7 @@
  *
  * This header lets all existing subsystem code compile unchanged when
  * switching from TeensyThreads to FreeRTOS.  It provides:
- *   - Threads::Mutex   (wraps FreeRTOS xSemaphoreCreateMutex)
+ *   - Threads::Mutex   (wraps FreeRTOS xSemaphoreCreateRecursiveMutex)
  *   - Threads::Scope   (RAII lock guard)
  *   - global `threads`  object with delay() and addThread()
  *
@@ -25,16 +25,16 @@ namespace Threads {
 
 class Mutex {
  public:
-  Mutex() : handle_(xSemaphoreCreateMutex()) {}
+  Mutex() : handle_(xSemaphoreCreateRecursiveMutex()) {}
   ~Mutex() {
     if (handle_) vSemaphoreDelete(handle_);
   }
 
   void lock() {
-    if (handle_) xSemaphoreTake(handle_, portMAX_DELAY);
+    if (handle_) xSemaphoreTakeRecursive(handle_, portMAX_DELAY);
   }
   void unlock() {
-    if (handle_) xSemaphoreGive(handle_);
+    if (handle_) xSemaphoreGiveRecursive(handle_);
   }
 
   Mutex(const Mutex&) = delete;

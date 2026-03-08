@@ -25,7 +25,7 @@ void ImuSubsystem::update() {
   setup_.driver_->update();
 
   // Cache yaw for cross-thread access (e.g., DriveSubsystem localization)
-  yaw_rad_ = setup_.driver_->getData().yaw;
+  yaw_rad_.store(setup_.driver_->getData().yaw, std::memory_order_relaxed);
 
   ++diag_update_count_;
   diag_last_update_ms_ = millis();

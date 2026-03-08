@@ -2,6 +2,7 @@
 
 #include <microros_manager_robot.h>
 
+#include "I2CBusLock.h"
 #include "Pose2D.h"
 #include "TimedSubsystem.h"
 #include "mcu_msgs/msg/mini_robot_state.h"
@@ -86,6 +87,7 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   // Micro-ROS Hooks (IMicroRosParticipant interface)
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   // Public Commands
   void startMission(float target_x, float target_y);
@@ -167,6 +169,11 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   rcl_publisher_t state_pub_{};
   mcu_msgs__msg__MiniRobotState state_msg_{};
   rcl_node_t* node_ = nullptr;
+
+  // Deferred publishing — update() fills msg under data_mutex_, publishAll()
+  // publishes under g_microros_mutex.
+  bool data_ready_ = false;
+  Threads::Mutex data_mutex_;
 
   // Diagnostics Slop
   uint32_t mission_count_ = 0;

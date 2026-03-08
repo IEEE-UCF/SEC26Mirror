@@ -13,6 +13,7 @@
 #include <RTOSSubsystem.h>
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
+#include <atomic>
 
 namespace Subsystem {
 
@@ -42,8 +43,8 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   void publishData();
 
-  /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (atomic float read). */
-  float getYaw() const { return yaw_rad_; }
+  /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (std::atomic). */
+  float getYaw() const { return yaw_rad_.load(std::memory_order_relaxed); }
 
  private:
   void initCovariances();
@@ -52,7 +53,7 @@ class ImuSubsystem : public IMicroRosParticipant,
   rcl_publisher_t pub_{};
   sensor_msgs__msg__Imu msg_{};
   rcl_node_t* node_ = nullptr;
-  float yaw_rad_ = 0.0f;
+  std::atomic<float> yaw_rad_{0.0f};
 
   // Orientation covariance (BNO085 Game Rotation Vector: ~2 deg accuracy)
   static constexpr double kOrientationVariance = 0.001;

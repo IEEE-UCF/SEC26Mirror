@@ -88,7 +88,7 @@ void MicrorosManager::destroy_entities() {
 #ifdef MICRO_ROS_TRANSPORT_ARDUINO_SERIAL
   Serial.flush();
   while (Serial.available()) Serial.read();
-  delay(100);
+  vTaskDelay(pdMS_TO_TICKS(100));
 #endif
 }
 

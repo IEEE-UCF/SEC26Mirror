@@ -25,7 +25,11 @@
 
 #pragma once
 
+#if defined(USE_FREERTOS)
+#include "FreeRTOSCompat.h"
+#elif defined(USE_TEENSYTHREADS)
 #include <TeensyThreads.h>
+#endif
 #include <Wire.h>
 
 namespace I2CBus {

@@ -15,7 +15,9 @@
 #include <rclc/rclc.h>
 #include <stdio.h>
 
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
+#include "FreeRTOSCompat.h"
+#elif defined(USE_TEENSYTHREADS)
 #include <TeensyThreads.h>
 #endif
 
@@ -100,7 +102,7 @@ class UWBSubsystem : public IMicroRosParticipant,
   uint8_t num_peer_pubs_ = 0;
 
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
   Threads::Mutex data_mutex_;
 #endif
 };

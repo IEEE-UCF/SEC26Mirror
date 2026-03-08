@@ -19,7 +19,7 @@
 #include <Arduino.h>
 #include <I2CBusLock.h>
 #include <I2CMuxDriver.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 #include <robot/subsystems/BatterySubsystem.h>
 

@@ -76,7 +76,7 @@
 #endif
 
 #include <SPI.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 // Debug logging (routed to SerialUSB1 when SERIAL_DEBUG is defined)

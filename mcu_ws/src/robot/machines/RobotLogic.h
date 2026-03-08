@@ -2,7 +2,7 @@
  * @file RobotLogic.h
  * @date 12/16/25
  * @author Aldem Pido
- * @brief Main logic for the SEC26 robot — TeensyThreads-based scheduling.
+ * @brief Main logic for the SEC26 robot — FreeRTOS-based scheduling.
  *
  * I2C bus layout:
  *   Wire  (Wire0) — TCA9548A mux (0x70), TCA9555 GPIO expander (0x20),
@@ -308,7 +308,7 @@ void setup() {
     DEBUG_FLUSH();
   }
 
-  Serial.println(PSTR("\r\nSEC26 Robot — TeensyThreads\r\n"));
+  Serial.println(PSTR("\r\nSEC26 Robot — FreeRTOS\r\n"));
   DEBUG_PRINTLN("\r\n=== SEC26 Robot — Debug Console (SerialUSB1) ===\r\n");
 
   // 0. I2C bus mutexes

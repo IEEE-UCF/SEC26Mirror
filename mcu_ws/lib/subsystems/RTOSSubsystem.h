@@ -3,8 +3,8 @@
  * @brief RTOS-threaded subsystem base class — single beginThreaded()
  *        implementation via virtual dispatch, plus polling sub-timers.
  *
- * This is the FreeRTOS migration shim.  Currently backed by TeensyThreads
- * (USE_TEENSYTHREADS); Step 2 will swap to xTaskCreateStatic.
+ * FreeRTOS backend (USE_FREERTOS) uses xTaskCreate / vTaskDelay.
+ * TeensyThreads backend (USE_TEENSYTHREADS) kept for backward compatibility.
  */
 #pragma once
 
@@ -12,7 +12,9 @@
 #include <BaseSubsystem.h>
 #include <elapsedMillis.h>
 
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
+#include "FreeRTOSCompat.h"
+#elif defined(USE_TEENSYTHREADS)
 #include <TeensyThreads.h>
 #endif
 
@@ -23,7 +25,27 @@ class RTOSSubsystem : public Classes::BaseSubsystem {
   explicit RTOSSubsystem(const Classes::BaseSetup& setup)
       : Classes::BaseSubsystem(setup) {}
 
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
+  void beginThreaded(uint32_t stackSize, int priority = 1,
+                     uint32_t updateRateMs = 20) {
+    task_delay_ms_ = updateRateMs;
+    // FreeRTOS stack depth is in words (4 bytes); callers pass bytes.
+    xTaskCreate(taskFunction, getInfo(), stackSize / 4,
+                static_cast<void*>(this), priority, nullptr);
+  }
+
+ private:
+  static void taskFunction(void* pv) {
+    auto* self = static_cast<RTOSSubsystem*>(pv);
+    self->begin();   // virtual dispatch
+    while (true) {
+      self->update();  // virtual dispatch
+      vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+  uint32_t task_delay_ms_ = 20;
+
+#elif defined(USE_TEENSYTHREADS)
   void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;

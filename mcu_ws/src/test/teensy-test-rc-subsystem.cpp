@@ -14,7 +14,7 @@
  */
 
 #include <Arduino.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include "robot/RobotPins.h"

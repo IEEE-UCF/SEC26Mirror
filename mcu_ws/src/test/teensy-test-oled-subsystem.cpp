@@ -12,7 +12,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include "robot/RobotConstants.h"

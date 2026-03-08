@@ -22,12 +22,14 @@ bool TCA9555Driver::writeReg(uint8_t reg, uint8_t value) {
   return setup_.wire_.endTransmission() == 0;
 }
 
-uint8_t TCA9555Driver::readReg(uint8_t reg) {
+bool TCA9555Driver::readReg(uint8_t reg, uint8_t* value) {
   setup_.wire_.beginTransmission(setup_.address_);
   setup_.wire_.write(reg);
-  setup_.wire_.endTransmission(false);  // repeated start
-  setup_.wire_.requestFrom(setup_.address_, static_cast<uint8_t>(1));
-  return setup_.wire_.available() ? setup_.wire_.read() : 0x00;
+  if (setup_.wire_.endTransmission(false) != 0) return false;
+  if (setup_.wire_.requestFrom(setup_.address_, static_cast<uint8_t>(1)) == 0)
+    return false;
+  *value = setup_.wire_.read();
+  return true;
 }
 
 // ── Lifecycle
@@ -50,8 +52,11 @@ bool TCA9555Driver::init() {
 void TCA9555Driver::update() {
   I2CBus::Lock lock(setup_.wire_);
   __disable_irq();
-  data_.inputPort0 = readReg(REG_INPUT0);
-  data_.inputPort1 = readReg(REG_INPUT1);
+  uint8_t p0, p1;
+  if (readReg(REG_INPUT0, &p0) && readReg(REG_INPUT1, &p1)) {
+    data_.inputPort0 = p0;
+    data_.inputPort1 = p1;
+  }
   __enable_irq();
 }
 

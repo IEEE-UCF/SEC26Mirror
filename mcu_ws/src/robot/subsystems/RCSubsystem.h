@@ -78,10 +78,11 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   const RCSubsystemData& getData() const { return data_; }
 
 #ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
+  void beginThreaded(uint32_t stackSize, int priority = 1,
                      uint32_t updateRateMs = 5) {
     task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
+    int id = threads.addThread(taskFunction, this, stackSize);
+    threads.setTimeSlice(id, priority);
   }
 
  private:

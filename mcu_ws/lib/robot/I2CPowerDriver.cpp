@@ -35,6 +35,7 @@ bool I2CPowerDriver::init() {
 void I2CPowerDriver::update() {
   if (!initSuccess_) return;
   I2CBus::Lock lock(_setup._wire);
+  __disable_irq();
 
   if (_setup._mux != nullptr) {
     _setup._mux->selectChannel(_setup._muxChannel);
@@ -42,6 +43,8 @@ void I2CPowerDriver::update() {
 
   _data.shuntVoltagemV = _sensor.getShuntVoltage_mV();
   _data.busVoltage = _sensor.getBusVoltage_V();
+
+  __enable_irq();
 
   // Derive current and power from raw shunt voltage so the result is correct
   // for any shunt resistor, not just the 0.1 Ω assumed by the library.

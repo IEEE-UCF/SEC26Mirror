@@ -43,7 +43,10 @@ bool ImuSubsystem::init() {
 void ImuSubsystem::update() {
   if (!setup_.driver_) return;
 
+  uint32_t t0 = micros();
   setup_.driver_->update();
+  uint32_t t_drv = micros();
+  DEBUG_PRINTF("[IMU] driver->update() took %lu us\n", t_drv - t0);
 
   // Cache yaw for cross-thread access (e.g., DriveSubsystem localization)
   yaw_rad_ = setup_.driver_->getData().yaw;
@@ -56,9 +59,13 @@ void ImuSubsystem::update() {
   // Populate message under data_mutex_ for deferred publishing
 #ifdef USE_TEENSYTHREADS
   {
+    uint32_t t_m0 = micros();
     Threads::Scope lock(data_mutex_);
+    uint32_t t_m1 = micros();
     publishData();
     data_ready_ = true;
+    DEBUG_PRINTF("[IMU] data_mutex + publishData took %lu us (lock wait %lu us)\n",
+                 micros() - t_m0, t_m1 - t_m0);
   }
 #else
   publishData();

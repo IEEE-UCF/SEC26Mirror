@@ -14,6 +14,7 @@
 #include <cmath>
 #include <mcu_msgs/msg/drive_base.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 
 namespace secbot {
 
@@ -26,11 +27,13 @@ class DriveTestNode : public rclcpp::Node {
   void sendGoal(double x, double y, double theta);
   void stopRobot();
   void onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg);
+  void onImu(const sensor_msgs::msg::Imu::SharedPtr msg);
   void logPose(const char* label);
   bool reachedGoal();
 
   enum class Phase : uint8_t {
     WAIT_FOR_STATUS,
+    GYRO_CALIBRATE,
     GOAL_FORWARD,
     PAUSE_AFTER_FORWARD,
     GOAL_BACKWARD,
@@ -73,9 +76,20 @@ class DriveTestNode : public rclcpp::Node {
   double origin_y_ = 0.0;
   double origin_theta_ = 0.0;
 
+  // Gyro offset calibration
+  double gyro_sum_x_ = 0.0;
+  double gyro_sum_y_ = 0.0;
+  double gyro_sum_z_ = 0.0;
+  double gyro_min_x_ = 1e9, gyro_max_x_ = -1e9;
+  double gyro_min_y_ = 1e9, gyro_max_y_ = -1e9;
+  double gyro_min_z_ = 1e9, gyro_max_z_ = -1e9;
+  int gyro_samples_ = 0;
+  double calibrate_time_;
+
   rclcpp::TimerBase::SharedPtr tick_timer_;
   rclcpp::Publisher<mcu_msgs::msg::DriveBase>::SharedPtr drive_cmd_pub_;
   rclcpp::Subscription<mcu_msgs::msg::DriveBase>::SharedPtr drive_status_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
 };
 
 }  // namespace secbot

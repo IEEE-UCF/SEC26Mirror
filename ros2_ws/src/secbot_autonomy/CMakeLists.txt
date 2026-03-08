@@ -14,6 +14,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(secbot_msgs REQUIRED)
 find_package(mcu_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -81,6 +82,7 @@ add_executable(drive_test_node
 ament_target_dependencies(drive_test_node
   rclcpp
   mcu_msgs
+  sensor_msgs
 )
 
 # Install targets

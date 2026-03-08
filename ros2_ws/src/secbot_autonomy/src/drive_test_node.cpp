@@ -42,6 +42,7 @@ DriveTestNode::DriveTestNode() : Node("drive_test_node") {
   this->declare_parameter("pause_time", 1.0);
   this->declare_parameter("goal_tolerance", 0.03);
   this->declare_parameter("goal_timeout", 10.0);
+  this->declare_parameter("calibrate_time", 3.0);
 
   distance_ = this->get_parameter("distance").as_double();
   turn_angle_ = this->get_parameter("turn_angle").as_double();
@@ -50,6 +51,7 @@ DriveTestNode::DriveTestNode() : Node("drive_test_node") {
   pause_time_ = this->get_parameter("pause_time").as_double();
   goal_tolerance_ = this->get_parameter("goal_tolerance").as_double();
   goal_timeout_ = this->get_parameter("goal_timeout").as_double();
+  calibrate_time_ = this->get_parameter("calibrate_time").as_double();
 
   drive_cmd_pub_ =
       this->create_publisher<mcu_msgs::msg::DriveBase>("drive_base/command", 10);
@@ -57,6 +59,10 @@ DriveTestNode::DriveTestNode() : Node("drive_test_node") {
   drive_status_sub_ = this->create_subscription<mcu_msgs::msg::DriveBase>(
       "drive_base/status", rclcpp::SensorDataQoS(),
       std::bind(&DriveTestNode::onDriveStatus, this, _1));
+
+  imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+      "/mcu_robot/imu/data", rclcpp::SensorDataQoS(),
+      std::bind(&DriveTestNode::onImu, this, _1));
 
   tick_timer_ = this->create_wall_timer(100ms, std::bind(&DriveTestNode::tick, this));
 
@@ -106,6 +112,23 @@ void DriveTestNode::onDriveStatus(
   robot_vx_ = msg->twist.linear.x;
   robot_omega_ = msg->twist.angular.z;
   has_status_ = true;
+}
+
+void DriveTestNode::onImu(const sensor_msgs::msg::Imu::SharedPtr msg) {
+  if (phase_ != Phase::GYRO_CALIBRATE) return;
+  double gx = msg->angular_velocity.x;
+  double gy = msg->angular_velocity.y;
+  double gz = msg->angular_velocity.z;
+  gyro_sum_x_ += gx;
+  gyro_sum_y_ += gy;
+  gyro_sum_z_ += gz;
+  if (gx < gyro_min_x_) gyro_min_x_ = gx;
+  if (gx > gyro_max_x_) gyro_max_x_ = gx;
+  if (gy < gyro_min_y_) gyro_min_y_ = gy;
+  if (gy > gyro_max_y_) gyro_max_y_ = gy;
+  if (gz < gyro_min_z_) gyro_min_z_ = gz;
+  if (gz > gyro_max_z_) gyro_max_z_ = gz;
+  gyro_samples_++;
 }
 
 void DriveTestNode::sendGoal(double x, double y, double theta) {
@@ -168,6 +191,56 @@ void DriveTestNode::tick() {
       origin_theta_ = robot_theta_;
       RCLCPP_INFO(this->get_logger(), "Got status, recording origin");
       logPose("ORIGIN");
+
+      RCLCPP_INFO(this->get_logger(),
+                  "Measuring gyro offset for %.1fs, keep robot still...",
+                  calibrate_time_);
+      gyro_sum_x_ = gyro_sum_y_ = gyro_sum_z_ = 0.0;
+      gyro_min_x_ = gyro_min_y_ = gyro_min_z_ = 1e9;
+      gyro_max_x_ = gyro_max_y_ = gyro_max_z_ = -1e9;
+      gyro_samples_ = 0;
+      enterPhase(Phase::GYRO_CALIBRATE);
+      break;
+    }
+
+    case Phase::GYRO_CALIBRATE: {
+      if (elapsed < calibrate_time_) return;
+
+      RCLCPP_INFO(this->get_logger(),
+                  "========== Gyro Offset Results ==========");
+      if (gyro_samples_ == 0) {
+        RCLCPP_WARN(this->get_logger(),
+                    "  No IMU samples received on /mcu_robot/imu/data");
+      } else {
+        double avg_x = gyro_sum_x_ / gyro_samples_;
+        double avg_y = gyro_sum_y_ / gyro_samples_;
+        double avg_z = gyro_sum_z_ / gyro_samples_;
+        double range_x = gyro_max_x_ - gyro_min_x_;
+        double range_y = gyro_max_y_ - gyro_min_y_;
+        double range_z = gyro_max_z_ - gyro_min_z_;
+        RCLCPP_INFO(this->get_logger(), "  Samples:  %d (%.0f Hz)",
+                    gyro_samples_, gyro_samples_ / calibrate_time_);
+        RCLCPP_INFO(this->get_logger(),
+                    "  Avg X:    %+.6f rad/s (%+.4f deg/s)", avg_x,
+                    avg_x * 180.0 / M_PI);
+        RCLCPP_INFO(this->get_logger(),
+                    "  Avg Y:    %+.6f rad/s (%+.4f deg/s)", avg_y,
+                    avg_y * 180.0 / M_PI);
+        RCLCPP_INFO(this->get_logger(),
+                    "  Avg Z:    %+.6f rad/s (%+.4f deg/s)", avg_z,
+                    avg_z * 180.0 / M_PI);
+        RCLCPP_INFO(this->get_logger(),
+                    "  Range X:  %.6f rad/s (noise)", range_x);
+        RCLCPP_INFO(this->get_logger(),
+                    "  Range Y:  %.6f rad/s (noise)", range_y);
+        RCLCPP_INFO(this->get_logger(),
+                    "  Range Z:  %.6f rad/s (noise)", range_z);
+        double drift_deg_per_min = avg_z * 180.0 / M_PI * 60.0;
+        RCLCPP_INFO(this->get_logger(),
+                    "  Z drift:  %+.2f deg/min (yaw bias)", drift_deg_per_min);
+      }
+      RCLCPP_INFO(this->get_logger(),
+                  "=========================================");
 
       cycle_ = 1;
       RCLCPP_INFO(this->get_logger(), "--- Cycle %d ---", cycle_);

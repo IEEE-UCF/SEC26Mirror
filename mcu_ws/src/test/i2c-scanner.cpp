@@ -12,6 +12,9 @@
 #define WIRE_INTERFACES_COUNT 1
 #endif
 
+void scan(TwoWire &myport);
+void printKnownChips(byte address);
+
 void setup() {
   // pinMode(45, OUTPUT);
   // digitalWriteFast(45, HIGH);

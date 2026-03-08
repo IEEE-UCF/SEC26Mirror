@@ -24,12 +24,14 @@ bool TCA9555Driver::writeReg(uint8_t reg, uint8_t value) {
   return setup_.wire_.endTransmission() == 0;
 }
 
-uint8_t TCA9555Driver::readReg(uint8_t reg) {
+bool TCA9555Driver::readReg(uint8_t reg, uint8_t* value) {
   setup_.wire_.beginTransmission(setup_.address_);
   setup_.wire_.write(reg);
-  setup_.wire_.endTransmission(false);  // repeated start
-  setup_.wire_.requestFrom(setup_.address_, static_cast<uint8_t>(1));
-  return setup_.wire_.available() ? setup_.wire_.read() : 0x00;
+  if (setup_.wire_.endTransmission(false) != 0) return false;
+  if (setup_.wire_.requestFrom(setup_.address_, static_cast<uint8_t>(1)) == 0)
+    return false;
+  *value = setup_.wire_.read();
+  return true;
 }
 
 // ── Lifecycle
@@ -52,8 +54,13 @@ bool TCA9555Driver::init() {
 void TCA9555Driver::update() {
   if (dma_bus_) return;  // DMA mode: data updated by processDMAResults()
   I2CBus::Lock lock(setup_.wire_);
-  data_.inputPort0 = readReg(REG_INPUT0);
-  data_.inputPort1 = readReg(REG_INPUT1);
+  __disable_irq();
+  uint8_t p0, p1;
+  if (readReg(REG_INPUT0, &p0) && readReg(REG_INPUT1, &p1)) {
+    data_.inputPort0 = p0;
+    data_.inputPort1 = p1;
+  }
+  __enable_irq();
 }
 
 // ── DMA support ──────────────────────────────────────────────────────────
@@ -81,41 +88,49 @@ const char* TCA9555Driver::getInfo() {
 bool TCA9555Driver::pinMode(uint8_t pin, uint8_t mode) {
   if (pin > 15) return false;
   I2CBus::Lock lock(setup_.wire_);
+  __disable_irq();
 
+  bool result;
   if (pin < 8) {
     if (mode == OUTPUT)
       data_.configPort0 &= ~(1 << pin);
     else
       data_.configPort0 |= (1 << pin);
-    return writeReg(REG_CONFIG0, data_.configPort0);
+    result = writeReg(REG_CONFIG0, data_.configPort0);
   } else {
     uint8_t bit = pin - 8;
     if (mode == OUTPUT)
       data_.configPort1 &= ~(1 << bit);
     else
       data_.configPort1 |= (1 << bit);
-    return writeReg(REG_CONFIG1, data_.configPort1);
+    result = writeReg(REG_CONFIG1, data_.configPort1);
   }
+  __enable_irq();
+  return result;
 }
 
 bool TCA9555Driver::digitalWrite(uint8_t pin, bool val) {
   if (pin > 15) return false;
   I2CBus::Lock lock(setup_.wire_);
+  __disable_irq();
 
+  bool result;
   if (pin < 8) {
     if (val)
       data_.outputPort0 |= (1 << pin);
     else
       data_.outputPort0 &= ~(1 << pin);
-    return writeReg(REG_OUTPUT0, data_.outputPort0);
+    result = writeReg(REG_OUTPUT0, data_.outputPort0);
   } else {
     uint8_t bit = pin - 8;
     if (val)
       data_.outputPort1 |= (1 << bit);
     else
       data_.outputPort1 &= ~(1 << bit);
-    return writeReg(REG_OUTPUT1, data_.outputPort1);
+    result = writeReg(REG_OUTPUT1, data_.outputPort1);
   }
+  __enable_irq();
+  return result;
 }
 
 bool TCA9555Driver::digitalRead(uint8_t pin) const {
@@ -128,15 +143,17 @@ bool TCA9555Driver::digitalRead(uint8_t pin) const {
 
 bool TCA9555Driver::writePort(uint8_t port, uint8_t value) {
   I2CBus::Lock lock(setup_.wire_);
+  __disable_irq();
+  bool result = false;
   if (port == 0) {
     data_.outputPort0 = value;
-    return writeReg(REG_OUTPUT0, value);
-  }
-  if (port == 1) {
+    result = writeReg(REG_OUTPUT0, value);
+  } else if (port == 1) {
     data_.outputPort1 = value;
-    return writeReg(REG_OUTPUT1, value);
+    result = writeReg(REG_OUTPUT1, value);
   }
-  return false;
+  __enable_irq();
+  return result;
 }
 
 uint8_t TCA9555Driver::readPort(uint8_t port) const {
@@ -147,15 +164,17 @@ uint8_t TCA9555Driver::readPort(uint8_t port) const {
 
 bool TCA9555Driver::configurePort(uint8_t port, uint8_t mask) {
   I2CBus::Lock lock(setup_.wire_);
+  __disable_irq();
+  bool result = false;
   if (port == 0) {
     data_.configPort0 = mask;
-    return writeReg(REG_CONFIG0, mask);
-  }
-  if (port == 1) {
+    result = writeReg(REG_CONFIG0, mask);
+  } else if (port == 1) {
     data_.configPort1 = mask;
-    return writeReg(REG_CONFIG1, mask);
+    result = writeReg(REG_CONFIG1, mask);
   }
-  return false;
+  __enable_irq();
+  return result;
 }
 
 }  // namespace Drivers

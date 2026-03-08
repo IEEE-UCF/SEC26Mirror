@@ -79,7 +79,6 @@ class UWBPositioningNode : public rclcpp::Node {
 
   // UWB status service
   rclcpp::Service<mcu_msgs::srv::UWBCalibrationStatus>::SharedPtr status_srv_;
-  float calibration_residual_;
   uwb_state_t current_state_ = WAITING;
   std::map<std::pair<int, int>, std::vector<double>> calibration_samples_;
   std::map<int, std::array<double, 3>> calibrated_positions_;

@@ -64,7 +64,6 @@ UWBPositioningNode::UWBPositioningNode()
         response->beacon_12 = {calibrated_positions_[12][0],
                                calibrated_positions_[12][1],
                                calibrated_positions_[12][2]};
-        response->calibration_error = calibration_residual_;
       });
 
   logConfiguration();

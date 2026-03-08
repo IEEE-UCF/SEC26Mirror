@@ -8,6 +8,3 @@ uint8 state
 float32[3] beacon_10
 float32[3] beacon_11
 float32[3] beacon_12
-
-# Residual error of triangle
-float32 calibration_error

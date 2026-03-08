@@ -2,7 +2,7 @@
  * @file I2CBusLock.h
  * @brief RTOS mutex guards for the three I2C buses on Teensy 4.1.
  *
- * Uses Threads::Mutex (FreeRTOS recursive mutex or TeensyThreads mutex)
+ * Uses Threads::Mutex (FreeRTOS recursive mutex via FreeRTOSCompat shim)
  * which is cooperative with the scheduler and avoids a raw busy-wait.
  * Each bus has a dedicated mutex so Wire0, Wire1, and Wire2 can be
  * driven concurrently by separate tasks.
@@ -28,16 +28,16 @@
 
 #if defined(USE_FREERTOS)
 #include "FreeRTOSCompat.h"
-#elif defined(USE_TEENSYTHREADS)
-#include <TeensyThreads.h>
 #endif
 #include <Wire.h>
 
 namespace I2CBus {
 
-extern Threads::Mutex wire0;  ///< Wire  — TCA9548A, TCA9555, INA219
-extern Threads::Mutex wire1;  ///< Wire1 — BNO085
+extern Threads::Mutex wire0;  ///< Wire  (Wire0)
+extern Threads::Mutex wire1;  ///< Wire1
+#if defined(__IMXRT1062__)     // Teensy 4.x has 3 I2C buses
 extern Threads::Mutex wire2;  ///< Wire2 — PCA9685 #1 & #2
+#endif
 
 /// No-op: Threads::Mutex is self-initialising. Kept so existing call sites
 /// compile.

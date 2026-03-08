@@ -17,8 +17,6 @@
 
 #if defined(USE_FREERTOS)
 #include "FreeRTOSCompat.h"
-#elif defined(USE_TEENSYTHREADS)
-#include <TeensyThreads.h>
 #endif
 
 #include "TimedSubsystem.h"
@@ -102,7 +100,7 @@ class UWBSubsystem : public IMicroRosParticipant,
   uint8_t num_peer_pubs_ = 0;
 
   bool data_ready_ = false;
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
   Threads::Mutex data_mutex_;
 #endif
 };

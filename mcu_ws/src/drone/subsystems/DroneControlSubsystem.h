@@ -24,10 +24,10 @@ struct PIDState {
 
 //  Motor pin config
 struct MotorConfig {
-  uint8_t pin_fl = 12;          // front left (CCW)
-  uint8_t pin_fr = 13;          // front right (CW)
-  uint8_t pin_rr = 14;          // rear right (CCW)
-  uint8_t pin_rl = 15;          // rear left (CW)
+  uint8_t pin_fl = 0;           // front left (CCW)
+  uint8_t pin_fr = 1;           // front right (CW)  — NOTE: GPIO 1 is UART0 TX
+  uint8_t pin_rr = 2;           // rear right (CCW)
+  uint8_t pin_rl = 3;           // rear left (CW)
   uint32_t pwm_freq = 20000;    // Hz
   uint8_t pwm_resolution = 10;  // bits (0-1023)
 };

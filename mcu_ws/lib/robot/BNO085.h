@@ -15,7 +15,17 @@
 #include <BaseDriver.h>
 #include <Wire.h>
 
+#if defined(USE_FREERTOS)
 #include "I2CBusLock.h"
+#endif
+
+// digitalWriteFast / digitalReadFast — Teensy-specific; fall back to standard on ESP32
+#ifndef digitalWriteFast
+#define digitalWriteFast(pin, val) digitalWrite(pin, val)
+#endif
+#ifndef digitalReadFast
+#define digitalReadFast(pin) digitalRead(pin)
+#endif
 
 namespace Drivers {
 
@@ -33,17 +43,26 @@ class BNO085DriverSetup : public Classes::BaseSetup {
    *                  connected.
    */
   BNO085DriverSetup(const char* _id, int8_t _pin = -1, TwoWire& wire = Wire1,
-                    uint8_t addr = 0x4B, int8_t int_pin = -1)
+                    uint8_t addr = 0x4B, int8_t int_pin = -1,
+                    bool enable_gyro = false,
+                    uint32_t rotation_report_us = 20000,
+                    uint32_t gyro_report_us = 2500)
       : Classes::BaseSetup(_id),
         reset_pin(_pin),
         wire_(wire),
         addr_(addr),
-        int_pin_(int_pin) {}
+        int_pin_(int_pin),
+        enable_gyro_(enable_gyro),
+        rotation_report_us_(rotation_report_us),
+        gyro_report_us_(gyro_report_us) {}
 
   const int8_t reset_pin;
   TwoWire& wire_;
   uint8_t addr_;
   int8_t int_pin_;
+  bool enable_gyro_;                 ///< Also enable calibrated gyro reports
+  uint32_t rotation_report_us_;      ///< Game Rotation Vector report interval
+  uint32_t gyro_report_us_;          ///< Gyro report interval (if enabled)
 };
 
 struct BNO085DriverData {
@@ -51,7 +70,7 @@ struct BNO085DriverData {
   float accel_y = 0.0f;
   float accel_z = 0.0f;
 
-  float gyro_x = 0.0f;
+  float gyro_x = 0.0f;  ///< Calibrated gyro rate (rad/s)
   float gyro_y = 0.0f;
   float gyro_z = 0.0f;
 
@@ -60,7 +79,9 @@ struct BNO085DriverData {
   float qz = 0.0f;
   float qw = 0.0f;
 
-  float yaw = 0.0f;
+  float roll = 0.0f;   ///< Euler roll (radians)
+  float pitch = 0.0f;  ///< Euler pitch (radians)
+  float yaw = 0.0f;    ///< Euler yaw (radians)
 };
 
 class BNO085Driver : public Classes::BaseDriver {

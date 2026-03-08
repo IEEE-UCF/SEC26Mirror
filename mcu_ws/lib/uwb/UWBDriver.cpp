@@ -575,11 +575,11 @@ void UWBDriver::dw3000ForceIdle() {
   // Required before inter-beacon TX because standardRX() leaves the chip in
   // RX mode and TXInstantRX() (0x0C) needs IDLE state to succeed.
   SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-  digitalWrite(CHIP_SELECT_PIN, LOW);
+  digitalWrite(setup_.cs_pin, LOW);
   delayMicroseconds(1);
   SPI.transfer(0x81);
   delayMicroseconds(1);
-  digitalWrite(CHIP_SELECT_PIN, HIGH);
+  digitalWrite(setup_.cs_pin, HIGH);
   SPI.endTransaction();
   delayMicroseconds(10);
 }

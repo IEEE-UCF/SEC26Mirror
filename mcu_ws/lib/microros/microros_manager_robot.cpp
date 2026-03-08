@@ -6,7 +6,7 @@
 #include <micro_ros_utilities/type_utilities.h>
 #include <uxr/client/util/time.h>
 
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
 Threads::Mutex g_microros_mutex;
 #endif
 
@@ -107,7 +107,7 @@ void MicrorosManager::begin() {
 }
 
 void MicrorosManager::update() {
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
   Threads::Scope guard(g_microros_mutex);
 #else
   std::lock_guard<std::mutex> guard(mutex_);
@@ -183,7 +183,7 @@ void MicrorosManager::registerParticipant(IMicroRosParticipant* participant) {
   }
 }
 
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
 Threads::Mutex& MicrorosManager::getMutex() { return mutex_; }
 #else
 std::mutex& MicrorosManager::getMutex() { return mutex_; }
@@ -194,7 +194,7 @@ bool MicrorosManager::isConnected() const { return state_ == AGENT_CONNECTED; }
 void MicrorosManager::debugLog(const char* text) {
   if (!debug_pub_.impl || state_ != AGENT_CONNECTED) return;
   debug_msg_.data = micro_ros_string_utilities_set(debug_msg_.data, text);
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
   {
     Threads::Scope guard(g_microros_mutex);
     (void)rcl_publish(&debug_pub_, &debug_msg_, NULL);

@@ -15,6 +15,10 @@
 #include <std_msgs/msg/string.h>
 #include <uxr/client/util/time.h>
 
+#if defined(USE_FREERTOS)
+#include "FreeRTOSCompat.h"
+#endif
+
 namespace Subsystem {
 
 class HeartbeatSubsystemSetup : public Classes::BaseSetup {
@@ -32,8 +36,12 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   void begin() override {}
   void update() override {
     if (!pub_.impl) return;
+#if defined(USE_FREERTOS)
     Threads::Scope lock(data_mutex_);
     data_ready_ = true;
+#else
+    (void)rcl_publish(&pub_, &msg_, NULL);
+#endif
   }
   void pause() override {}
   void reset() override { pause(); }
@@ -67,10 +75,12 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
 
  public:
   void publishAll() override {
+#if defined(USE_FREERTOS)
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &msg_, NULL);
     data_ready_ = false;
+#endif
   }
 
  private:
@@ -79,7 +89,9 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
   std_msgs__msg__String msg_{};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
+#if defined(USE_FREERTOS)
   Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

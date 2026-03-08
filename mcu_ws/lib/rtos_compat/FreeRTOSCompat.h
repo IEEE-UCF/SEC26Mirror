@@ -15,8 +15,14 @@
 
 #ifdef USE_FREERTOS
 
+#if defined(__IMXRT1062__)  // Teensy 4.x — FreeRTOS via freertos-teensy library
 #include "arduino_freertos.h"
 #include "semphr.h"
+#else  // ESP32 and other platforms — FreeRTOS is native
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#endif
 
 // ---------------------------------------------------------------------------
 //  Threads::Mutex  /  Threads::Scope  — API-compatible with TeensyThreads
@@ -75,8 +81,13 @@ struct ThreadsCompat {
   TaskHandle_t addThread(void (*fn)(void*), void* arg = nullptr,
                          uint32_t stackBytes = 1024) {
     TaskHandle_t handle = nullptr;
-    // FreeRTOS stack depth is in words (4 bytes on Cortex-M7)
-    xTaskCreate(reinterpret_cast<TaskFunction_t>(fn), "task", stackBytes / 4,
+    // Teensy FreeRTOS: stack depth in words (4 bytes); ESP32: bytes.
+#if defined(__IMXRT1062__)
+    const uint32_t depth = stackBytes / 4;
+#else
+    const uint32_t depth = stackBytes;
+#endif
+    xTaskCreate(reinterpret_cast<TaskFunction_t>(fn), "task", depth,
                 arg, 1, &handle);
     return handle;
   }

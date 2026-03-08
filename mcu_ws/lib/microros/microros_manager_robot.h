@@ -20,8 +20,6 @@
 
 #if defined(USE_FREERTOS)
 #include "FreeRTOSCompat.h"
-#elif defined(USE_TEENSYTHREADS)
-#include <TeensyThreads.h>
 #else
 #include <mutex>
 #endif
@@ -86,7 +84,7 @@ class MicrorosManager : public Subsystem::RTOSSubsystem {
 
 
   // Mutex for thread-safe access to the executor
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
   Threads::Mutex& getMutex();
 #else
   std::mutex& getMutex();
@@ -133,7 +131,7 @@ class MicrorosManager : public Subsystem::RTOSSubsystem {
   } state_;
 
   static MicrorosManager* s_instance_;
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
   Threads::Mutex mutex_;
 #else
   std::mutex mutex_;
@@ -155,7 +153,7 @@ class MicrorosManager : public Subsystem::RTOSSubsystem {
 // The XRCE-DDS session is NOT thread-safe: concurrent rcl_publish, ping,
 // and executor-spin calls corrupt the serial stream.  All code that touches
 // the session must hold this mutex.
-#if defined(USE_FREERTOS) || defined(USE_TEENSYTHREADS)
+#if defined(USE_FREERTOS)
 extern Threads::Mutex g_microros_mutex;
 #endif
 

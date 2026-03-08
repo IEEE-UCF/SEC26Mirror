@@ -4,7 +4,6 @@
  *        implementation via virtual dispatch, plus polling sub-timers.
  *
  * FreeRTOS backend (USE_FREERTOS) uses xTaskCreate / vTaskDelay.
- * TeensyThreads backend (USE_TEENSYTHREADS) kept for backward compatibility.
  */
 #pragma once
 
@@ -14,8 +13,13 @@
 
 #if defined(USE_FREERTOS)
 #include "FreeRTOSCompat.h"
-#elif defined(USE_TEENSYTHREADS)
-#include <TeensyThreads.h>
+#endif
+
+// Debug serial: Teensy has dual USB serial (SerialUSB1 for debug); ESP32 uses Serial.
+#if defined(__IMXRT1062__)
+#define RTOS_DEBUG_SERIAL SerialUSB1
+#else
+#define RTOS_DEBUG_SERIAL Serial
 #endif
 
 namespace Subsystem {
@@ -30,15 +34,20 @@ class RTOSSubsystem : public Classes::BaseSubsystem {
                      uint32_t updateRateMs = 20) {
     task_delay_ms_ = updateRateMs;
     TaskHandle_t handle = nullptr;
-    // FreeRTOS stack depth is in words (4 bytes); callers pass bytes.
-    BaseType_t rc = xTaskCreate(taskFunction, getInfo(), stackSize / 4,
+    // Teensy FreeRTOS: stack depth in words (4 bytes); ESP32: bytes.
+#if defined(__IMXRT1062__)
+    const uint32_t stackDepth = stackSize / 4;
+#else
+    const uint32_t stackDepth = stackSize;
+#endif
+    BaseType_t rc = xTaskCreate(taskFunction, getInfo(), stackDepth,
                                 static_cast<void*>(this), priority, &handle);
     if (rc != pdPASS || handle == nullptr) {
-      SerialUSB1.printf("[RTOS] FAIL xTaskCreate '%s' rc=%ld stack=%lu pri=%d heap=%lu\n",
+      RTOS_DEBUG_SERIAL.printf("[RTOS] FAIL xTaskCreate '%s' rc=%ld stack=%lu pri=%d heap=%lu\n",
                     getInfo(), (long)rc, stackSize, priority,
                     (unsigned long)xPortGetFreeHeapSize());
     } else {
-      SerialUSB1.printf("[RTOS] Task '%s' created OK (heap free=%lu)\n",
+      RTOS_DEBUG_SERIAL.printf("[RTOS] Task '%s' created OK (heap free=%lu)\n",
                     getInfo(), (unsigned long)xPortGetFreeHeapSize());
     }
   }
@@ -46,9 +55,9 @@ class RTOSSubsystem : public Classes::BaseSubsystem {
  private:
   static void taskFunction(void* pv) {
     auto* self = static_cast<RTOSSubsystem*>(pv);
-    SerialUSB1.printf("[RTOS] Task '%s' RUNNING (begin)\n", self->getInfo());
+    RTOS_DEBUG_SERIAL.printf("[RTOS] Task '%s' RUNNING (begin)\n", self->getInfo());
     self->begin();   // virtual dispatch
-    SerialUSB1.printf("[RTOS] Task '%s' begin() done, entering loop\n", self->getInfo());
+    RTOS_DEBUG_SERIAL.printf("[RTOS] Task '%s' begin() done, entering loop\n", self->getInfo());
     while (true) {
       self->update();  // virtual dispatch
       vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
@@ -56,23 +65,6 @@ class RTOSSubsystem : public Classes::BaseSubsystem {
   }
   uint32_t task_delay_ms_ = 20;
 
-#elif defined(USE_TEENSYTHREADS)
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, static_cast<void*>(this), stackSize);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<RTOSSubsystem*>(pv);
-    self->begin();   // virtual dispatch
-    while (true) {
-      self->update();  // virtual dispatch
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
 #endif
 
  protected:

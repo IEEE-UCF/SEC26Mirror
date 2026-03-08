@@ -6,8 +6,11 @@
 namespace Drivers {
 
 bool BNO085Driver::init() {
+#if defined(USE_FREERTOS)
   I2CBus::Lock lock(setup_.wire_);
+#endif
 
+#if defined(__IMXRT1062__)  // Teensy 4.x — I2C bus recovery for Wire1
   // I2C bus recovery: if the MCU reset mid-transaction, the BNO085 may be
   // holding SDA low.  Toggle SCL manually to clock out the stuck byte.
   // This must happen BEFORE Wire.begin() claims the pins.
@@ -31,6 +34,7 @@ bool BNO085Driver::init() {
     pinMode(sda, INPUT);
     pinMode(scl, INPUT);
   }
+#endif
 
   // Hardware reset the BNO085 BEFORE Wire.begin() so the chip is fully
   // booted when I2C starts.  We do this ourselves (instead of relying on
@@ -59,6 +63,11 @@ bool BNO085Driver::init() {
     return initSuccess_;
   }
 
+  // Configure INT pin (active LOW when data ready)
+  if (setup_.int_pin_ >= 0) {
+    pinMode(setup_.int_pin_, INPUT_PULLUP);
+  }
+
   // Consume the initial wasReset flag from the boot sequence
   (void)imu_.wasReset();
   delay(100);
@@ -74,16 +83,22 @@ bool BNO085Driver::init() {
 }
 
 bool BNO085Driver::enableReports() {
-  // 50000us = 50ms = 20Hz per report — matches the IMU subsystem publish rate.
-  // Higher rates (100Hz) cause event backlog in the getSensorEvent() loop.
-  return imu_.enableReport(SH2_ACCELEROMETER, 50000) &&
-         imu_.enableReport(SH2_GYROSCOPE_CALIBRATED, 50000) &&
-         imu_.enableReport(SH2_GAME_ROTATION_VECTOR, 50000);
+  if (!imu_.enableReport(SH2_GAME_ROTATION_VECTOR, setup_.rotation_report_us_)) {
+    return false;
+  }
+  if (setup_.enable_gyro_) {
+    if (!imu_.enableReport(SH2_GYROSCOPE_CALIBRATED, setup_.gyro_report_us_)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void BNO085Driver::update() {
   if (!initSuccess_) return;
+#if defined(USE_FREERTOS)
   I2CBus::Lock lock(setup_.wire_);
+#endif
 
   // BNO085 can spontaneously reset — re-enable reports when it does.
   // Release the I2C lock during the 300ms boot delay so other threads
@@ -91,9 +106,13 @@ void BNO085Driver::update() {
   if (imu_.wasReset()) {
     ++resetCount_;
     DEBUG_PRINTF("[BNO085] Reset detected (#%lu) — waiting 300ms\n", resetCount_);
+#if defined(USE_FREERTOS)
     lock.unlock();
+#endif
     delay(300);  // BNO085 needs ~300ms after reset before accepting commands
+#if defined(USE_FREERTOS)
     lock.relock();
+#endif
     if (!enableReports()) {
       DEBUG_PRINTLN("[BNO085] WARNING: enableReports failed after reset");
     } else {
@@ -101,39 +120,38 @@ void BNO085Driver::update() {
     }
   }
 
-  // Drain available sensor events.  Cap iterations to prevent infinite loop
-  // if the chip produces data faster than we consume (or I2C returns garbage).
-  int eventsRead = 0;
-  while (eventsRead < kMaxEventsPerUpdate && imu_.getSensorEvent(&sensorValue_)) {
-    ++eventsRead;
+  // INT pin is active LOW when data is ready.  Skip the I2C read if no
+  // data is queued — keeps poll cycles cheap (single GPIO read).
+  if (setup_.int_pin_ >= 0 && digitalReadFast(setup_.int_pin_) == HIGH) {
+    return;
+  }
+
+  // Drain all available sensor events from the SHTP queue.
+  while (imu_.getSensorEvent(&sensorValue_)) {
     switch (sensorValue_.sensorId) {
-      case SH2_ACCELEROMETER:
-        data_.accel_x = sensorValue_.un.accelerometer.x;
-        data_.accel_y = sensorValue_.un.accelerometer.y;
-        data_.accel_z = sensorValue_.un.accelerometer.z;
-        break;
-
-      case SH2_GYROSCOPE_CALIBRATED:
-        data_.gyro_x = sensorValue_.un.gyroscope.x;
-        data_.gyro_y = sensorValue_.un.gyroscope.y;
-        data_.gyro_z = sensorValue_.un.gyroscope.z;
-        break;
-
-      case SH2_GAME_ROTATION_VECTOR:
+      case SH2_GAME_ROTATION_VECTOR: {
         data_.qx = sensorValue_.un.gameRotationVector.i;
         data_.qy = sensorValue_.un.gameRotationVector.j;
         data_.qz = sensorValue_.un.gameRotationVector.k;
         data_.qw = sensorValue_.un.gameRotationVector.real;
 
-        data_.yaw = calculateYaw(data_.qx, data_.qy, data_.qz, data_.qw);
+        // Euler angles from quaternion
+        float qi = data_.qx, qj = data_.qy, qk = data_.qz, qr = data_.qw;
+        data_.roll = atan2f(2.0f * (qr * qi + qj * qk),
+                            1.0f - 2.0f * (qi * qi + qj * qj));
+        data_.pitch = asinf(fmaxf(-1.0f, fminf(1.0f, 2.0f * (qr * qj - qk * qi))));
+        data_.yaw = calculateYaw(qi, qj, qk, qr);
         break;
-
+      }
+      case SH2_GYROSCOPE_CALIBRATED: {
+        data_.gyro_x = sensorValue_.un.gyroscope.x;  // rad/s
+        data_.gyro_y = sensorValue_.un.gyroscope.y;
+        data_.gyro_z = sensorValue_.un.gyroscope.z;
+        break;
+      }
       default:
         break;
     }
-  }
-  if (eventsRead >= kMaxEventsPerUpdate) {
-    DEBUG_PRINTLN("[BNO085] WARNING: hit max events per update — possible I2C issue");
   }
 }
 

@@ -42,6 +42,7 @@ bool ESP32WifiSubsystem::init() {
   state_ = WifiState::DISCONNECTED;
   current_ap_index_ = 0;
   retry_count_ = 0;
+  consecutive_failures_ = 0;
   event_connected_ = false;
   event_disconnected_ = false;
   event_got_ip_ = false;
@@ -58,6 +59,15 @@ void ESP32WifiSubsystem::begin() {
   // Register as singleton for event callbacks
   s_instance_ = this;
 
+  // Prevent ESP32 from saving credentials to NVS flash on every WiFi.begin().
+  // Reduces flash wear and speeds up connection attempts.
+  WiFi.persistent(false);
+
+  // Disable the ESP32's built-in auto-reconnect — we manage reconnection
+  // ourselves via the state machine. The built-in logic can fight with ours
+  // and leave the radio in a bad state.
+  WiFi.setAutoReconnect(false);
+
   // Set WiFi mode to station
   WiFi.mode(WIFI_STA);
 
@@ -70,7 +80,6 @@ void ESP32WifiSubsystem::begin() {
   WiFi.onEvent(onWifiEvent);
 
   // Start connection attempt
-  state_entry_time_ms_ = millis();
   transitionTo(WifiState::CONNECTING);
   attemptConnection();
 }
@@ -78,10 +87,11 @@ void ESP32WifiSubsystem::begin() {
 void ESP32WifiSubsystem::update() {
   uint32_t now = millis();
 
-  // Process our WiFi events (set by callback in WiFi task context)
+  // Process WiFi events (set by callback in WiFi task context)
   if (event_got_ip_) {
     event_got_ip_ = false;
     event_connected_ = false;
+    event_disconnected_ = false;  // Clear stale disconnect from reconnect cycle
     handleConnected();
   }
 
@@ -90,33 +100,44 @@ void ESP32WifiSubsystem::update() {
     handleDisconnected();
   }
 
-  // State machine logic! My favorite
+  // State machine logic
   switch (state_) {
     case WifiState::DISCONNECTED:
-      // Nothing to do, its gonna wait for begin() or reconnect()
+      // Wait for begin() or reconnect()
       break;
 
     case WifiState::CONNECTING:
     case WifiState::RECONNECTING: {
       // Check for connection timeout
-      uint32_t time_in_state = now - state_entry_time_ms_;
-      if (time_in_state >= setup_.connection_timeout_ms_) {
+      uint32_t time_since_attempt = now - last_attempt_time_ms_;
+      if (time_since_attempt >= setup_.connection_timeout_ms_) {
         // Connection attempt timed out
         WiFi.disconnect(true);
         retry_count_++;
+        consecutive_failures_++;
 
         if (setup_.max_retries_ > 0 && retry_count_ >= setup_.max_retries_) {
           transitionTo(WifiState::FAILED);
         } else {
-          // Schedule next retry (max_retries_==0 means infinite)
+          // Power cycle the radio after several consecutive failures.
+          // This clears hardware-level issues that WiFi.disconnect() alone
+          // cannot fix (stuck PHY, stale association state, etc.).
+          if (consecutive_failures_ > 0 &&
+              consecutive_failures_ % kRadioResetInterval == 0) {
+            powerCycleRadio();
+          }
+
+          // For multi-AP, try next AP on failure
+          if (setup_.ap_count_ > 1) {
+            current_ap_index_ = (current_ap_index_ + 1) % setup_.ap_count_;
+          }
+
+          // Schedule next retry after reconnect interval
           last_attempt_time_ms_ = now;
-          transitionTo(state_ == WifiState::CONNECTING
-                           ? WifiState::CONNECTING
-                           : WifiState::RECONNECTING);
         }
       }
 
-      // Check if we should retry after interval
+      // Retry after interval (only if we've had at least one failure)
       if (retry_count_ > 0 &&
           (now - last_attempt_time_ms_) >= setup_.reconnect_interval_ms_) {
         attemptConnection();
@@ -125,7 +146,7 @@ void ESP32WifiSubsystem::update() {
     }
 
     case WifiState::CONNECTED:
-      // Checking the connection quality every 5 seconds
+      // Poll connection health every 5 seconds
       if (everyMs(5000)) {
         if (WiFi.status() != WL_CONNECTED) {
           handleDisconnected();
@@ -147,6 +168,7 @@ void ESP32WifiSubsystem::pause() {
 void ESP32WifiSubsystem::reset() {
   WiFi.disconnect(true);
   retry_count_ = 0;
+  consecutive_failures_ = 0;
   current_ap_index_ = 0;
   event_connected_ = false;
   event_disconnected_ = false;
@@ -172,6 +194,7 @@ void ESP32WifiSubsystem::reconnect() {
   }
 
   retry_count_ = 0;
+  consecutive_failures_ = 0;
   transitionTo(WifiState::RECONNECTING);
   attemptConnection();
 }
@@ -179,6 +202,7 @@ void ESP32WifiSubsystem::reconnect() {
 void ESP32WifiSubsystem::clearFailedState() {
   if (state_ == WifiState::FAILED) {
     retry_count_ = 0;
+    consecutive_failures_ = 0;
     transitionTo(WifiState::DISCONNECTED);
   }
 }
@@ -193,57 +217,59 @@ void ESP32WifiSubsystem::transitionTo(WifiState new_state) {
 }
 
 void ESP32WifiSubsystem::attemptConnection() {
-  // For multi-AP mode, scan and find best AP!
+  // For multi-AP mode, scan and find best AP
   if (setup_.ap_count_ > 1) {
     int8_t best_ap = scanForBestAP();
     if (best_ap >= 0) {
       current_ap_index_ = best_ap;
     }
-    // If scan fails, use current_ap_index_ (it cycles through on retry)
   }
 
   const WifiCredentials& creds = setup_.ap_list_[current_ap_index_];
 
-  // Disconnect any existing connection first
+  // Clean disconnect before reconnecting (non-blocking)
   WiFi.disconnect(true);
-  delay(100);
 
-  // Re-apply static IP config (WiFi.disconnect(true) can clear it)
+  // Re-apply static IP config (WiFi.disconnect(true) clears it)
   if (setup_.use_static_ip_) {
     WiFi.config(setup_.local_ip_, setup_.gateway_, setup_.subnet_);
   }
 
   // Attempt connection
   WiFi.begin(creds.ssid, creds.password);
-  state_entry_time_ms_ = millis();
   last_attempt_time_ms_ = millis();
 }
 
 void ESP32WifiSubsystem::handleConnected() {
   retry_count_ = 0;
+  consecutive_failures_ = 0;
   transitionTo(WifiState::CONNECTED);
 }
 
 void ESP32WifiSubsystem::handleDisconnected() {
-  // Only transition if we were connected (ignore during initial connection)
   if (state_ == WifiState::CONNECTED) {
+    // Lost an established connection — start reconnecting
     retry_count_ = 0;
     transitionTo(WifiState::RECONNECTING);
     attemptConnection();
-  } else if (state_ == WifiState::CONNECTING ||
-             state_ == WifiState::RECONNECTING) {
-    // Connection attempt failed, increment retry
-    retry_count_++;
+  }
+  // If already CONNECTING/RECONNECTING, do nothing here — the timeout handler
+  // in update() manages retries. This prevents double-counting retries when
+  // both the disconnect event and the timeout fire for the same attempt.
+}
 
-    if (setup_.max_retries_ > 0 && retry_count_ >= setup_.max_retries_) {
-      transitionTo(WifiState::FAILED);
-    } else {
-      // For multi-AP, try next AP on failure
-      if (setup_.ap_count_ > 1) {
-        current_ap_index_ = (current_ap_index_ + 1) % setup_.ap_count_;
-      }
-      last_attempt_time_ms_ = millis();
-    }
+void ESP32WifiSubsystem::powerCycleRadio() {
+  // Full radio power cycle: OFF → delay → STA mode.
+  // This clears hardware-level issues that WiFi.disconnect() cannot fix:
+  // stuck PHY state, stale AP association, radio calibration drift, etc.
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  delay(500);
+  WiFi.mode(WIFI_STA);
+
+  // Re-apply static IP after mode change
+  if (setup_.use_static_ip_) {
+    WiFi.config(setup_.local_ip_, setup_.gateway_, setup_.subnet_);
   }
 }
 

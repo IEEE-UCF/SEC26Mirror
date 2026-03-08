@@ -76,7 +76,7 @@
 #endif
 
 #include <SPI.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 // Debug logging (routed to SerialUSB1 when SERIAL_DEBUG is defined)
@@ -343,15 +343,54 @@ static void pca_task(void*) {
   }
 }
 
+// --- RC + drive task (IBusBM NOTIMER needs its own task, not idle) ---
+#if DEBUG_STAGE >= 6
+static void rc_drive_task(void*) {
+  while (true) {
+    g_rc.update();
+
+    // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
+    if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
+      const auto& rc = g_rc.getData();
+      bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
+
+      if (swa_high) {
+        float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
+        float steering = static_cast<float>(rc.channels[3]) / 255.0f;
+        g_drive.rcDrive(throttle, steering);
+      } else {
+        if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
+          g_drive.stop();
+        }
+      }
+    }
+
+    // RC knob motor control — knob 1 (left) → motor 2 (linear extension),
+    //                         knob 2 (right) → motor 3 (intake)
+    {
+      const auto& rc = g_rc.getData();
+      float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;
+      float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;
+      g_motor.setSpeed(2, knob1);
+      g_motor.setSpeed(3, knob2);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+#endif
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  Arduino entry points
 // ═══════════════════════════════════════════════════════════════════════════
 
 static bool s_uwb_enabled = false;
+static void debugMonitorTask(void*);
 
 void setup() {
   Serial.begin(0);
   DEBUG_BEGIN();
+  delay(3000);  // Wait for USB serial ports to enumerate
   if (CrashReport) {
     Serial.print(CrashReport);
     DEBUG_PRINT(CrashReport);
@@ -361,7 +400,9 @@ void setup() {
   }
 
   Serial.println(
-      PSTR("\r\nSEC26 Robot — All Subsystems Test (TeensyThreads)\r\n"));
+      PSTR("\r\nSEC26 Robot — All Subsystems Test (FreeRTOS)\r\n"));
+  DEBUG_PRINTF("[HEAP] Free at start: %lu bytes\n",
+               (unsigned long)xPortGetFreeHeapSize());
   DEBUG_PRINTLN("\r\n=== SEC26 All-Subsystems Test — Debug Console (SerialUSB1) ===\r\n");
   DEBUG_PRINTF("[CONFIG] DEBUG_STAGE = %d\n", DEBUG_STAGE);
 
@@ -508,87 +549,67 @@ void setup() {
   // ─── Start threaded tasks ─────────────────────────────────────────────
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4);       // ROS agent
-  g_hb.beginThreaded(1024, 1, 1000); // 1 Hz
+  g_mr.beginThreaded(8192, 4, 10);   // ROS agent
+  g_hb.beginThreaded(2048, 1, 1000); // 1 Hz
 
 #if DEBUG_STAGE >= 2
   g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (50ms was ~14Hz due to I2C overhead)
 #endif
 
 #if DEBUG_STAGE >= 3
-  g_servo.beginThreaded(1024, 2, 100);       // 10 Hz state pub
-  g_motor.beginThreaded(1024, 2, 1);         // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(1024, 2, 50);  // 20 Hz encoder reading
-  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
+  g_servo.beginThreaded(2048, 2, 100);       // 10 Hz state pub
+  g_motor.beginThreaded(2048, 2, 1);         // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(2048, 2, 50);  // 20 Hz encoder reading
+  threads.addThread(pca_task, nullptr, 2048);  // 50 Hz PWM flush
 #endif
 
 #if DEBUG_STAGE >= 4
-  g_battery.beginThreaded(1024, 1, 2000);  // 0.5 Hz
-  g_sensor.beginThreaded(1024, 1, 500);    // 2 Hz TOF
-  g_dip.beginThreaded(1024, 1, 2000);      // 0.5 Hz
-  g_btn.beginThreaded(1024, 1, 100);       // 10 Hz
+  g_battery.beginThreaded(2048, 1, 2000);  // 0.5 Hz
+  g_sensor.beginThreaded(2048, 1, 500);    // 2 Hz TOF
+  g_dip.beginThreaded(2048, 1, 2000);      // 0.5 Hz
+  g_btn.beginThreaded(2048, 1, 100);       // 10 Hz
 #endif
 
 #if DEBUG_STAGE >= 5
-  g_led.beginThreaded(1024, 1, 200);       // 5 Hz
+  g_led.beginThreaded(2048, 1, 200);       // 5 Hz
   g_oled.beginThreaded(2048, 1, 100);      // 10 Hz display
-  g_deploy.beginThreaded(1024, 1, 100);    // 10 Hz deploy button
-  g_crank.beginThreaded(1024, 1, 200);     // 5 Hz crank
-  g_keypad.beginThreaded(1024, 1, 200);    // 5 Hz keypad
+  g_deploy.beginThreaded(2048, 1, 100);    // 10 Hz deploy button
+  g_crank.beginThreaded(2048, 1, 200);     // 5 Hz crank
+  g_keypad.beginThreaded(2048, 1, 200);    // 5 Hz keypad
 #endif
 
 #if DEBUG_STAGE >= 6
   g_drive.beginThreaded(4096, 3, 20);      // 50 Hz drive control
+  threads.addThread(rc_drive_task, nullptr, 2048);  // RC polling + manual drive
 #endif
 
 #if DEBUG_STAGE >= 7
   if (s_uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
 #endif
 
-  DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
+  DEBUG_PRINTLN("[INIT] All tasks created — starting scheduler");
+
+  // FreeRTOS scheduler must be started explicitly — vTaskStartScheduler()
+  // never returns.  The debug monitor runs as its own task (created above
+  // would need a task, so we create one here for the periodic status).
+  xTaskCreate(debugMonitorTask, "debug_monitor", 4096 / 4, nullptr, 1, nullptr);
+
+  DEBUG_PRINTLN("[INIT] Starting FreeRTOS scheduler...");
+  vTaskStartScheduler();
+
+  // Should never reach here
+  DEBUG_PRINTLN("[FATAL] Scheduler exited!");
+  while (true) {}
 }
 
-static uint32_t s_last_debug_ms = 0;
-static constexpr uint32_t DEBUG_INTERVAL_MS = 200;
+// ═══════════════════════════════════════════════════════════════════════════
+//  Debug monitor task — periodic status (replaces loop())
+// ═══════════════════════════════════════════════════════════════════════════
+static void debugMonitorTask(void*) {
+  static constexpr uint32_t DEBUG_INTERVAL_MS = 200;
 
-void loop() {
-  // RC polling — must be in main loop (IBusBM NOTIMER mode)
-#if DEBUG_STAGE >= 6
-  g_rc.update();
-
-  // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
-  if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
-    // MCU/RC mode — RC stick drives motors
-    const auto& rc = g_rc.getData();
-    bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
-
-    if (swa_high) {
-      float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
-      float steering = static_cast<float>(rc.channels[3]) / 255.0f;
-      g_drive.rcDrive(throttle, steering);
-    } else {
-      if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
-        g_drive.stop();
-      }
-    }
-  }
-  // DIP 1 ON — ROS2 controls drive via drive_base/command subscription
-
-  // RC knob motor control — knob 1 (left) → motor 2 (linear extension),
-  //                         knob 2 (right) → motor 3 (intake)
-  {
-    const auto& rc = g_rc.getData();
-    float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;  // left knob
-    float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;  // right knob
-    g_motor.setSpeed(2, knob1);
-    g_motor.setSpeed(3, knob2);
-  }
-#endif
-
-  // Periodic debug output
-  uint32_t now = millis();
-  if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
-    s_last_debug_ms = now;
+  for (;;) {
+    uint32_t now = millis();
 
     DEBUG_PRINTF("[%lu] === Periodic Status (Stage %d) ===\n", now, DEBUG_STAGE);
     DEBUG_PRINTF("  uROS state : %s\n", g_mr.isConnected() ? "CONNECTED" : "WAITING");
@@ -651,7 +672,10 @@ void loop() {
 #endif
 
     DEBUG_PRINTF("  Uptime     : %lus\n", now / 1000);
-  }
 
-  delay(5);
+    vTaskDelay(pdMS_TO_TICKS(DEBUG_INTERVAL_MS));
+  }
 }
+
+// loop() should never be reached — scheduler takes over
+void loop() {}

@@ -124,8 +124,8 @@ void setup() {
 
   // Step 4: Initialize remaining subsystems
   bool ok = true;
-  ok = ok && g_hb.init();
-  ok = ok && g_uwb.init();
+  ok &= g_hb.init();
+  ok &= g_uwb.init();
 
   if (!ok) {
     Serial.println("ERROR: Failed to initialize subsystems!");

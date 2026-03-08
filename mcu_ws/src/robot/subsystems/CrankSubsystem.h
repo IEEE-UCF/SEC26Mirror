@@ -20,15 +20,11 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/u_int8.h>
 
 #include "robot/subsystems/ServoSubsystem.h"
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -84,10 +80,10 @@ class CrankSubsystemSetup : public Classes::BaseSetup {
 };
 
 class CrankSubsystem : public IMicroRosParticipant,
-                        public Classes::BaseSubsystem {
+                        public Subsystem::RTOSSubsystem {
  public:
   explicit CrankSubsystem(const CrankSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -127,15 +123,11 @@ class CrankSubsystem : public IMicroRosParticipant,
     // Publish state at ~5 Hz
     if (state_pub_.impl && now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-#ifdef USE_TEENSYTHREADS
       {
         Threads::Scope lock(data_mutex_);
         state_msg_.data = static_cast<uint8_t>(state_);
         data_ready_ = true;
       }
-#else
-      publishState();
-#endif
     }
   }
 
@@ -200,35 +192,12 @@ class CrankSubsystem : public IMicroRosParticipant,
 
   CrankState getState() const { return state_; }
 
-  // ── TeensyThreads ─────────────────────────────────────────────────────
-
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 50) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<CrankSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 50;
-#endif
-
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !state_pub_.impl) return;
     (void)rcl_publish(&state_pub_, &state_msg_, NULL);
     data_ready_ = false;
-#endif
   }
 
  private:
@@ -260,9 +229,7 @@ class CrankSubsystem : public IMicroRosParticipant,
   std_msgs__msg__UInt8 cmd_msg_{};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

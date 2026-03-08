@@ -1,12 +1,8 @@
 #pragma once
 
-#include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
 
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
-
+#include "I2CBusLock.h"
 #include "Pose2D.h"
 #include "TimedSubsystem.h"
 #include "mcu_msgs/msg/mini_robot_state.h"
@@ -91,6 +87,7 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   // Micro-ROS Hooks (IMicroRosParticipant interface)
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   // Public Commands
   void startMission(float target_x, float target_y);
@@ -125,25 +122,6 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   Pose2D getCurrentPosition() const { return current_position_; }
   Pose2D getTargetPosition() const { return target_position_; }
   float getDistanceToTarget() const;
-
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 100) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<MiniRobotSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 100;
-#endif
 
  private:
   // Internal State Machine Logic
@@ -191,6 +169,11 @@ class MiniRobotSubsystem : public IMicroRosParticipant,
   rcl_publisher_t state_pub_{};
   mcu_msgs__msg__MiniRobotState state_msg_{};
   rcl_node_t* node_ = nullptr;
+
+  // Deferred publishing — update() fills msg under data_mutex_, publishAll()
+  // publishes under g_microros_mutex.
+  bool data_ready_ = false;
+  Threads::Mutex data_mutex_;
 
   // Diagnostics Slop
   uint32_t mission_count_ = 0;

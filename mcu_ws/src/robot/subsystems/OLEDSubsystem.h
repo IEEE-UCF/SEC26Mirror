@@ -27,15 +27,11 @@
 #define OLEDSUBSYSTEM_H
 
 #include <Adafruit_SSD1306.h>
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <SPI.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/int8.h>
 #include <std_msgs/msg/string.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -79,7 +75,7 @@ class OLEDSubsystemSetup : public Classes::BaseSetup {
 // ─────────────────────────────────────────────────────────────────
 
 class OLEDSubsystem : public IMicroRosParticipant,
-                      public Classes::BaseSubsystem {
+                      public Subsystem::RTOSSubsystem {
  public:
   // ── Display geometry ──────────────────────────────────────────────────────
   static constexpr uint8_t DISPLAY_W = 128;
@@ -129,14 +125,6 @@ class OLEDSubsystem : public IMicroRosParticipant,
   void setDashboardSources(DipSwitchSubsystem* dip, BatterySubsystem* battery,
                            ImuSubsystem* imu, UWBSubsystem* uwb);
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 50) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-#endif
-
  private:
   // ── Status line (persistent top row) ─────────────────────────────────────
   char status_line_[MAX_LINE_LEN + 1] = {};
@@ -167,28 +155,13 @@ class OLEDSubsystem : public IMicroRosParticipant,
   std_msgs__msg__Int8 scroll_msg_ = {};
   rcl_subscription_t scroll_sub_ = {};
 
-#ifdef USE_TEENSYTHREADS
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<OLEDSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-
   Threads::Mutex mutex_;
-  uint32_t task_delay_ms_ = 50;
 
   bool takeMutex() {
     mutex_.lock();
     return true;
   }
   void giveMutex() { mutex_.unlock(); }
-#else
-  bool takeMutex() { return true; }
-  void giveMutex() {}
-#endif
 
   // ── Dashboard mode (DIP bit 5) ──────────────────────────────────────────
   DipSwitchSubsystem* dash_dip_ = nullptr;

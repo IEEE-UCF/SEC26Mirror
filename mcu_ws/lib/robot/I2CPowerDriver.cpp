@@ -9,7 +9,7 @@ bool I2CPowerDriver::init() {
   _setup._wire.begin();
 
   // Route I2C through the mux channel if one is configured.
-  // selectChannel() also acquires the bus lock (recursive mutex — safe).
+  // selectChannel() does NOT acquire the bus lock — caller must hold it.
   if (_setup._mux != nullptr &&
       !_setup._mux->selectChannel(_setup._muxChannel)) {
     initSuccess_ = false;

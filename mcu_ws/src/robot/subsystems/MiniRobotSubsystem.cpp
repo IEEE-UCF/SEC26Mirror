@@ -4,6 +4,7 @@
 #include <Wire.h>
 
 #include <cmath>
+#include "I2CBusLock.h"
 
 namespace Subsystem {
 
@@ -226,6 +227,7 @@ void MiniRobotSubsystem::sendDriveCommand(float target_x, float target_y) {
   memcpy(&buffer[1], &target_x, sizeof(float));
   memcpy(&buffer[5], &target_y, sizeof(float));
 
+  I2CBus::Lock lock(Wire);
   Wire.beginTransmission(setup_.esp32_i2c_addr_);
   Wire.write(buffer, sizeof(buffer));
   Wire.endTransmission();
@@ -235,6 +237,7 @@ void MiniRobotSubsystem::sendDriveCommand(float target_x, float target_y) {
 
 void MiniRobotSubsystem::sendStopCommand() {
   uint8_t cmd = 0x02;  // CMD_STOP
+  I2CBus::Lock lock(Wire);
   Wire.beginTransmission(setup_.esp32_i2c_addr_);
   Wire.write(cmd);
   Wire.endTransmission();
@@ -246,6 +249,7 @@ void MiniRobotSubsystem::sendReturnCommand() {
   memcpy(&buffer[1], &home_position_.x, sizeof(float));
   memcpy(&buffer[5], &home_position_.y, sizeof(float));
 
+  I2CBus::Lock lock(Wire);
   Wire.beginTransmission(setup_.esp32_i2c_addr_);
   Wire.write(buffer, sizeof(buffer));
   Wire.endTransmission();
@@ -268,6 +272,7 @@ void MiniRobotSubsystem::updateCommsStatus() {
 }
 
 bool MiniRobotSubsystem::pollEsp32Status() {
+  I2CBus::Lock lock(Wire);
   uint8_t bytes_received = Wire.requestFrom(setup_.esp32_i2c_addr_, (uint8_t)1);
 
   if (bytes_received > 0 && Wire.available()) {
@@ -303,6 +308,8 @@ bool MiniRobotSubsystem::hasArrivedAtHome() const {
 void MiniRobotSubsystem::publishState() {
   if (!state_pub_.impl) return;
 
+  Threads::Scope guard(data_mutex_);
+
   state_msg_.header.stamp.sec = (int32_t)(millis() / 1000);
   state_msg_.header.stamp.nanosec = (uint32_t)((millis() % 1000) * 1000000);
 
@@ -331,7 +338,14 @@ void MiniRobotSubsystem::publishState() {
       break;
   }
 
+  data_ready_ = true;
+}
+
+void MiniRobotSubsystem::publishAll() {
+  Threads::Scope guard(data_mutex_);
+  if (!data_ready_ || !state_pub_.impl) return;
   (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+  data_ready_ = false;
 }
 
 }  // namespace Subsystem

@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
 #include <Pose2D.h>
 #include <TankDriveLocalization.h>
 #include <Vector2D.h>
@@ -30,10 +29,6 @@
 #include <motion_profile.h>
 #include <pid_controller.h>
 #include <traj_controller.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 #include "TimedSubsystem.h"
 #include "robot/subsystems/EncoderSubsystem.h"
@@ -258,15 +253,11 @@ class DriveSubsystem : public IMicroRosParticipant,
     publishCounter_++;
     if (publishCounter_ >= setup_.publishDivider) {
       publishCounter_ = 0;
-#ifdef USE_TEENSYTHREADS
       {
         Threads::Scope lock(data_mutex_);
         publishStatus();
         data_ready_ = true;
       }
-#else
-      publishStatus();
-#endif
     }
   }
 
@@ -516,27 +507,6 @@ class DriveSubsystem : public IMicroRosParticipant,
   float getLinearVelocity() const { return currentLinearVel_; }
   float getAngularVelocity() const { return currentAngularVel_; }
   bool isIdle() const { return mode_ == DriveMode::IDLE; }
-
-  // ── Threading ──────────────────────────────────────────────────────────
-
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<DriveSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
 
  private:
   // ── Constants ──────────────────────────────────────────────────────────
@@ -856,20 +826,14 @@ class DriveSubsystem : public IMicroRosParticipant,
 
     // Clear path in status (we don't echo it back)
     status_msg_.goal_path.poses.size = 0;
-
-#ifndef USE_TEENSYTHREADS
-    (void)rcl_publish(&status_pub_, &status_msg_, NULL);
-#endif
   }
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !status_pub_.impl) return;
     (void)rcl_publish(&status_pub_, &status_msg_, NULL);
     data_ready_ = false;
-#endif
   }
 
  private:
@@ -932,9 +896,7 @@ class DriveSubsystem : public IMicroRosParticipant,
   micro_ros_utilities_memory_conf_t cmd_mem_conf_{};
 
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

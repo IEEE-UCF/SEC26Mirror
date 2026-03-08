@@ -21,14 +21,10 @@
 #ifndef BATTERYSUBSYSTEM_H
 #define BATTERYSUBSYSTEM_H
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <I2CPowerDriver.h>
 #include <mcu_msgs/msg/battery_health.h>
 #include <microros_manager_robot.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -42,10 +38,10 @@ class BatterySubsystemSetup : public Classes::BaseSetup {
 };
 
 class BatterySubsystem : public IMicroRosParticipant,
-                         public Classes::BaseSubsystem {
+                         public Subsystem::RTOSSubsystem {
  public:
   explicit BatterySubsystem(const BatterySubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   // ── BaseSubsystem lifecycle ───────────────────────────────────────────────
   bool init() override;
@@ -71,14 +67,6 @@ class BatterySubsystem : public IMicroRosParticipant,
   /** Get current draw in amps. */
   float getCurrentA() const { return setup_.driver_ ? setup_.driver_->getCurrentmA() / 1000.0f : 0.0f; }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 100) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-#endif
-
  private:
   const BatterySubsystemSetup setup_;
   OLEDSubsystem* oled_ = nullptr;
@@ -87,21 +75,7 @@ class BatterySubsystem : public IMicroRosParticipant,
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
-
-#ifdef USE_TEENSYTHREADS
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<BatterySubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 100;
-#endif
 };
 
 }  // namespace Subsystem

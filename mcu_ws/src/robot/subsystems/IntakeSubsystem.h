@@ -23,12 +23,7 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
 #include <microros_manager_robot.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 #include "TimedSubsystem.h"
 #include "mcu_msgs/msg/intake_command.h"
@@ -133,26 +128,6 @@ class IntakeSubsystem : public IMicroRosParticipant,
   float getIntakeSpeed() const { return intake_speed_; }
   void stopIntake() { setIntakeSpeed(0.0f); }
 
-  // ── TeensyThreads ─────────────────────────────────────────────────────
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<IntakeSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
-
  private:
   // State machine
   void transitionTo(IntakeState new_state);
@@ -197,9 +172,7 @@ class IntakeSubsystem : public IMicroRosParticipant,
   mcu_msgs__msg__IntakeCommand cmd_msg_{};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

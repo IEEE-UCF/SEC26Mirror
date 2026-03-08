@@ -9,7 +9,7 @@
 #ifndef ARMSUBSYSTEM_H
 #define ARMSUBSYSTEM_H
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <mcu_msgs/msg/arm_susbsytem.h>
 #include "DebugLog.h"
 #include <mcu_msgs/srv/arm_control.h>
@@ -17,10 +17,6 @@
 
 #include "PCA9685Driver.h"
 #include "robot/drive-base/EncoderDriver.h"
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -43,10 +39,10 @@ class ArmSubsystemSetup : public Classes::BaseSetup {
 // Pseudo-code subsystem: publishes current `ArmSusbsytem` state and
 // accepts commands via a service to change states.
 class ArmSubsystem : public IMicroRosParticipant,
-                     public Classes::BaseSubsystem {
+                     public Subsystem::RTOSSubsystem {
  public:
   explicit ArmSubsystem(const ArmSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   // Lifecycle hooks
   bool init() override {
@@ -158,25 +154,6 @@ class ArmSubsystem : public IMicroRosParticipant,
     response->accepted = true;
     // rosidl_runtime_c__String__assign(&response->message, "Command accepted");
   }
-
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int /*priority*/ = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    threads.addThread(taskFunction, this, stackSize);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<ArmSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
 
  private:
   // Non-blocking state transition handler

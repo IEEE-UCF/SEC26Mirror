@@ -1,5 +1,7 @@
 #include "TCA9555Driver.h"
 
+#include "I2CDMABus.h"
+
 namespace Drivers {
 
 // ── Register addresses
@@ -48,9 +50,22 @@ bool TCA9555Driver::init() {
 }
 
 void TCA9555Driver::update() {
+  if (dma_bus_) return;  // DMA mode: data updated by processDMAResults()
   I2CBus::Lock lock(setup_.wire_);
   data_.inputPort0 = readReg(REG_INPUT0);
   data_.inputPort1 = readReg(REG_INPUT1);
+}
+
+// ── DMA support ──────────────────────────────────────────────────────────
+
+void TCA9555Driver::queueDMARead() {
+  if (!dma_bus_) return;
+  dma_bus_->queueRead(setup_.address_, REG_INPUT0, dma_rx_, 2);
+}
+
+void TCA9555Driver::processDMAResults() {
+  data_.inputPort0 = dma_rx_[0];
+  data_.inputPort1 = dma_rx_[1];
 }
 
 const char* TCA9555Driver::getInfo() {

@@ -17,6 +17,8 @@
 
 #include "I2CBusLock.h"
 
+class I2CDMABus;
+
 namespace Drivers {
 
 class BNO085DriverSetup : public Classes::BaseSetup {
@@ -69,6 +71,10 @@ class BNO085Driver : public Classes::BaseDriver {
   BNO085DriverData getData() const { return data_; }
 
   float calculateYaw(float qx, float qy, float qz, float qw);
+
+  /// DMA stub, BNO085 SHTP requires multi-step variable-length I2C
+  /// reads that cannot be batched into a single DMA cycle.
+  void setDMABus(I2CDMABus* /*bus*/) {}
 
  private:
   const BNO085DriverSetup setup_;

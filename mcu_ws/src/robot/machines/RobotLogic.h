@@ -26,6 +26,7 @@
 #include "../RobotPins.h"
 #include "BNO085.h"
 #include "I2CBusLock.h"
+#include "I2CDMABus.h"
 #include "I2CMuxDriver.h"
 #include "I2CPowerDriver.h"
 #include "PCA9685Manager.h"
@@ -121,6 +122,11 @@ static Robot::PCA9685DriverSetup g_pca_motor_setup(
     "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2);
 static Robot::PCA9685Driver g_pca_motor_drv(g_pca_motor_setup);
 static Robot::PCA9685Driver* g_pca_motor = &g_pca_motor_drv;
+
+// --- Wire0 I2CDMABus (400 kHz Fast Mode) ---
+// TCA9548A mux, TCA9555 GPIO, INA219 battery
+// Wire1 not created, BNO085 SHTP protocol requires blocking multi-step I2C.
+static I2CDMABus g_dma_wire0(Wire, 400000);
 
 // --- Arm subsystem ---
 static Drivers::EncoderDriverSetup g_encoder_setup("arm_encoder", /*pin1*/ 1,
@@ -285,7 +291,26 @@ static KeypadSubsystemSetup g_keypad_setup("keypad_subsystem", &g_servo,
                                             KEYPAD_SERVO_IDX, &g_drive);
 static KeypadSubsystem g_keypad(g_keypad_setup);
 
-// --- PCA9685 DMA flush task (1000 Hz via I2CDMABus) ---
+// Wire0 DMA bus task: batches mux select + INA219 + TCA9555 reads at 50 Hz.
+// TOF (VL53L0X) remains blocking, complex multi-step library protocol.
+static void wire0_dma_task(void*) {
+  while (true) {
+    g_mux.queueDMASelect(MUX_CH_BATTERY);
+    g_power_driver.queueDMAReads();
+    g_gpio.queueDMARead();
+
+    if (g_dma_wire0.fire()) {
+      while (!g_dma_wire0.isComplete()) threads.yield();
+      g_dma_wire0.dispatch();
+      g_power_driver.processDMAResults();
+      g_gpio.processDMAResults();
+    }
+
+    threads.delay(20);
+  }
+}
+
+// PCA9685 DMA flush task (1000 Hz via I2CDMABus)
 static void pca_task(void*) {
   while (true) {
     if (g_wire2_dma.isComplete()) {
@@ -366,24 +391,31 @@ void setup() {
   g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
   g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
 
-  // 2a. Clear LEDs on startup
+  // 2a. Wire DMA buses to I2C drivers
+  g_mux.setDMABus(&g_dma_wire0);
+  g_power_driver.setDMABus(&g_dma_wire0);
+  g_gpio.setDMABus(&g_dma_wire0);
+  g_imu_driver.setDMABus(nullptr);  // BNO085 SHTP, keep blocking on Wire1
+  DEBUG_PRINTLN("[INIT] DMA buses wired to I2C drivers");
+
+  // 2c. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
   FastLED.show();
 
-  // 2b. OLED startup debug info
+  // 2d. OLED startup debug info
   g_oled.appendText("SEC26 Robot v1.0");
   g_oled.appendText("Subsystems OK");
   g_oled.appendText("Waiting for uROS...");
 
-  // 2b2. Update OLED when micro-ROS connects/disconnects
+  // 2d2. Update OLED when micro-ROS connects/disconnects
   g_mr.setStateCallback([](bool connected) {
     g_oled.appendText(connected ? "uROS CONNECTED" : "uROS DISCONNECTED");
   });
 
-  // 2c. Wire battery → OLED status line
+  // 2e. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
-  // 2d. Wire OLED dashboard data sources (DIP 6 = debug dashboard)
+  // 2f. Wire OLED dashboard data sources (DIP 6 = debug dashboard)
   g_oled.setDashboardSources(&g_dip, &g_battery, &g_imu,
                              uwb_enabled ? &g_uwb : nullptr);
 
@@ -445,7 +477,8 @@ void setup() {
   g_crank.beginThreaded(1024, 1, 50);     // 20 Hz crank
   g_keypad.beginThreaded(1024, 1, 50);   // 20 Hz keypad
   g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
-  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
+  threads.addThread(wire0_dma_task, nullptr, 1024);  // 50 Hz Wire0 DMA
+  threads.addThread(pca_task, nullptr, 1024);         // 1000 Hz Wire2 DMA (PWM)
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 

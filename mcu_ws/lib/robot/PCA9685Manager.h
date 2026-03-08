@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <BaseDriver.h>
 #include <DMAChannel.h>
 #include <Wire.h>
 
@@ -105,10 +106,6 @@ public:
 
   /**
    * @brief Build selective buffer and fire DMA (standalone mode, non-blocking).
-   *
-   * Scans all registered drivers for dirty channels, builds the MTDR
-   * command buffer, and starts a DMA transfer to the LPI2C peripheral.
-   *
    * @return true if a transfer was started, false if previous transfer
    *         still in progress or nothing dirty.
    */
@@ -135,16 +132,5 @@ private:
   DMAChannel dma_;  ///< Standalone DMA channel.
   uint16_t buf_[MAX_BUF_ENTRIES] __attribute__((aligned(32)));  ///< Standalone TX buffer.
 
-  /**
-   * @brief Build MTDR commands for a single PCA9685 driver's dirty channels.
-   *
-   * Scans the driver's dirty flags, clears them, and emits run-length
-   * compressed MTDR command sequences (START, addr, reg, ON_L/H, OFF_L/H,
-   * ..., STOP) for consecutive dirty channels.
-   *
-   * @param drv  Driver to scan.
-   * @param out  Output buffer for MTDR words.
-   * @return Number of MTDR words written.
-   */
   uint16_t buildForDriver(Robot::PCA9685Driver *drv, uint16_t *out);
 };

@@ -1,7 +1,6 @@
 /**
  * @file PCA9685Manager.cpp
- * @brief Implementation of PCA9685DMAManager — DMA-accelerated multi-board
- *        PCA9685 write batching for Teensy 4.1.
+ * @brief Implementation of PCA9685DMAManager.
  * @see PCA9685Manager.h
  */
 
@@ -22,14 +21,10 @@ PCA9685DMAManager::PCA9685DMAManager(TwoWire &wire, uint32_t clock_hz)
   {
     port_ = &IMXRT_LPI2C1;
     dma_src_ = DMAMUX_SOURCE_LPI2C1;
-  }
-  else if (&wire == &Wire1)
-  {
+  } else if (&wire == &Wire1) {
     port_ = &IMXRT_LPI2C3;
     dma_src_ = DMAMUX_SOURCE_LPI2C3;
-  }
-  else if (&wire == &Wire2)
-  {
+  } else if (&wire == &Wire2) {
     port_ = &IMXRT_LPI2C4;
     dma_src_ = DMAMUX_SOURCE_LPI2C4;
   }
@@ -55,17 +50,15 @@ uint16_t PCA9685DMAManager::buildForDriver(Robot::PCA9685Driver *drv, uint16_t *
 {
   // Gather dirty bitmask from bool[16] and clear flags atomically.
   uint32_t dirty = 0;
-  uint8_t *d = (uint8_t *)drv->buffer_dirty_;
-  for (uint8_t i = 0; i < 16; i++)
-  {
+  uint8_t* d = (uint8_t*)drv->buffer_dirty_;
+  for (uint8_t i = 0; i < 16; i++) {
     dirty |= (uint32_t)d[i] << i;
     d[i] = 0;
   }
 
-  if (dirty == 0)
-    return 0;
+  if (dirty == 0) return 0;
 
-  uint16_t *p = out;
+  uint16_t* p = out;
 
   // Process consecutive runs of dirty channels for optimal bus utilisation.
   while (dirty)
@@ -78,10 +71,9 @@ uint16_t PCA9685DMAManager::buildForDriver(Robot::PCA9685Driver *drv, uint16_t *
     // Register address: LED0_ON_L + 4 * channel_index
     *p++ = PCA9685_LED0_ON_L + (tz << 2);
 
-    const uint16_t *src = &drv->buffer_[tz];
+    const uint16_t* src = &drv->buffer_[tz];
     uint32_t cnt = run;
-    do
-    {
+    do {
       uint32_t dd = *src++;
 
       // Each channel: ON_L, ON_H, OFF_L, OFF_H (4 bytes).
@@ -120,15 +112,14 @@ uint16_t PCA9685DMAManager::buildForDriver(Robot::PCA9685Driver *drv, uint16_t *
 
 // ── Shared DMA bus mode ─────────────────────────────────────────────────────
 
-uint16_t PCA9685DMAManager::buildInto()
-{
+uint16_t PCA9685DMAManager::buildInto() {
   if (!dma_bus_) return 0;
 
   // Reserve worst-case space; we'll rewind any unused tail after building.
   uint16_t needed = MAX_BUF_PER_DRIVER * num_drivers_;
   uint16_t save_pos = dma_bus_->txPos();
 
-  uint16_t *slot = dma_bus_->reserveTx(needed);
+  uint16_t* slot = dma_bus_->reserveTx(needed);
   if (!slot) return 0;
 
   uint16_t total = 0;
@@ -137,7 +128,6 @@ uint16_t PCA9685DMAManager::buildInto()
 
   if (total == 0)
   {
-    // Nothing dirty — give back the entire reservation.
     dma_bus_->rewindTx(save_pos);
     return 0;
   }
@@ -149,17 +139,14 @@ uint16_t PCA9685DMAManager::buildInto()
 
 // ── Legacy standalone mode ──────────────────────────────────────────────────
 
-bool PCA9685DMAManager::update()
-{
-  if (!isComplete())
-    return false;
+bool PCA9685DMAManager::update() {
+  if (!isComplete()) return false;
 
   uint16_t pos = 0;
   for (uint8_t d = 0; d < num_drivers_; d++)
     pos += buildForDriver(drivers_[d], buf_ + pos);
 
-  if (pos == 0)
-    return false;
+  if (pos == 0) return false;
 
   // Configure DMA: source from buf_, destination to LPI2C MTDR register.
   dma_.clearComplete();
@@ -182,7 +169,4 @@ bool PCA9685DMAManager::update()
   return true;
 }
 
-bool PCA9685DMAManager::isComplete()
-{
-  return dma_.complete();
-}
+bool PCA9685DMAManager::isComplete() { return dma_.complete(); }

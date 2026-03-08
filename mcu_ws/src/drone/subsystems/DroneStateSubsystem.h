@@ -8,6 +8,7 @@
  */
 
 #include <Arduino.h>
+#include <RTOSSubsystem.h>
 #include <microros_manager_robot.h>
 
 #include <geometry_msgs/msg/twist.h>
@@ -36,16 +37,20 @@ enum class DroneState : uint8_t {
   EMERGENCY_LAND = 6
 };
 
-class DroneStateSubsystem : public Subsystem::IMicroRosParticipant {
+class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
+                             public Subsystem::IMicroRosParticipant {
  public:
-  DroneStateSubsystem(DroneFlightSubsystem& flight, GyroSubsystem& gyro,
+  DroneStateSubsystem(const char* name,
+                      DroneFlightSubsystem& flight, GyroSubsystem& gyro,
                       DroneEKFSubsystem& ekf
 #if DRONE_ENABLE_HEIGHT
                       ,
                       HeightSubsystem& height
 #endif
                       )
-      : flight_(flight),
+      : RTOSSubsystem(setup_),
+        setup_(name),
+        flight_(flight),
         gyro_(gyro),
         ekf_(ekf)
 #if DRONE_ENABLE_HEIGHT
@@ -55,12 +60,18 @@ class DroneStateSubsystem : public Subsystem::IMicroRosParticipant {
   {
   }
 
-  // State machine update (called from main loop)
-  void update();
+  // RTOSSubsystem lifecycle
+  bool init() override { return true; }
+  void begin() override {}
+  void update() override;
+  void pause() override {}
+  void reset() override {}
+  const char* getInfo() override { return setup_.getId(); }
 
   // micro-ROS participant interface
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   // State accessors
   DroneState getState() const { return state_; }
@@ -77,7 +88,7 @@ class DroneStateSubsystem : public Subsystem::IMicroRosParticipant {
   uint32_t lastCmdVelMs() const { return last_cmd_vel_ms_; }
 
  private:
-  void publishState();
+  void populateStateMsg();
   void updateCmdVel(float dt);
 
   // Service callbacks
@@ -87,6 +98,7 @@ class DroneStateSubsystem : public Subsystem::IMicroRosParticipant {
   static void setAnchorsCallback(const void* req, void* res);
   static void setMotorsCallback(const void* req, void* res);
 
+  Classes::BaseSetup setup_;
   DroneFlightSubsystem& flight_;
   GyroSubsystem& gyro_;
   DroneEKFSubsystem& ekf_;
@@ -134,6 +146,10 @@ class DroneStateSubsystem : public Subsystem::IMicroRosParticipant {
 
   uint32_t last_state_pub_ms_ = 0;
   uint32_t last_update_ms_ = 0;
+
+  // Deferred publishing (same pattern as HeartbeatSubsystem)
+  bool data_ready_ = false;
+  SemaphoreHandle_t data_mutex_ = nullptr;
 
   // Static instance for service callbacks
   static DroneStateSubsystem* s_instance_;

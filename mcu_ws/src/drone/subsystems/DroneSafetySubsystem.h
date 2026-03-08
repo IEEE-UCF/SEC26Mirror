@@ -6,6 +6,7 @@
  */
 
 #include <Arduino.h>
+#include <RTOSSubsystem.h>
 #include <microros_manager_robot.h>
 
 #include "../DroneConfig.h"
@@ -19,9 +20,10 @@
 
 namespace Drone {
 
-class DroneSafetySubsystem {
+class DroneSafetySubsystem : public Subsystem::RTOSSubsystem {
  public:
-  DroneSafetySubsystem(DroneStateSubsystem& state, DroneFlightSubsystem& flight,
+  DroneSafetySubsystem(const char* name,
+                       DroneStateSubsystem& state, DroneFlightSubsystem& flight,
                        GyroSubsystem& gyro,
                        Subsystem::MicrorosManager& mr
 #if DRONE_ENABLE_HEIGHT
@@ -29,7 +31,9 @@ class DroneSafetySubsystem {
                        HeightSubsystem& height
 #endif
                        )
-      : state_(state),
+      : RTOSSubsystem(setup_),
+        setup_(name),
+        state_(state),
         flight_(flight),
         gyro_(gyro),
         mr_(mr)
@@ -40,8 +44,15 @@ class DroneSafetySubsystem {
   {
   }
 
-  // Check all failure conditions. Call at 10Hz from safety task.
-  void update() {
+  // RTOSSubsystem lifecycle
+  bool init() override { return true; }
+  void begin() override {}
+  void pause() override {}
+  void reset() override {}
+  const char* getInfo() override { return setup_.getId(); }
+
+  // Check all failure conditions (called by RTOSSubsystem task loop).
+  void update() override {
     if (!state_.isFlying() &&
         state_.getState() != DroneState::EMERGENCY_LAND) {
       return;
@@ -95,6 +106,7 @@ class DroneSafetySubsystem {
   }
 
  private:
+  Classes::BaseSetup setup_;
   DroneStateSubsystem& state_;
   DroneFlightSubsystem& flight_;
   GyroSubsystem& gyro_;

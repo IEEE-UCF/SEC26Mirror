@@ -13,6 +13,7 @@ DroneStateSubsystem* DroneStateSubsystem::s_instance_ = nullptr;
 bool DroneStateSubsystem::onCreate(rcl_node_t* node,
                                    rclc_executor_t* executor) {
   s_instance_ = this;
+  if (!data_mutex_) data_mutex_ = xSemaphoreCreateMutex();
 
   // State publisher (best-effort)
   if (rclc_publisher_init_best_effort(
@@ -238,10 +239,10 @@ void DroneStateSubsystem::update() {
     }
   }
 
-  // Publish state at configured rate
+  // Populate state message at configured rate (deferred publishing)
   if (now - last_state_pub_ms_ >=
       (1000 / Config::STATE_PUB_RATE_HZ)) {
-    publishState();
+    populateStateMsg();
     last_state_pub_ms_ = now;
   }
 }
@@ -274,12 +275,13 @@ void DroneStateSubsystem::updateCmdVel(float dt) {
   flight_.setSetpoint(sp);
 }
 
-void DroneStateSubsystem::publishState() {
+void DroneStateSubsystem::populateStateMsg() {
   if (!state_pub_.impl) return;
 
   EKFState ekf = ekf_.getState();
   IMUData imu = gyro_.getData();
 
+  if (data_mutex_) xSemaphoreTake(data_mutex_, portMAX_DELAY);
   state_msg_.state = static_cast<uint8_t>(state_);
 #if DRONE_ENABLE_HEIGHT
   state_msg_.altitude = height_.getAltitudeM();
@@ -291,8 +293,18 @@ void DroneStateSubsystem::publishState() {
   state_msg_.roll = imu.roll;
   state_msg_.pitch = imu.pitch;
   state_msg_.yaw = imu.yaw;
+  data_ready_ = true;
+  if (data_mutex_) xSemaphoreGive(data_mutex_);
+}
 
-  [[maybe_unused]] auto rc = rcl_publish(&state_pub_, &state_msg_, NULL);
+void DroneStateSubsystem::publishAll() {
+  if (!data_mutex_) return;
+  xSemaphoreTake(data_mutex_, portMAX_DELAY);
+  if (data_ready_ && state_pub_.impl) {
+    (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+    data_ready_ = false;
+  }
+  xSemaphoreGive(data_mutex_);
 }
 
 // ── Service callbacks ────────────────────────────────────────

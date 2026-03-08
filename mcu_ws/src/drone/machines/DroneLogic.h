@@ -115,7 +115,7 @@ static Drone::DroneUWBSubsystem g_drone_uwb(g_uwb);
 
 // ── State machine ──
 static Drone::DroneStateSubsystem g_state(
-    g_flight, g_gyro, g_ekf
+    "drone_state", g_flight, g_gyro, g_ekf
 #if DRONE_ENABLE_HEIGHT
     ,
     g_height
@@ -124,7 +124,7 @@ static Drone::DroneStateSubsystem g_state(
 
 // ── Safety monitor ──
 static Drone::DroneSafetySubsystem g_safety(
-    g_state, g_flight, g_gyro, g_mr
+    "drone_safety", g_state, g_flight, g_gyro, g_mr
 #if DRONE_ENABLE_HEIGHT
     ,
     g_height
@@ -232,18 +232,6 @@ static void uwbTask(void* /*param*/) {
 }
 #endif
 
-// Safety task: failure detection (10Hz, core 1)
-static void safetyTask(void* /*param*/) {
-  TickType_t prev_wake = xTaskGetTickCount();
-  const TickType_t period =
-      pdMS_TO_TICKS(1000 / Config::SAFETY_RATE_HZ);
-
-  for (;;) {
-    g_safety.update();
-    vTaskDelayUntil(&prev_wake, period);
-  }
-}
-
 // ════════════════════════════════════════════════════════════
 //  Arduino setup() / loop()
 // ════════════════════════════════════════════════════════════
@@ -322,6 +310,8 @@ void setup() {
 #endif
 
   g_hb.init();
+  g_state.init();
+  g_safety.init();
 
   // ── Register micro-ROS participants ──
   g_mr.registerParticipant(&g_hb);
@@ -331,13 +321,12 @@ void setup() {
   g_mr.registerParticipant(&g_drone_uwb);
 #endif
 
-  g_mr.begin();
-  g_hb.begin();
-
   // Check sensor readiness
   g_state.setAllSensorsReady(g_safety.checkSensorsReady());
 
   // ── Create FreeRTOS tasks ──
+  // Flight-critical tasks use xTaskCreatePinnedToCore for core affinity
+  // and vTaskDelayUntil for precise timing.
   xTaskCreatePinnedToCore(flightControlTask, "flight", Config::FLIGHT_TASK_STACK,
                           nullptr, Config::FLIGHT_TASK_PRIORITY, nullptr, 1);
 
@@ -351,42 +340,21 @@ void setup() {
                           Config::UWB_TASK_PRIORITY, nullptr, 0);
 #endif
 
-  xTaskCreatePinnedToCore(safetyTask, "safety", Config::SAFETY_TASK_STACK,
-                          nullptr, Config::SAFETY_TASK_PRIORITY, nullptr, 1);
+  // Non-flight subsystems use beginThreaded() (same pattern as robot).
+  //                            stack  pri  rate(ms)
+  g_mr.beginThreaded(          4096,   4,   100);   // micro-ROS agent (10Hz)
+  g_state.beginThreaded(       2048,   2,   100);   // state machine (10Hz)
+  g_safety.beginThreaded(      1024,   3,   100);   // safety monitor (10Hz)
+  g_hb.beginThreaded(          2048,   1,   1000);  // heartbeat (1Hz)
 
   Serial.printf("[Drone] Free heap: %u bytes\n", ESP.getFreeHeap());
   Serial.println("[Drone] All tasks started. Ready!");
 }
 
-static uint32_t last_heap_print_ms_ = 0;
-static uint32_t last_mr_update_ms_ = 0;
-
+// loop() is minimal — all subsystems run in FreeRTOS tasks.
+// Only WiFi + OTA remain here (ESP32 Arduino WiFi stack requirement).
 void loop() {
-  uint32_t now = millis();
-
   g_wifi.update();
   ArduinoOTA.handle();
-
-  // Rate-limit micro-ROS update to every 100ms to reduce leak surface
-  if (now - last_mr_update_ms_ >= 100) {
-    uint32_t before = ESP.getFreeHeap();
-    g_mr.update();
-    uint32_t after = ESP.getFreeHeap();
-    if (before - after > 100) {
-      Serial.printf("[LEAK] g_mr.update() lost %u bytes\n", before - after);
-    }
-    last_mr_update_ms_ = now;
-  }
-
-  g_hb.update();
-  g_state.update();
-
-  // Print heap every 5s for debugging
-  if (now - last_heap_print_ms_ > 5000) {
-    Serial.printf("[Drone] Free heap: %u, min: %u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
-    last_heap_print_ms_ = now;
-  }
-
-  delay(10);
+  vTaskDelay(pdMS_TO_TICKS(10));
 }

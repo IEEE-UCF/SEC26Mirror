@@ -9,5 +9,7 @@ colcon build --packages-select secbot_autonomy mcu_msgs
 source install/setup.bash
 
 ros2 run secbot_autonomy drive_test_node --ros-args \
-  -p speed:=0.2 \
-  -p leg_time:=3.0
+  -p distance:=0.5 \
+  -p goal_tolerance:=0.03 \
+  -p goal_timeout:=10.0 \
+  -p calibrate_time:=3.0

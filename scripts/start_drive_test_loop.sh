@@ -11,5 +11,8 @@ source install/setup.bash
 ros2 run secbot_autonomy drive_test_node --ros-args \
   -p loop:=true \
   -p with_turn:=true \
-  -p speed:=0.2 \
-  -p leg_time:=2.0
+  -p distance:=0.5 \
+  -p turn_angle:=1.5708 \
+  -p goal_tolerance:=0.03 \
+  -p goal_timeout:=10.0 \
+  -p calibrate_time:=3.0

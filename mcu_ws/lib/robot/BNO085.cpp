@@ -165,10 +165,10 @@ float BNO085Driver::calculateYaw(float qx, float qy, float qz, float qw) {
 bool BNO085Driver::tare() {
   if (!initSuccess_) return false;
 
+#if defined(USE_FREERTOS)
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
+#endif
   int rc = sh2_setTareNow(SH2_TARE_Z, SH2_TARE_BASIS_GAMING_ROTATION_VECTOR);
-  __enable_irq();
 
   if (rc != SH2_OK) {
     DEBUG_PRINTF("[BNO085] tare FAIL: rc=%d\n", rc);

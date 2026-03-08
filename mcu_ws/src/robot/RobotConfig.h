@@ -25,7 +25,6 @@ using namespace secbot::utils::units;
 //  Physical dimensions (inches — update these when measured!)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// TODO: MEASURE AND UPDATE THESE VALUES
 constexpr float TRACK_WIDTH_IN = 10.0f;           // center-to-center wheel dist
 constexpr float WHEEL_DIAMETER_IN = 3.25f;         // Vex omniwheel outer diameter
 
@@ -41,9 +40,12 @@ constexpr float WHEEL_CIRCUMFERENCE_M =
 // ═══════════════════════════════════════════════════════════════════════════
 
 constexpr int RAW_TICKS_PER_REVOLUTION = 3;
-constexpr int GEAR_RATIO = 34;
+constexpr int MOTOR_GEAR_RATIO = 34;
+constexpr int EXTERNAL_GEAR_SMALL = 36;   // motor-side gear teeth
+constexpr int EXTERNAL_GEAR_LARGE = 60;   // wheel-side gear teeth
 constexpr long TICKS_PER_REVOLUTION =
-    RAW_TICKS_PER_REVOLUTION * GEAR_RATIO;  // 102
+    RAW_TICKS_PER_REVOLUTION * MOTOR_GEAR_RATIO
+    * EXTERNAL_GEAR_LARGE / EXTERNAL_GEAR_SMALL;  // 170
 
 constexpr float DIST_PER_TICK_M =
     WHEEL_CIRCUMFERENCE_M / TICKS_PER_REVOLUTION;
@@ -57,9 +59,17 @@ constexpr uint8_t RIGHT_MOTOR_IDX = 0;
 constexpr uint8_t LEFT_ENCODER_IDX = 1;   // QTimer channel for left motor FG
 constexpr uint8_t RIGHT_ENCODER_IDX = 0;  // QTimer channel for right motor FG
 
-// Set to true if positive encoder ticks correspond to forward motion
-// for each side. Flip if a side reads backwards.
-constexpr bool LEFT_ENCODER_INVERTED = false;
+// Motor direction multipliers (1.0 = normal, -1.0 = reversed).
+// Left motor is mounted opposite to right on a tank-drive chassis,
+// so its command sign must be inverted for "forward" to mean "robot forward".
+constexpr float LEFT_MOTOR_MULTIPLIER = -1.0f;
+constexpr float RIGHT_MOTOR_MULTIPLIER = 1.0f;
+
+// Encoder inversion: set true when the motor multiplier is negative.
+// The encoder direction comes from MotorManager's intended direction (sign of
+// the speed command). When a motor multiplier flips the command sign, the
+// encoder counts in the opposite direction — this flag compensates.
+constexpr bool LEFT_ENCODER_INVERTED = true;
 constexpr bool RIGHT_ENCODER_INVERTED = false;
 
 // ═══════════════════════════════════════════════════════════════════════════

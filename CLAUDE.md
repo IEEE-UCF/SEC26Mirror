@@ -26,7 +26,7 @@ The codebase is split into two workspaces:
   - `src/robot/`: Main Teensy41 robot firmware (uses micro-ROS)
   - `src/beacon/`: UWB beacon nodes (differentiated by `BEACON_ID` build flag)
   - `src/drone/`: Drone controller (flight controller, IMU, height, IR subsystems)
-  - `src/minibot/`: Mini-robot ESP32 firmware (MinibotMotorDriver, MinibotDriveSubsystem, UWB tag, micro-ROS WiFi)
+  - `src/minibot/`: Mini-robot firmware (Seeed XIAO ESP32-S3: MinibotMotorDriver, MinibotDriveSubsystem, MiniBotIMUSubsystem, micro-ROS WiFi)
   - `src/field/`: Field element controllers (button, crank, earth, keypad, pressure)
   - `src/test/`: Hardware test programs
   - `src/platform/`: Platform support files (e.g., `atomic_stubs_arm.c`)
@@ -37,8 +37,7 @@ The codebase is split into two workspaces:
   - `OLEDSubsystem` — SSD1306 128x64 display (terminal mode + debug dashboard mode via DIP 6)
   - `SensorSubsystem` — VL53L0X time-of-flight distance
   - `ArmSubsystem` — Arm control with servo/encoder
-  - `IntakeSubsystem` — Intake/ejection mechanism
-  - `IntakeBridgeSubsystem` — Gear-and-rack mechanism for pressure plate duck retrieval
+  - `IntakeSubsystem` — Linear rail + spinning motor intake/ejection mechanism
   - `MiniRobotSubsystem` — Mini-robot control
   - `ServoSubsystem` — PCA9685 servo manager with SetServo service
   - `MotorManagerSubsystem` — PCA9685 motor manager with SetMotor service
@@ -55,7 +54,7 @@ The codebase is split into two workspaces:
   - `RobotConstants.h` — PCA9685 defaults (freq, channels)
   - `RobotConfig.h` — Drive kinematics, PID, motion profile, and trajectory constants
 - **Libraries**:
-  - `lib/subsystems/`: Core subsystem abstractions (McuSubsystem lifecycle, UWBSubsystem, IMicroRosParticipant, TimedSubsystem)
+  - `lib/subsystems/`: Core subsystem abstractions (McuSubsystem lifecycle, ESP32WifiSubsystem, RobotManager, TimedSubsystem)
   - `lib/robot/`: Hardware drivers (BNO085, TCA9555, PCA9685Driver/Manager, I2CMux, I2CPower, TOF, I2CBusLock, AnalogMux, AnalogRead)
   - `lib/drivers/`: Additional drivers (CD74HC4067 analog mux)
   - `lib/control/`: Control algorithms (PID, trapezoidal/S-curve motion profiles, trajectory controller, arm kinematics)
@@ -67,9 +66,7 @@ The codebase is split into two workspaces:
   - `lib/ir/`: IR NEC communication (ESP32 RMT-based)
   - `lib/field/`: Field element message definitions, ESP-NOW transport, shared protocol
   - `lib/hal/`: Hardware abstraction layer (NativeGPIO, PCA9685GPIO, MCP23017GPIO, CD74HC4067GPIO)
-  - `lib/encoders/`: QTimerEncoder hardware encoder driver (IMXRT1062 QTimer + XBAR)
-  - `lib/mpu6050/`: MPU6050 IMU driver (used by minibot/drone)
-  - `lib/utils/`: Signal filters, unit conversions, duck tracker, math helpers
+  - `lib/utils/`: Signal filters, unit conversions, duck tracker, math helpers, DebugLog
   - `lib/sensors/`: Photodiode signal conditioning
   - `lib/microros/`: MicrorosManager (agent lifecycle, participant registry, executor)
 
@@ -83,8 +80,9 @@ The codebase is split into two workspaces:
 - `secbot_sim`: Gazebo Harmonic simulation with full MCU subsystem emulator (C++)
 - `secbot_health`: System health monitoring and MCU heartbeat watchdog (C++)
 - `secbot_bridge_i2c`: ROS ↔ Teensy I2C bridge with packet codec and fake Teensy for simulation (C++)
+- `secbot_deploy`: Deployment trigger bridge — MCU button press → deploy-orchestrator (C++)
 - `secbot_tf`: TF static transform configuration (launch files + YAML)
-- `secbot_msgs`: Custom messages (TaskStatus, DuckDetection) and actions (NavigatePath, ApproachTarget)
+- `secbot_msgs`: Custom messages (TaskStatus, DuckDetection, DuckDetections), actions (NavigatePath, ApproachTarget), services (SetTask, StartStop)
 - `mcu_msgs`: Shared MCU↔ROS2 messages (symlinked to `mcu_ws/extra_packages/mcu_msgs`)
 - `my_robot_description`: URDF robot description for visualization
 
@@ -210,6 +208,14 @@ Hardware test environments: `teensy-test-battery-subsystem`, `teensy-test-sensor
 
 See `mcu_ws/test/README.md` for detailed test documentation.
 
+### Hardware Regression Tests (manual, per-target checklists)
+
+Each default firmware target has a `REGRESSION_TESTS.md` in its source directory:
+- `mcu_ws/src/robot/REGRESSION_TESTS.md` — Robot + teensy-test-all-subsystems (topic rates, data validation, services, drive, reconnection, staged debug)
+- `mcu_ws/src/beacon/REGRESSION_TESTS.md` — Beacons 1-3 (WiFi, UWB anchor, inter-beacon ranging, OTA)
+- `mcu_ws/src/drone/REGRESSION_TESTS.md` — Drone (WiFi, heartbeat, OTA)
+- `mcu_ws/src/minibot/REGRESSION_TESTS.md` — Minibot (WiFi, UWB tag, drive, IMU, OTA)
+
 ## Architecture
 
 ### Robot Firmware (Teensy41) — Threading Model
@@ -221,10 +227,11 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | Priority | Subsystem | Rate | Stack |
 |----------|-----------|------|-------|
 | 4 (highest) | micro-ROS Manager | — | 8192 |
-| 3 | IMU | 10ms (100 Hz) | 2048 |
+| 3 | IMU | 30ms (~33 Hz) | 8192 |
 | 3 | Drive | 20ms (50 Hz) | 4096 |
 | 2 | Servo | 25ms (40 Hz) | 1024 |
 | 2 | Motor Manager | 1ms (1000 Hz) | 1024 |
+| 2 | Encoder | 20ms (50 Hz) | 1024 |
 | 2 | UWB | 50ms (20 Hz) | 2048 |
 | 2 | Arm, Intake | 20ms (50 Hz) | 1024 |
 | 1 | OLED | 25ms (40 Hz) | 2048 |
@@ -233,7 +240,7 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 | 1 | DIP Switch | 500ms (2 Hz) | 1024 |
 | 1 | Button | 20ms (50 Hz) | 1024 |
 | 1 | LED | 50ms (20 Hz) | 1024 |
-| 1 | Heartbeat | 200ms (5 Hz) | 1024 |
+| 1 | Heartbeat | 1000ms (1 Hz) | 1024 |
 | 1 | Deploy | 20ms (50 Hz) | 1024 |
 | 1 | Crank | 50ms (20 Hz) | 1024 |
 | 1 | Keypad | 50ms (20 Hz) | 1024 |
@@ -246,7 +253,9 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 - **OLED Display**: Uses hardware SPI1 (pins 26/27) — software SPI is unreliable under TeensyThreads preemption.
 - **UWB Init**: Conditional on DIP switch 2 (ON = enabled). Must call `SPI.begin()` before `g_uwb.init()`. The DW3000 library has a hardcoded `RST_PIN 27` in `DW3000Constants.h` that conflicts with OLED SPI1 SCK — `UWBDriver.cpp` skips `hardReset()` when no reset pin is wired to avoid this.
 
-Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`) for ROS2 lifecycle.
+Subsystems implement `beginThreaded(stackSize, priority, updateRateMs)` and the `IMicroRosParticipant` interface (`onCreate`/`onDestroy`/`publishAll`) for ROS2 lifecycle.
+
+**Deferred publishing architecture**: Sensor threads no longer acquire `g_microros_mutex` to call `rcl_publish()`. Instead, each subsystem caches its message under a per-subsystem `data_mutex_` and sets `data_ready_ = true`. The MicrorosManager thread calls `publishAll()` on each participant inside the existing `g_microros_mutex` scope, which acquires the subsystem's `data_mutex_` and publishes if data is ready. Lock ordering: `g_microros_mutex` (outer, manager only) > `data_mutex_` (inner, per-subsystem).
 
 ### I2C Bus Layout
 
@@ -261,7 +270,7 @@ I2C bus access is mutex-protected via `I2CBusLock` (RAII pattern: `I2CBus::Lock 
 ### Teensy 4.1 Pin Map
 
 See `src/robot/RobotPins.h` for full assignments. Key pins:
-- **Motors**: GPIO 2-9 (reserved for motor outputs)
+- **Motor FG Encoders**: GPIO 2-9 (QTimer3/QTimer4 pulse inputs; pin 8 disabled)
 - **UWB SPI**: CS=10, MOSI=11, MISO=12, CLK=13
 - **Display SPI1**: MOSI=26, SCK=27, CS=38, DC=37, RST=33 (hardware SPI1, not SPI0)
 - **Misc GPIO**: WS2812B=35, RC RX=34 (Serial8), Mux Reset=23, Button INT=36
@@ -271,21 +280,28 @@ See `src/robot/RobotPins.h` for full assignments. Key pins:
 
 All MCU subsystems inherit from `Classes::BaseSubsystem` with lifecycle: `init()` → `begin()` → `update()` (loop) / `pause()` → `reset()`. Subsystems that need ROS2 also implement `IMicroRosParticipant` and register with `MicrorosManager::registerParticipant()`.
 
-The MicrorosManager supports up to 16 registered participants and initializes 10 executor handles (for subscriptions, services, and timers — publishers do not consume handles).
+The MicrorosManager supports up to 32 registered participants (20 currently used) and initializes 24 executor handles (for subscriptions, services, and timers — publishers do not consume handles). micro-ROS entity limits (in `custom_microros.meta`): 22 publishers, 14 subscriptions, 6 services.
 
 ### micro-ROS Topic Namespace
 
 All robot topics use `/mcu_robot/` prefix:
 - `/mcu_robot/heartbeat` (String), `/mcu_robot/battery_health` (BatteryHealth), `/mcu_robot/imu/data` (Imu)
-- `/mcu_robot/tof_distances` (Float32MultiArray), `/mcu_robot/rc` (RC), `/mcu_robot/intake/state` (IntakeState)
-- `/mcu_robot/mini_robot/state` (MiniRobotState), `/mcu_robot/lcd/append` (subscription: String)
+- `/mcu_robot/tof_distances` (Float32MultiArray), `/mcu_robot/rc` (RC)
+- `/mcu_robot/intake/state` (IntakeState), `/mcu_robot/intake/command` (subscription: IntakeCommand)
+- `/mcu_robot/mini_robot/state` (MiniRobotState)
+- `/mcu_robot/lcd/append` (subscription: String), `/mcu_robot/lcd/scroll` (subscription: String)
 - `/mcu_robot/servo/state` (Float32MultiArray), `/mcu_robot/servo/set` (service: SetServo)
 - `/mcu_robot/motor/state` (Float32MultiArray), `/mcu_robot/motor/set` (service: SetMotor)
 - `/mcu_robot/encoders` (Float32MultiArray)
 - `/mcu_robot/buttons` (UInt8), `/mcu_robot/dip_switches` (UInt8)
 - `/mcu_robot/led/set_all` (subscription: LedColor)
-- UWB: `mcu_uwb/ranging` (from beacons/robot tag)
-- Drive: `drive_base/status`, `drive_base/command` (currently commented out in RobotLogic.h)
+- `/mcu_robot/crank/state` (pub), `/mcu_robot/crank/command` (subscription)
+- `/mcu_robot/keypad/state` (pub), `/mcu_robot/keypad/command` (subscription)
+- `/mcu_robot/deploy/trigger` (pub), `/mcu_robot/deploy/status` (pub)
+- `/mcu_robot/reset` (service: Reset)
+- `/mcu_robot/debug` (String — manager-owned debug publisher)
+- `/mcu_robot/uwb/ranging` (UWBRanging — robot tag ranging)
+- Drive: `drive_base/status` (DriveBase), `drive_base/command` (subscription: DriveCommand), `drive_base/reset_pose` (subscription)
 
 Minibot topics use `/mcu_minibot/` prefix:
 - `/mcu_minibot/cmd_vel` (subscription: geometry_msgs/Twist — differential drive mix)
@@ -305,13 +321,14 @@ drive_base/status ──serial──► secbot_fusion ──► /odom/unfiltered
 
 ESP32 Beacons (×3)
 ──────────────────
-mcu_uwb/ranging ───WiFi UDP──► secbot_uwb ──► /uwb/robot_pose
+mcu_uwb/ranging ──WiFi UDP──► secbot_uwb ──► /uwb/robot_pose
+Robot UWB tag: /mcu_robot/uwb/ranging ──serial──► secbot_uwb
 ```
 
 ### UWB Positioning System
 
 - **Beacons** (anchors): ID=10, ID=11, ID=12 deployed at field corners (ESP32 + DW3000)
-- **Tag**: ID=13 on main robot (reserved), ranges to all anchors via DW3000 TWR
+- **Tag**: ID=13 on main robot, ID=14 minibot, ID=15 drone (reserved). Ranges to all anchors via DW3000 TWR
 - **Transport**: ESP32 micro-ROS WiFi UDP to Pi, then `secbot_uwb` trilaterates position
 - **Rate**: ~20Hz ranging initiation, 10Hz publish to ROS2
 - **Trilateration**: Min 3 beacons (2D), outlier rejection at 2.0σ, max residual 0.5m
@@ -345,9 +362,9 @@ Field elements (ESP32) communicate via **ESP-NOW** broadcast (not micro-ROS):
 - Source of truth: `ros2_ws/src/mcu_msgs`
 - Symlinked to: `mcu_ws/extra_packages/mcu_msgs`
 
-**Current message inventory** (21 msgs, 5 srvs):
-- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeBridgeCommand, IntakeBridgeState, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
-- Services: ArmControl, LCDAppend, OLEDControl, SetServo, SetMotor
+**Current message inventory** (20 msgs, 6 srvs):
+- Messages: AntennaMarker, ArmCommand, ArmSusbsytem, BatteryHealth, DriveBase, DriveCommand, DroneControl, DroneState, IntakeCommand, IntakeState, IRCommand, LedColor, McuState, MiniRobotControl, MiniRobotState, RC, RobotInputs, UWBAnchorInfo, UWBRange, UWBRanging
+- Services: ArmControl, LCDAppend, OLEDControl, Reset, SetServo, SetMotor
 
 **When you add/modify a `.msg` or `.srv` file**: you must clean and rebuild micro-ROS:
 ```bash
@@ -399,7 +416,7 @@ Hosted on **Gitea** (not GitHub). Workflows in `.gitea/workflows/`:
 | `platformio-robot.yml` | PR touching mcu_ws or mcu_msgs | Builds ALL non-test PlatformIO environments |
 | `build-ws.yml` | PR/push to master touching ros2_ws | Docker image build + colcon build |
 | `prod-push.yml` | Push to `master` | Auto-syncs master → prod branch |
-| `auto-format.yml` | PR labeled `format` | Runs clang-format, auto-commits |
+| `auto-format.yml` | PR labeled `format` OR push to master | Runs clang-format, auto-commits |
 | `commit-linter.yml` | All PRs | Enforces Conventional Commits |
 | `test-multiarch.yml` | Manual dispatch only | Multi-architecture runner test |
 
@@ -416,3 +433,4 @@ Commits must follow **Conventional Commits** format (enforced by CI): `feat:`, `
 - **ESP32 transport**: WiFi UDP to Pi agent
 - **Beacon IPs**: beacon1=192.168.4.20, beacon2=192.168.4.21, beacon3=192.168.4.22
 - **Minibot IP**: 192.168.4.24
+- **Drone IP**: 192.168.4.25

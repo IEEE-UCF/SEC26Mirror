@@ -1,8 +1,8 @@
 # Project Status — SEC26 Robot
 
-**Last Updated:** 2026-02-28
-**Branch:** `feat/dip-switches` (7 files changed, +280 -14 vs master)
-**Latest master:** `94ec4c3` (Merge feat/full-drivebase)
+**Last Updated:** 2026-03-06
+**Branch:** `feat/FSMDebug`
+**Latest master:** `27afe33` (Merge feat/encoders-new #173)
 
 ---
 
@@ -12,55 +12,55 @@
 
 | Subsystem | Status | Notes |
 |-----------|--------|-------|
-| MicrorosManager | Mature | 32 participants / 24 executor handles |
+| MicrorosManager | Mature | 20 participants registered, 24 executor handles, MAX_PARTICIPANTS=32 |
 | BatterySubsystem | Mature | INA219, OLED status line, getVoltage/getCurrentA |
 | ImuSubsystem | Mature | BNO085, gyro calibration, getYaw accessor |
-| RCSubsystem | Mature | FlySky IBUS, main-loop polling |
-| OLEDSubsystem | Mature | Terminal + debug dashboard mode (DIP 6) |
+| RCSubsystem | Mature | FlySky IBUS, main-loop polling, RC override via DIP 1 |
+| OLEDSubsystem | Mature | Terminal + debug dashboard mode (DIP 6), lcd/append + lcd/scroll subscriptions |
 | SensorSubsystem | Implemented | Single VL53L0X TOF |
-| ServoSubsystem | Mature | PCA9685, SetServo service |
-| MotorManagerSubsystem | Mature | PCA9685, 1kHz reverse-pulse, SetMotor service |
-| EncoderSubsystem | Implemented | QTimer hardware FG counting |
-| DriveSubsystem | Implemented | Tank drive, PID, S-curve profiles, trajectory controller |
+| ServoSubsystem | Mature | PCA9685, SetServo service, 8 channels |
+| MotorManagerSubsystem | Mature | PCA9685, 1kHz reverse-pulse, SetMotor service, 8 channels |
+| EncoderSubsystem | Implemented | QTimer hardware FG counting, 50Hz publish, pins 2-9 (pin 8 disabled) |
+| DriveSubsystem | Implemented | Tank drive, PID, S-curve profiles, trajectory controller, RC manual mode, pose drive |
 | DipSwitchSubsystem | Mature | 8-bit named constants, isSwitchOn(), conditional behaviors |
 | ButtonSubsystem | Mature | TCA9555 port 1, interrupt-ready |
-| LEDSubsystem | Mature | WS2812B, LedColor subscription |
-| UWBSubsystem | Implemented | DW3000 tag, conditional on DIP 2 |
+| LEDSubsystem | Mature | WS2812B (5 LEDs), LedColor subscription |
+| UWBSubsystem | Implemented | DW3000 tag ID=13, conditional on DIP 2 |
 | ArmSubsystem | Implemented | Servo + encoder, kinematics |
-| IntakeSubsystem | Implemented | Intake/eject mechanism |
-| IntakeBridgeSubsystem | Scaffolding | Pin numbers unconfirmed (TODO) |
-| CrankSubsystem | Implemented | Servo channel 0 |
-| KeypadSubsystem | Implemented | Servo channel 1 + drive-to-press |
-| DeploySubsystem | Implemented | Button-triggered, DIP 8 target select |
-| ResetSubsystem | Implemented | micro-ROS Reset service |
-| HeartbeatSubsystem | Mature | 5 Hz heartbeat string |
+| IntakeSubsystem | Implemented | Linear rail + spinning motor, limit switch buttons, state/command topics |
+| CrankSubsystem | Implemented | Servo channel 0, state/command topics |
+| KeypadSubsystem | Implemented | Servo channel 1 + drive-to-press, state/command topics |
+| DeploySubsystem | Implemented | Button-triggered, DIP 8 target select, trigger/status topics |
+| ResetSubsystem | Implemented | micro-ROS Reset service, 9 reset targets |
+| HeartbeatSubsystem | Mature | 1 Hz heartbeat string |
+| MiniRobotSubsystem | Not Active | Header exists but NOT instantiated in RobotLogic.h |
 
 ### MCU Subsystems (Other Targets)
 
 | Target | Status | Notes |
 |--------|--------|-------|
-| Beacons (×3) | Implemented | ESP32 + DW3000, micro-ROS WiFi UDP |
-| Minibot | Scaffolding | Pin assignments are TODOs |
-| Drone | Implemented | Flight controller, IMU, height, IR |
-| Field Elements (×6) | Implemented | ESP-NOW communication |
+| Beacons (x3) | Implemented | ESP32 + DW3000, micro-ROS WiFi UDP, IDs 10/11/12 |
+| Minibot | Scaffolding | Seeed XIAO ESP32-S3, pin assignments are TODOs, MPU6050 + DW3000 + drive |
+| Drone | Implemented | Flight controller, BNO085 IMU, VL53L1X height, IR, DW3000 UWB (ESP32) |
+| Field Elements (x6) | Implemented | ESP-NOW communication (button, crank, earth, keypad, pressure, controller) |
 
 ### ROS2 Packages
 
 | Package | Version | Status | Notes |
 |---------|---------|--------|-------|
-| mcu_msgs | 1.0.0 | Mature | 21 msgs, 6 srvs — shared MCU↔ROS2 interface |
-| secbot_msgs | 0.1.0 | Implemented | TaskStatus, DuckDetection, NavigatePath, ApproachTarget |
-| secbot_autonomy | 0.0.1 | Implemented | 7 competition task state machines, 50Hz orchestration |
-| secbot_navigation | 0.0.1 | Implemented | D* Lite + pure pursuit, yaml-cpp config |
-| secbot_vision | 0.1.0 | Implemented | HSV duck detection (Python), cv_bridge |
-| secbot_fusion | 0.0.1 | Scaffolding | DriveBase → Odometry pass-through, ready for EKF |
-| secbot_uwb | 0.1.0 | Implemented | Trilateration, outlier rejection, Eigen |
-| secbot_sim | 0.0.1 | Implemented | Gazebo Harmonic + MCU subsystem emulator |
+| mcu_msgs | 1.0.0 | Mature | 20 msgs, 6 srvs — shared MCU<>ROS2 interface |
+| secbot_msgs | 0.1.0 | Implemented | 3 msgs, 2 actions (NavigatePath, ApproachTarget), 2 srvs (SetTask, StartStop) |
+| secbot_autonomy | 0.0.1 | Implemented | 7 task state machines, 50Hz orchestration, mission node |
+| secbot_navigation | 0.0.1 | Implemented | D* Lite + pure pursuit, yaml-cpp config, arena layout |
+| secbot_vision | 0.1.0 | Implemented | HSV duck detection (Python), antenna LED detection, odom TF broadcaster |
+| secbot_fusion | 0.0.1 | Scaffolding | DriveBase -> Odometry pass-through, ready for EKF |
+| secbot_uwb | 0.1.0 | Implemented | Trilateration, outlier rejection, Eigen, 450+ line README |
+| secbot_sim | 0.0.1 | Implemented | Gazebo Harmonic + MCU subsystem emulator, arena world + SDF models |
 | secbot_health | 0.0.1 | Implemented | MCU heartbeat watchdog |
-| secbot_bridge_i2c | 0.0.1 | Scaffolding | I2C bridge + fake Teensy for sim |
-| secbot_deploy | 0.0.1 | Implemented | Deployment trigger bridge (MCU button → orchestrator) |
-| secbot_tf | 0.0.1 | Implemented | Static transform configuration |
-| my_robot_description | 0.0.1 | Implemented | URDF for RViz visualization |
+| secbot_bridge_i2c | 0.0.1 | Implemented | I2C bridge + packet codec + rate limiter + fake Teensy for sim |
+| secbot_deploy | 0.0.1 | Implemented | Deployment trigger bridge (MCU button -> orchestrator) |
+| secbot_tf | 0.0.1 | Implemented | Static transform configuration (frames.yaml) |
+| my_robot_description | 0.0.1 | Implemented | URDF + 23 STL drivetrain meshes for RViz visualization |
 
 ### Native Test Suites
 
@@ -83,13 +83,13 @@
 
 | Workflow | Trigger | Status |
 |----------|---------|--------|
-| test-mcu.yml | PR touching mcu_ws/mcu_msgs | Active — runs 253+ unit tests |
-| platformio-robot.yml | PR touching mcu_ws/mcu_msgs | Active — builds all default PIO envs |
-| build-ws.yml | PR/push to master (ros2_ws) | Active — Docker image + colcon build |
-| commit-linter.yml | All PRs | Active — enforces Conventional Commits |
-| prod-push.yml | Push to master | Active — force-pushes master → prod |
-| auto-format.yml | PR labeled `format` | Active — clang-format auto-commit |
-| test-multiarch.yml | Manual dispatch | Active — multi-architecture test |
+| `test-mcu.yml` | PR touching mcu_ws/mcu_msgs | Active — runs 11 native test suites (253+ tests) |
+| `platformio-robot.yml` | PR touching mcu_ws/mcu_msgs | Active — builds all default PIO envs + uploads artifacts |
+| `build-ws.yml` | PR/push to master (ros2_ws) | Active — Docker image + colcon build with caching |
+| `commit-linter.yml` | All PRs | Active — enforces Conventional Commits |
+| `prod-push.yml` | Push to master | Active — force-pushes master -> prod |
+| `auto-format.yml` | PR labeled `format` OR push to master | Active — clang-format auto-commit |
+| `test-multiarch.yml` | Manual dispatch | Active — multi-architecture runner test |
 
 ---
 
@@ -100,13 +100,32 @@
 | BNO085Driver | BNO085 | Wire1 (I2C, 0x4B) | lib/robot/ |
 | TCA9555Driver | TCA9555 | Wire0 (I2C, 0x20) | lib/robot/ |
 | PCA9685Driver | PCA9685 | Wire2 (I2C, 0x40/0x41) | lib/robot/ |
+| PCA9685Manager | — | Wire2 (manages PCA9685 boards) | lib/robot/ |
 | I2CMuxDriver | TCA9548A | Wire0 (I2C, 0x70) | lib/robot/ |
-| I2CPowerDriver | INA219 | Wire0 (I2C, 0x40 via mux) | lib/robot/ |
+| I2CPowerDriver | INA219 | Wire0 (I2C, 0x40 via mux ch0) | lib/robot/ |
 | TOFDriver | VL53L0X | Wire0 (I2C) | lib/robot/ |
+| I2CBusLock | — | RAII mutex for all I2C buses | lib/robot/ |
+| AnalogMuxDriver | — | GPIO analog multiplexer | lib/robot/ |
+| AnalogRead | — | Teensy ADC wrapper | lib/robot/ |
 | UWBDriver | DW3000 | SPI0 (CS=10) | lib/uwb/ |
-| QTimerEncoder | — | GPIO 2-9 (hardware FG) | lib/encoders/ |
-| MPU6050 | MPU6050 | I2C (alternative) | lib/mpu6050/ |
+| QTimerEncoder | — | GPIO 2-9 (hardware FG pulse counting) | lib/encoders/ |
+| MPU6050 | MPU6050 | I2C (minibot/drone) | lib/mpu6050/ |
 | CD74HC4067 | CD74HC4067 | GPIO (analog mux) | lib/drivers/ |
+
+---
+
+## micro-ROS Entity Limits
+
+From `custom_microros.meta`:
+
+| Entity | Max |
+|--------|-----|
+| Nodes | 1 |
+| Publishers | 22 |
+| Subscriptions | 14 |
+| Services | 6 |
+| Clients | 1 |
+| History depth | 4 |
 
 ---
 
@@ -114,24 +133,24 @@
 
 ```
 Developer pushes to master
-    │
-    ├─► CI: test-mcu.yml (253+ unit tests)
-    ├─► CI: platformio-robot.yml (build all MCU envs)
-    ├─► CI: build-ws.yml (Docker + colcon build)
-    ├─► CI: commit-linter.yml (conventional commits)
-    │
-    ▼
-prod-push.yml auto-syncs master → prod
-    │
-    ▼
+    |
+    +-> CI: test-mcu.yml (253+ unit tests)
+    +-> CI: platformio-robot.yml (build all MCU envs)
+    +-> CI: build-ws.yml (Docker + colcon build)
+    +-> CI: commit-linter.yml (conventional commits)
+    |
+    v
+prod-push.yml auto-syncs master -> prod
+    |
+    v
 deploy-orchestrator.py (systemd on Pi)
-    │  watches for: MCU button trigger OR CI trigger file
-    │
-    ├─► git pull (prod branch)
-    ├─► detect firmware changes (hash comparison)
-    ├─► OTA flash ESP32s (beacons, minibot, drone)
-    ├─► USB flash Teensy (robot)
-    └─► Docker restart + colcon build
+    |  watches for: MCU button trigger OR CI trigger file
+    |
+    +-> git pull (prod branch)
+    +-> detect changes (MCU vs ROS vs micro-ROS rebuild)
+    +-> OTA flash ESP32s (beacons, minibot, drone) [hash-tracked]
+    +-> USB flash Teensy (robot, done last)
+    +-> Docker restart + colcon build (if ROS changed)
 ```
 
 ---
@@ -140,22 +159,41 @@ deploy-orchestrator.py (systemd on Pi)
 
 | Priority | File | Issue |
 |----------|------|-------|
-| High | `src/robot/RobotConfig.h:28` | Drive kinematics constants need measurement/calibration |
-| High | `src/robot/machines/RobotLogic.h:184` | IntakeBridge pin numbers unconfirmed with electrical |
-| High | `src/robot/subsystems/IntakeBridgeSubsystem.cpp:23` | Pin numbers need electrical team confirmation |
-| Medium | `src/minibot/machines/MinibotLogic.h:28-43` | 11 GPIO pin assignments are placeholders |
+| High | `src/robot/RobotConfig.h:28` | Drive kinematics constants (TRACK_WIDTH, WHEEL_DIAMETER) need measurement/calibration |
+| High | `src/robot/machines/RobotLogic.h:181-186` | Intake motor/encoder/button indices need electrical confirmation |
+| Medium | `src/minibot/machines/MinibotLogic.h:28-43` | 10 GPIO pin assignments are placeholders (I2C, UWB, motors) |
 
 ---
 
-## Recent Changes (feat/dip-switches branch)
+## Recent Changes (merged to master)
 
-Changes vs master (`94ec4c3`):
+Latest commits on master:
 
-| File | Change |
-|------|--------|
-| `DipSwitchSubsystem.h` | +8 named bit constants, +isSwitchOn() helper |
-| `RobotLogic.h` | RC override moved to bit 0, conditional UWB (DIP 2), OLED dashboard wiring |
-| `OLEDSubsystem.h/.cpp` | Debug dashboard mode (DIP 6): battery, IMU, UWB, DIP binary display |
-| `BatterySubsystem.h` | +getVoltage(), +getCurrentA() accessors |
-| `UWBSubsystem.h` | +getDriverData() accessor |
-| `teensy-test-all-subsystems.cpp` | +RC drive in loop, +configureDriveSetup(), +conditional UWB, +OLED dashboard |
+| Commit | Change |
+|--------|--------|
+| `27afe33` | Merge feat/encoders-new (#173) — encoder integration + drive fixes |
+| `d65a464` | Quick fix |
+| `c4e882e` | Localization logic for drive subsystem |
+| `f3910cd` | Wire bus to intake subsystem |
+| `9d6da5a` | Merge feat/encoders-new (#166) — first encoder merge |
+| `090e72a` | Revert back to Teensy, fix micro-ROS issues |
+| `826b096` | Ultra-reset functionality |
+| `9514827` | Drive working (initial) |
+| `1b22f89` | Remove QTimer4 channel 2 (pin 8 disabled) |
+| `8edcac5` | Merge feat/intake-subsystem (#164) |
+
+Key changes since last update:
+- EncoderSubsystem integrated with QTimer hardware pulse counting (second merge)
+- DriveSubsystem fully wired with PID, S-curve profiles, trajectory controller, RC control
+- IntakeSubsystem wired to motor bus with state/command topics
+- Localization logic added to drive subsystem
+- MicrorosManager: MAX_PARTICIPANTS=32, executor handles=24
+- ResetSubsystem manages 9 reset targets
+- micro-ROS participant count: 20 active (with UWB enabled)
+
+Changes on `feat/FSMDebug` (pending merge):
+- **Deferred publishing refactor**: All 16 publishing subsystems decoupled from `g_microros_mutex`. Sensor threads cache data under per-subsystem `data_mutex_`, MicrorosManager calls `publishAll()` in one pass. Eliminates mutex contention across ~17 threads.
+- **BNO085 IMU fixes**: 300ms boot delay, 20Hz report rate (matches consumer), max 20 events/update cap, 8K thread stack
+- **Container entrypoint fix**: Zombie process reaping, duplicate agent prevention via `is_running()` guard
+- **Regression test docs**: Added per-target regression test checklists (`src/robot/`, `src/beacon/`, `src/drone/`, `src/minibot/`)
+- **Verified topic rates** at full system load (stage 7, 20 participants): IMU ~21Hz, encoders ~17Hz, drive ~32Hz, all others within spec

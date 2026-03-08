@@ -114,6 +114,7 @@ class IntakeSubsystem : public IMicroRosParticipant,
   // ── IMicroRosParticipant ───────────────────────────────────────────────
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override;
   void onDestroy() override;
+  void publishAll() override;
 
   // ── Linear Rail API ────────────────────────────────────────────────────
   void initialize();
@@ -195,6 +196,10 @@ class IntakeSubsystem : public IMicroRosParticipant,
   mcu_msgs__msg__IntakeState state_msg_{};
   mcu_msgs__msg__IntakeCommand cmd_msg_{};
   rcl_node_t* node_ = nullptr;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

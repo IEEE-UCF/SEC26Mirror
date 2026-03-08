@@ -12,7 +12,7 @@
  * One instance per Wire bus.  Thread-safe via I2CBusLock — fire() acquires
  * the bus mutex, dispatch() releases it.
  *
- * Typical 1 kHz cycle (used by PCA9685DMAManager for motor PWM):
+ * Typical 1 kHz cycle (used by PCA9685Manager for motor PWM):
  * @code
  *   if (bus.isComplete()) {
  *     bus.dispatch();          // release lock, deliver RX, reset queues
@@ -27,7 +27,7 @@
  *   - `0x0200`         — STOP
  *   - `0x0400 | addr`  — START + transmit address byte
  *
- * @see PCA9685DMAManager
+ * @see PCA9685Manager
  */
 
 #pragma once
@@ -41,7 +41,7 @@
  * @class I2CDMABus
  * @brief Shared two-phase (TX+RX) DMA engine for one I2C bus on Teensy 4.1.
  *
- * Multiple producers (e.g. PCA9685DMAManager, sensor drivers) queue
+ * Multiple producers (e.g. PCA9685Manager, sensor drivers) queue
  * commands between dispatch() and fire().  All commands are sent in a
  * single DMA burst, minimising bus arbitration overhead.
  */
@@ -113,7 +113,7 @@ class I2CDMABus {
   /**
    * @brief Reserve raw MTDR buffer space for custom command sequences.
    *
-   * Used by PCA9685DMAManager to write pre-built MTDR commands directly
+   * Used by PCA9685Manager to write pre-built MTDR commands directly
    * into the TX buffer.  Caller must rewindTx() any unused space.
    *
    * @param count  Number of 16-bit MTDR words to reserve.

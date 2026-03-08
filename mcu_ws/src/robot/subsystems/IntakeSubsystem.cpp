@@ -61,7 +61,15 @@ void IntakeSubsystem::update() {
 
   // Publish state at ~20 Hz
   if (everyMs(50)) {
+#ifdef USE_TEENSYTHREADS
+    {
+      Threads::Scope lock(data_mutex_);
+      publishState();
+      data_ready_ = true;
+    }
+#else
     publishState();
+#endif
   }
 }
 
@@ -412,14 +420,14 @@ void IntakeSubsystem::publishState() {
   state_msg_.calibrated = calibrated_;
   state_msg_.intake_motor_speed = intake_speed_;
   state_msg_.time_in_state_ms = millis() - state_entry_ms_;
+}
 
+void IntakeSubsystem::publishAll() {
 #ifdef USE_TEENSYTHREADS
-  {
-    Threads::Scope guard(g_microros_mutex);
-    (void)rcl_publish(&state_pub_, &state_msg_, NULL);
-  }
-#else
+  Threads::Scope lock(data_mutex_);
+  if (!data_ready_ || !state_pub_.impl) return;
   (void)rcl_publish(&state_pub_, &state_msg_, NULL);
+  data_ready_ = false;
 #endif
 }
 

@@ -14,9 +14,13 @@
           "/home/ubuntu/ros2_workspaces/src/**",
           "/home/ubuntu/ros2_workspaces/install/**",
           "/home/ubuntu/ros2_workspaces/build/**",
-          "/usr/include",
+          // "/usr/include",
           "/usr/local/include",
-          "/opt/ros/humble/include"
+          "/opt/ros/humble/include",
+          "/home/ubuntu/mcu_workspaces/sec26mcu/src/**",
+          "/home/ubuntu/mcu_workspaces/sec26mcu/lib/**",
+          "/home/ubuntu/mcu_workspaces/sec26mcu/extra_packages/**",
+          "/usr/include",
         ],
         "C_Cpp.default.compileCommands": "/home/ubuntu/ros2_workspaces/build/compile_commands.json",
         "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"

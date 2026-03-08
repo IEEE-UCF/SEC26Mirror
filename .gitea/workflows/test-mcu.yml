@@ -17,7 +17,7 @@ on:
 jobs:
   test-mcu:
     name: Run MCU Unit Tests
-    if: "!startsWith(github.head_ref, 'doc')"
+    if: "!startsWith(github.head_ref, 'doc') && !contains(github.event.pull_request.labels.*.name, 'invalid')"
     runs-on: [ubuntu-latest, linux-amd64]
 
     steps:

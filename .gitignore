@@ -57,6 +57,12 @@ ros2_ws/install/*
 build/*
 install/*
 log/*
+**/build/COLCON_IGNORE
+**/install/COLCON_IGNORE
+**/log/COLCON_IGNORE
+ros2_ws/src/**/build/
+ros2_ws/src/**/install/
+ros2_ws/src/**/log/
 ros2_ws/.vscode/*
 
 # env

@@ -28,16 +28,10 @@ static constexpr double kAngularVelocityVariance = 0.00003;
 static constexpr double kLinearAccelerationVariance = 0.0001;
 
 McuSubsystemSimulator::McuSubsystemSimulator()
-    : Node("mcu_subsystem_sim"),
-      current_mode_(DriveMode::MANUAL),
-      left_motor_pwm_(0),
-      right_motor_pwm_(0),
-      left_encoder_accum_(0.0),
-      right_encoder_accum_(0.0),
-      prev_left_ticks_(0),
-      prev_right_ticks_(0),
-      sim_yaw_(0.0f),
-      prev_vel_x_(0.0) {
+    : Node("mcu_subsystem_sim"), current_mode_(DriveMode::MANUAL),
+      left_motor_pwm_(0), right_motor_pwm_(0), left_encoder_accum_(0.0),
+      right_encoder_accum_(0.0), prev_left_ticks_(0), prev_right_ticks_(0),
+      sim_yaw_(0.0f), prev_vel_x_(0.0) {
   RCLCPP_INFO(this->get_logger(), "Starting MCU Subsystem Simulator");
 
   // Declare all parameters
@@ -48,7 +42,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   this->declare_parameter("track_width", 12.0);
   this->declare_parameter("wheel_diameter", 4.0);
   this->declare_parameter("encoder_ticks_per_rev", 2048);
-  this->declare_parameter("gear_ratio", 1);
+  this->declare_parameter("gear_ratio", 1.0);
   this->declare_parameter("max_velocity", 24.0);
   this->declare_parameter("max_angular_velocity", 3.0);
   this->declare_parameter("max_wheel_velocity", 48.0);
@@ -82,7 +76,7 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       static_cast<float>(this->get_parameter("wheel_diameter").as_double());
   encoder_ticks_per_rev_ =
       this->get_parameter("encoder_ticks_per_rev").as_int();
-  gear_ratio_ = this->get_parameter("gear_ratio").as_int();
+  gear_ratio_ = this->get_parameter("gear_ratio").as_double();
   max_velocity_ =
       static_cast<float>(this->get_parameter("max_velocity").as_double());
   max_angular_velocity_ = static_cast<float>(
@@ -92,8 +86,9 @@ McuSubsystemSimulator::McuSubsystemSimulator()
 
   // Derived constants (same math as TankDriveLocalizationSetup constructor)
   float wheel_circumference = static_cast<float>(M_PI) * wheel_diameter_;
-  long ticks_per_rev = static_cast<long>(encoder_ticks_per_rev_) * gear_ratio_;
-  dist_per_tick_ = wheel_circumference / static_cast<float>(ticks_per_rev);
+  long ticks_per_rev = static_cast<long>(
+      static_cast<double>(encoder_ticks_per_rev_) * gear_ratio_);
+  inches_per_tick_ = wheel_circumference / static_cast<float>(ticks_per_rev);
 
   // Configure PID controllers (same config for both wheels)
   PIDController::Config pid_cfg;
@@ -142,12 +137,15 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   angular_profile_.configure(angular_cfg);
 
   // Configure localization
+  // Pre-compute effective ticks (encoder * gear_ratio) since the localization
+  // setup only accepts integer gear_ratio and ours is fractional (0.6).
+  int effective_ticks = static_cast<int>(
+      static_cast<double>(encoder_ticks_per_rev_) * gear_ratio_);
   loc_setup_ = std::make_unique<Drive::TankDriveLocalizationSetup>(
-      "sim", track_width_, wheel_diameter_, encoder_ticks_per_rev_,
-      gear_ratio_);
+      "sim", track_width_, wheel_diameter_, effective_ticks, 1);
   localization_ = std::make_unique<Drive::TankDriveLocalization>(*loc_setup_);
 
-  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
+  // tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
 
   // Initialize last update time
   last_update_time_ = this->now();
@@ -162,8 +160,9 @@ McuSubsystemSimulator::McuSubsystemSimulator()
   heartbeat_pub_ =
       this->create_publisher<std_msgs::msg::String>("/mcu_robot/heartbeat", 10);
 
-  imu_pub_ =
-      this->create_publisher<sensor_msgs::msg::Imu>("/mcu_robot/imu/data", 10);
+  // imu_pub_ =
+  //     this->create_publisher<sensor_msgs::msg::Imu>("/mcu_robot/imu/data",
+  //     10);
 
   tof_pub_ = this->create_publisher<std_msgs::msg::Float32MultiArray>(
       "/mcu_robot/tof_distances", 10);
@@ -172,9 +171,6 @@ McuSubsystemSimulator::McuSubsystemSimulator()
 
   intake_pub_ = this->create_publisher<mcu_msgs::msg::IntakeState>(
       "/mcu_robot/intake/state", 10);
-
-  bridge_pub_ = this->create_publisher<mcu_msgs::msg::IntakeBridgeState>(
-      "/mcu_robot/intake_bridge/state", 10);
 
   mini_robot_pub_ = this->create_publisher<mcu_msgs::msg::MiniRobotState>(
       "/mcu_robot/mini_robot/state", 10);
@@ -202,13 +198,6 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::bind(&McuSubsystemSimulator::cmdVelCallback, this,
                 std::placeholders::_1));
 
-  // Bridge command subscriber
-  bridge_cmd_sub_ =
-      this->create_subscription<mcu_msgs::msg::IntakeBridgeCommand>(
-          "/mcu_robot/intake_bridge/command", 10,
-          std::bind(&McuSubsystemSimulator::bridgeCommandCallback, this,
-                    std::placeholders::_1));
-
   // Arm command subscriber (for camera mast, latches)
   arm_cmd_sub_ = this->create_subscription<mcu_msgs::msg::ArmCommand>(
       "/arm_command", 10,
@@ -223,8 +212,18 @@ McuSubsystemSimulator::McuSubsystemSimulator()
 
   // Gazebo ground-truth odometry — used for trajectory tracking in sim
   gz_odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-      "/odom", 10,
+      "/odom/ground_truth", 10,
       std::bind(&McuSubsystemSimulator::gzOdomCallback, this,
+                std::placeholders::_1));
+
+  joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
+      "/joint_states", 10,
+      std::bind(&McuSubsystemSimulator::jointStateCallback, this,
+                std::placeholders::_1));
+
+  ekf_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+      "/odometry/filtered", 10,
+      std::bind(&McuSubsystemSimulator::ekfOdomCallback, this,
                 std::placeholders::_1));
 
   // Timers
@@ -238,9 +237,9 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::chrono::milliseconds(20),
       std::bind(&McuSubsystemSimulator::drivePublishCallback, this));
 
-  imu_publish_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(20),
-      std::bind(&McuSubsystemSimulator::imuPublishCallback, this));
+  // imu_publish_timer_ = this->create_wall_timer(
+  //   std::chrono::milliseconds(20),
+  // std::bind(&McuSubsystemSimulator::imuPublishCallback, this));
 
   // Battery @ 1 Hz
   battery_publish_timer_ = this->create_wall_timer(
@@ -267,11 +266,6 @@ McuSubsystemSimulator::McuSubsystemSimulator()
       std::chrono::milliseconds(50),
       std::bind(&McuSubsystemSimulator::intakePublishCallback, this));
 
-  // Bridge @ 20 Hz
-  bridge_publish_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(50),
-      std::bind(&McuSubsystemSimulator::bridgePublishCallback, this));
-
   // MiniRobot @ 10 Hz
   mini_robot_publish_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(100),
@@ -294,7 +288,7 @@ void McuSubsystemSimulator::trajectoryCallback(
 
   // Keep waypoints in meters — TrajectoryController config (lookahead,
   // tolerances) is in meters, so the pose and waypoints must also be in meters.
-  for (const auto& ps : msg->poses) {
+  for (const auto &ps : msg->poses) {
     TrajectoryController::Waypoint wp{};
     wp.x = static_cast<float>(ps.pose.position.x);
     wp.y = static_cast<float>(ps.pose.position.y);
@@ -312,7 +306,7 @@ void McuSubsystemSimulator::trajectoryCallback(
   }
 
   // Reset controller state BEFORE setTrajectory if your API supports it
-  traj_controller_.clearTrajectory();  // safe even if empty
+  traj_controller_.clearTrajectory(); // safe even if empty
   traj_controller_.setTrajectory(active_traj_.data(), active_traj_.size());
 
   current_mode_ = DriveMode::TRAJECTORY_DRIVE;
@@ -334,79 +328,77 @@ void McuSubsystemSimulator::trajectoryCallback(
 void McuSubsystemSimulator::driveCommandCallback(
     const mcu_msgs::msg::DriveBase::SharedPtr msg) {
   switch (msg->drive_mode) {
-    case mcu_msgs::msg::DriveBase::DRIVE_VECTOR: {
-      if (current_mode_ == DriveMode::TRAJECTORY_DRIVE &&
-          !active_traj_.empty()) {
-        RCLCPP_WARN_THROTTLE(
-            this->get_logger(), *this->get_clock(), 2000,
-            "Ignoring DRIVE_VECTOR because trajectory is active");
-        return;
-      }
-
-      // Same as RobotDriveBase::driveVelocity()
-      float vx = msg->goal_velocity.linear.x;
-      float omega = msg->goal_velocity.angular.z;
-
-      current_mode_ = DriveMode::VELOCITY_DRIVE;
-      target_velocity_ = Vector2D(vx, 0.0f, omega);
-
-      // Reset profiles to current velocity to avoid jumps
-      linear_profile_.reset(
-          {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
-      angular_profile_.reset(
-          {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
-
-      // Set target velocity as goal
-      linear_profile_.setGoal(
-          {target_velocity_.getX(), target_velocity_.getX()});
-      angular_profile_.setGoal(
-          {target_velocity_.getTheta(), target_velocity_.getTheta()});
-
-      left_pid_.reset();
-      right_pid_.reset();
-
-      RCLCPP_DEBUG(this->get_logger(), "Drive VELOCITY: vx=%.2f, omega=%.2f",
-                   vx, omega);
-      break;
+  case mcu_msgs::msg::DriveBase::DRIVE_VECTOR: {
+    if (current_mode_ == DriveMode::TRAJECTORY_DRIVE && !active_traj_.empty()) {
+      RCLCPP_WARN_THROTTLE(
+          this->get_logger(), *this->get_clock(), 2000,
+          "Ignoring DRIVE_VECTOR because trajectory is active");
+      return;
     }
 
-    case mcu_msgs::msg::DriveBase::DRIVE_GOAL: {
-      // Same as DriveSubsystem::drive_callback DRIVE_GOAL case
-      double qz = msg->goal_transform.transform.rotation.z;
-      double qw = msg->goal_transform.transform.rotation.w;
-      float target_yaw = std::atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
+    // Same as RobotDriveBase::driveVelocity()
+    float vx = msg->goal_velocity.linear.x;
+    float omega = msg->goal_velocity.angular.z;
 
-      current_mode_ = DriveMode::POSE_DRIVE;
-      target_pose_ =
-          Pose2D(msg->goal_transform.transform.translation.x,
-                 msg->goal_transform.transform.translation.y, target_yaw);
+    current_mode_ = DriveMode::VELOCITY_DRIVE;
+    target_velocity_ = Vector2D(vx, 0.0f, omega);
 
-      left_pid_.reset();
-      right_pid_.reset();
+    // Reset profiles to current velocity to avoid jumps
+    linear_profile_.reset(
+        {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
+    angular_profile_.reset(
+        {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
 
-      RCLCPP_DEBUG(this->get_logger(), "Drive POSE: x=%.2f, y=%.2f, theta=%.2f",
-                   target_pose_.getX(), target_pose_.getY(), target_yaw);
-      break;
-    }
+    // Set target velocity as goal
+    linear_profile_.setGoal({target_velocity_.getX(), target_velocity_.getX()});
+    angular_profile_.setGoal(
+        {target_velocity_.getTheta(), target_velocity_.getTheta()});
 
-    default: {
-      // Stop (same as real MCU default case)
-      current_mode_ = DriveMode::VELOCITY_DRIVE;
-      target_velocity_ = Vector2D(0, 0, 0);
-      gz_cmd_v_ = 0.0;
-      gz_cmd_w_ = 0.0;
+    left_pid_.reset();
+    right_pid_.reset();
 
-      linear_profile_.reset(
-          {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
-      angular_profile_.reset(
-          {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
-      linear_profile_.setGoal({0.0f, 0.0f});
-      angular_profile_.setGoal({0.0f, 0.0f});
+    RCLCPP_DEBUG(this->get_logger(), "Drive VELOCITY: vx=%.2f, omega=%.2f", vx,
+                 omega);
+    break;
+  }
 
-      left_pid_.reset();
-      right_pid_.reset();
-      break;
-    }
+  case mcu_msgs::msg::DriveBase::DRIVE_GOAL: {
+    // Same as DriveSubsystem::drive_callback DRIVE_GOAL case
+    double qz = msg->goal_transform.transform.rotation.z;
+    double qw = msg->goal_transform.transform.rotation.w;
+    float target_yaw = std::atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz));
+
+    current_mode_ = DriveMode::POSE_DRIVE;
+    target_pose_ =
+        Pose2D(msg->goal_transform.transform.translation.x,
+               msg->goal_transform.transform.translation.y, target_yaw);
+
+    left_pid_.reset();
+    right_pid_.reset();
+
+    RCLCPP_DEBUG(this->get_logger(), "Drive POSE: x=%.2f, y=%.2f, theta=%.2f",
+                 target_pose_.getX(), target_pose_.getY(), target_yaw);
+    break;
+  }
+
+  default: {
+    // Stop (same as real MCU default case)
+    current_mode_ = DriveMode::VELOCITY_DRIVE;
+    target_velocity_ = Vector2D(0, 0, 0);
+    gz_cmd_v_ = 0.0;
+    gz_cmd_w_ = 0.0;
+
+    linear_profile_.reset(
+        {current_velocity_.getX(), current_velocity_.getX(), 0.0f});
+    angular_profile_.reset(
+        {current_velocity_.getTheta(), current_velocity_.getTheta(), 0.0f});
+    linear_profile_.setGoal({0.0f, 0.0f});
+    angular_profile_.setGoal({0.0f, 0.0f});
+
+    left_pid_.reset();
+    right_pid_.reset();
+    break;
+  }
   }
 }
 
@@ -460,7 +452,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
   float dt = static_cast<float>((current_time - last_update_time_).seconds());
   last_update_time_ = current_time;
 
-  if (dt < 0.001f) return;
+  if (dt < 0.001f)
+    return;
 
   // First we simulate physics, motor PWM -> wheel velocity -> encoder ticks
   simulatePhysics(dt);
@@ -475,8 +468,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
   long d_left = left_ticks - prev_left_ticks_;
   long d_right = right_ticks - prev_right_ticks_;
 
-  float left_dist = static_cast<float>(d_left) * dist_per_tick_;
-  float right_dist = static_cast<float>(d_right) * dist_per_tick_;
+  float left_dist = static_cast<float>(d_left) * inches_per_tick_;
+  float right_dist = static_cast<float>(d_right) * inches_per_tick_;
   float left_vel = left_dist / dt;
   float right_vel = right_dist / dt;
 
@@ -497,19 +490,19 @@ void McuSubsystemSimulator::updateTimerCallback() {
 
   // Then we dispatch control mode (same switch as RobotDriveBase::update)
   switch (current_mode_) {
-    case DriveMode::MANUAL:
-      gz_cmd_v_ = 0.0;
-      gz_cmd_w_ = 0.0;
-      break;
-    case DriveMode::VELOCITY_DRIVE:
-      velocityControl(dt);
-      break;
-    case DriveMode::POSE_DRIVE:
-      setPointControl(dt);
-      break;
-    case DriveMode::TRAJECTORY_DRIVE:
-      trajectoryControl(dt);
-      break;
+  case DriveMode::MANUAL:
+    gz_cmd_v_ = 0.0;
+    gz_cmd_w_ = 0.0;
+    break;
+  case DriveMode::VELOCITY_DRIVE:
+    velocityControl(dt);
+    break;
+  case DriveMode::POSE_DRIVE:
+    setPointControl(dt);
+    break;
+  case DriveMode::TRAJECTORY_DRIVE:
+    trajectoryControl(dt);
+    break;
   }
 
   // THEN WE FINALLY SAVE PREVIOUS STATE (same as real MCU)
@@ -535,7 +528,8 @@ void McuSubsystemSimulator::updateTimerCallback() {
 
 // velocityControl, mirrors RobotDriveBase::velocityControl exactly
 void McuSubsystemSimulator::velocityControl(float dt) {
-  if (dt < 0.001f) return;
+  if (dt < 0.001f)
+    return;
 
   // S-curve motion profiles -> smooth ramped velocities
   MotionState linear_state = linear_profile_.update(dt);
@@ -557,12 +551,12 @@ void McuSubsystemSimulator::velocityControl(float dt) {
   float actual_left_vel =
       (static_cast<float>(static_cast<long>(left_encoder_accum_) -
                           prev_left_ticks_) *
-       dist_per_tick_) /
+       inches_per_tick_) /
       dt;
   float actual_right_vel =
       (static_cast<float>(static_cast<long>(right_encoder_accum_) -
                           prev_right_ticks_) *
-       dist_per_tick_) /
+       inches_per_tick_) /
       dt;
 
   // PID control on wheel velocities
@@ -614,18 +608,16 @@ void McuSubsystemSimulator::setPointControl(float dt) {
 
 // trajectoryControl, mirrors RobotDriveBase::trajectoryControl exactly
 void McuSubsystemSimulator::trajectoryControl(float dt) {
-  if (dt < 0.001f) return;
+  if (dt < 0.001f)
+    return;
 
-  static constexpr float M_TO_IN = 39.37007874f;
-
-  // In simulation, use Gazebo's ground-truth odom so the trajectory controller
-  // knows where the robot ACTUALLY is (not where the simulated encoders think).
-  // This prevents the robot from overshooting the goal.
   TrajectoryController::Pose2D traj_pose;
-  if (gz_odom_received_) {
-    traj_pose.x = static_cast<float>(gz_odom_x_);
-    traj_pose.y = static_cast<float>(gz_odom_y_);
-    traj_pose.theta = static_cast<float>(gz_odom_yaw_);
+
+  // Use EKF filtered odometry to align with the path planner
+  if (ekf_received_) {
+    traj_pose.x = static_cast<float>(ekf_x_);
+    traj_pose.y = static_cast<float>(ekf_y_);
+    traj_pose.theta = static_cast<float>(ekf_yaw_);
   } else {
     // Fallback to internal localization (inches -> meters) if no odom yet
     static constexpr float IN_TO_M = 0.0254f;
@@ -640,7 +632,7 @@ void McuSubsystemSimulator::trajectoryControl(float dt) {
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                        "[TRAJ] src=%s pose=(%.3f,%.3f,%.2f) cmd v=%.3f m/s "
                        "w=%.3f rad/s finished=%d",
-                       gz_odom_received_ ? "gz_odom" : "FALLBACK", traj_pose.x,
+                       ekf_received_ ? "ekf_odom" : "FALLBACK", traj_pose.x,
                        traj_pose.y, traj_pose.theta, cmd.v, cmd.w,
                        cmd.finished);
 
@@ -673,16 +665,16 @@ void McuSubsystemSimulator::writeMotorSpeeds(int left_pwm, int right_pwm) {
 void McuSubsystemSimulator::simulatePhysics(float dt) {
   // Simple motor model: PWM -> wheel velocity (in/s)
   // At PWM=255 the wheel spins at max_wheel_velocity_
-  float left_wheel_vel =
-      (static_cast<float>(left_motor_pwm_) / 255.0f) * max_wheel_velocity_;
-  float right_wheel_vel =
-      (static_cast<float>(right_motor_pwm_) / 255.0f) * max_wheel_velocity_;
+  // float left_wheel_vel =
+  //     (static_cast<float>(left_motor_pwm_) / 255.0f) * max_wheel_velocity_;
+  // float right_wheel_vel =
+  //     (static_cast<float>(right_motor_pwm_) / 255.0f) * max_wheel_velocity_;
 
   // Accumulate encoder ticks (fractional, cast to long on read)
-  left_encoder_accum_ +=
-      static_cast<double>(left_wheel_vel) * dt / dist_per_tick_;
-  right_encoder_accum_ +=
-      static_cast<double>(right_wheel_vel) * dt / dist_per_tick_;
+  // left_encoder_accum_ +=
+  //     static_cast<double>(left_wheel_vel) * dt / inches_per_tick_;
+  // right_encoder_accum_ +=
+  //     static_cast<double>(right_wheel_vel) * dt / inches_per_tick_;
 }
 
 // Drive publish, mirrors DriveSubsystem::publishData
@@ -721,13 +713,27 @@ void McuSubsystemSimulator::drivePublishCallback() {
   msg.transform.transform.rotation.z = std::sin(yaw / 2.0);
   msg.transform.transform.rotation.w = std::cos(yaw / 2.0);
 
-  // Twist (velocity) — convert in/s to m/s for ROS convention
-  msg.twist.linear.x = current_velocity_.getX() * IN_TO_M;
-  msg.twist.linear.y = current_velocity_.getY() * IN_TO_M;
-  msg.twist.linear.z = 0.0;
-  msg.twist.angular.x = 0.0;
-  msg.twist.angular.y = 0.0;
-  msg.twist.angular.z = current_velocity_.getTheta();
+  // Twist (velocity)
+  // In trajectory mode the internal encoder simulation is bypassed — the
+  // trajectory controller sends cmd_vel directly to Gazebo.  Use the
+  // commanded velocity so the fusion pipeline (and therefore the EKF) sees
+  // the actual movement instead of the idle internal simulation.
+  if (current_mode_ == DriveMode::TRAJECTORY_DRIVE) {
+    msg.twist.linear.x = gz_cmd_v_; // already m/s
+    msg.twist.linear.y = 0.0;
+    msg.twist.linear.z = 0.0;
+    msg.twist.angular.x = 0.0;
+    msg.twist.angular.y = 0.0;
+    msg.twist.angular.z = gz_cmd_w_; // already rad/s
+  } else {
+    // Other modes use the internal encoder-derived velocity (in/s → m/s)
+    msg.twist.linear.x = current_velocity_.getX() * IN_TO_M;
+    msg.twist.linear.y = current_velocity_.getY() * IN_TO_M;
+    msg.twist.linear.z = 0.0;
+    msg.twist.angular.x = 0.0;
+    msg.twist.angular.y = 0.0;
+    msg.twist.angular.z = current_velocity_.getTheta();
+  }
 
   msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_VECTOR;
 
@@ -736,19 +742,14 @@ void McuSubsystemSimulator::drivePublishCallback() {
   RCLCPP_DEBUG(
       this->get_logger(),
       "Drive status: x=%.4f m, y=%.4f m, theta=%.2f, vx=%.4f m/s, omega=%.2f",
-      pub_x, pub_y, yaw, current_velocity_.getX() * IN_TO_M,
-      current_velocity_.getTheta());
+      pub_x, pub_y, yaw, msg.twist.linear.x, msg.twist.angular.z);
 
-  // TF broadcast so "odom" exists in /tf
-  geometry_msgs::msg::TransformStamped t;
-  t.header.stamp = msg.header.stamp;
-  t.header.frame_id = "odom";
-  t.child_frame_id = "base_link";
-  t.transform = msg.transform.transform;
-  tf_broadcaster_->sendTransform(t);
+  // NOTE: odom→base_link TF is published solely by the EKF node.
+  // Do NOT broadcast it here — duplicate TF publishers cause conflicts.
 }
 
 // IMU publish
+/*
 void McuSubsystemSimulator::imuPublishCallback() {
   auto msg = sensor_msgs::msg::Imu();
 
@@ -775,7 +776,7 @@ void McuSubsystemSimulator::imuPublishCallback() {
   msg.angular_velocity_covariance[8] = kAngularVelocityVariance;
 
   // Linear acceleration from velocity change
-  double dt = 0.02;  // 50 Hz publish rate
+  double dt = 0.02; // 50 Hz publish rate
   double accel_x =
       (static_cast<double>(current_velocity_.getX()) - prev_vel_x_) / dt;
   prev_vel_x_ = current_velocity_.getX();
@@ -790,6 +791,7 @@ void McuSubsystemSimulator::imuPublishCallback() {
 
   imu_pub_->publish(msg);
 }
+  */
 
 // TOF publish
 void McuSubsystemSimulator::tofPublishCallback() {
@@ -831,17 +833,15 @@ void McuSubsystemSimulator::intakePublishCallback() {
   msg.header.frame_id = "base_link";
 
   msg.state = sim_intake_state_;
-  msg.duck_detected = sim_duck_detected_;
-
-  if (sim_intake_speed_ > 0)
-    msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_FORWARD;
-  else if (sim_intake_speed_ < 0)
-    msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_REVERSE;
-  else
-    msg.motor_state = mcu_msgs::msg::IntakeState::MOTOR_OFF;
-
-  msg.capture_count = 0;
-  msg.jam_count = 0;
+  msg.position = 0.0f;
+  msg.setpoint = 0.0f;
+  msg.encoder_ticks = 0;
+  msg.min_ticks = 0;
+  msg.max_ticks = 1000;
+  msg.limit_retract_active = false;
+  msg.limit_extend_active = false;
+  msg.calibrated = true;
+  msg.intake_motor_speed = static_cast<float>(sim_intake_speed_) / 255.0f;
 
   auto elapsed = std::chrono::steady_clock::now() - intake_state_time_;
   msg.time_in_state_ms = static_cast<uint32_t>(
@@ -855,52 +855,16 @@ void McuSubsystemSimulator::intakeSpeedCallback(
     const std_msgs::msg::Int16::SharedPtr msg) {
   sim_intake_speed_ = msg->data;
 
-  if (msg->data > 0 &&
+  if (msg->data != 0 &&
       sim_intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE) {
-    sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_SPINNING;
+    sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_MOVING;
     intake_state_time_ = std::chrono::steady_clock::now();
-    sim_duck_detected_ = false;
-    RCLCPP_INFO(this->get_logger(), "[SIM] Intake spinning (speed=%d)",
+    RCLCPP_INFO(this->get_logger(), "[SIM] Intake moving (speed=%d)",
                 msg->data);
-  } else if (msg->data < 0) {
-    sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_EJECTING;
-    intake_state_time_ = std::chrono::steady_clock::now();
-    sim_duck_detected_ = false;
-    RCLCPP_INFO(this->get_logger(), "[SIM] Intake ejecting");
   } else if (msg->data == 0) {
     sim_intake_state_ = mcu_msgs::msg::IntakeState::STATE_IDLE;
     intake_state_time_ = std::chrono::steady_clock::now();
     RCLCPP_INFO(this->get_logger(), "[SIM] Intake off");
-  }
-}
-
-// Bridge command callback
-void McuSubsystemSimulator::bridgeCommandCallback(
-    const mcu_msgs::msg::IntakeBridgeCommand::SharedPtr msg) {
-  bridge_cmd_time_ = std::chrono::steady_clock::now();
-
-  switch (msg->command) {
-    case mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND:
-      if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_STOWED) {
-        sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING;
-        RCLCPP_INFO(this->get_logger(), "[SIM] Bridge extending");
-      }
-      break;
-    case mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT:
-      if (sim_bridge_state_ ==
-              mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED ||
-          sim_bridge_state_ ==
-              mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING) {
-        sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING;
-        bridge_cmd_time_ = std::chrono::steady_clock::now();
-        RCLCPP_INFO(this->get_logger(), "[SIM] Bridge retracting");
-      }
-      break;
-    case mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW:
-    default:
-      sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_STOWED;
-      RCLCPP_INFO(this->get_logger(), "[SIM] Bridge stowed");
-      break;
   }
 }
 
@@ -912,61 +876,32 @@ void McuSubsystemSimulator::armCommandCallback(
               msg->joint_id, msg->position, msg->speed);
 }
 
-// Bridge publish callback (with time-based state transitions)
-void McuSubsystemSimulator::bridgePublishCallback() {
-  // Time-based state transitions
-  auto elapsed = std::chrono::steady_clock::now() - bridge_cmd_time_;
-  double sec =
-      std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
-          .count();
+void McuSubsystemSimulator::jointStateCallback(
+    const sensor_msgs::msg::JointState::SharedPtr msg) {
+  // ticks = (radians / 2pi) * ticks_per_rev * gear_ratio
+  double ticks_per_rad = (encoder_ticks_per_rev_ * gear_ratio_) / (2.0 * M_PI);
 
-  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING &&
-      sec >= 2.0) {
-    sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED;
-    RCLCPP_INFO(this->get_logger(), "[SIM] Bridge fully extended");
-  } else if (sim_bridge_state_ ==
-                 mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING &&
-             sec >= 2.0) {
-    sim_bridge_state_ = mcu_msgs::msg::IntakeBridgeState::STATE_STOWED;
-    RCLCPP_INFO(this->get_logger(), "[SIM] Bridge fully stowed");
+  for (size_t i = 0; i < msg->name.size(); ++i) {
+    if (msg->name[i] == "leftcenter") {
+      left_encoder_accum_ = msg->position[i] * ticks_per_rad;
+    } else if (msg->name[i] == "rightcenter") {
+      right_encoder_accum_ = msg->position[i] * ticks_per_rad;
+    }
   }
-
-  auto msg = mcu_msgs::msg::IntakeBridgeState();
-  msg.header.stamp = this->now();
-  msg.header.frame_id = "base_link";
-  msg.state = sim_bridge_state_;
-
-  // Simulate duck detection when extended (auto-detect after 1s for testing)
-  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED) {
-    auto ext_elapsed = std::chrono::steady_clock::now() - bridge_cmd_time_;
-    double ext_sec =
-        std::chrono::duration_cast<std::chrono::duration<double>>(ext_elapsed)
-            .count();
-    msg.duck_detected = (ext_sec >= 1.0);  // auto-detect after 1s in sim
-    msg.tof_distance_mm = msg.duck_detected ? 30 : 200;
-  } else {
-    msg.duck_detected = false;
-    msg.tof_distance_mm = 0;
-  }
-
-  if (sim_bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDING)
-    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_EXTENDING;
-  else if (sim_bridge_state_ ==
-           mcu_msgs::msg::IntakeBridgeState::STATE_RETRACTING)
-    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_RETRACTING;
-  else
-    msg.rack_motor_state = mcu_msgs::msg::IntakeBridgeState::MOTOR_OFF;
-
-  msg.extend_count = 0;
-  msg.retract_count = 0;
-
-  auto state_elapsed = std::chrono::steady_clock::now() - bridge_cmd_time_;
-  msg.time_in_state_ms = static_cast<uint32_t>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(state_elapsed)
-          .count());
-
-  bridge_pub_->publish(msg);
 }
+
+void McuSubsystemSimulator::ekfOdomCallback(
+    const nav_msgs::msg::Odometry::SharedPtr msg) {
+  ekf_x_ = msg->pose.pose.position.x;
+  ekf_y_ = msg->pose.pose.position.y;
+
+  double qz = msg->pose.pose.orientation.z;
+  double qw = msg->pose.pose.orientation.w;
+  ekf_yaw_ = 2.0 * std::atan2(qz, qw);
+
+  ekf_received_ = true;
+}
+
 
 // MiniRobot publish
 void McuSubsystemSimulator::miniRobotPublishCallback() {
@@ -1022,9 +957,9 @@ void McuSubsystemSimulator::mcuStatePublishCallback() {
   mcu_state_pub_->publish(msg);
 }
 
-}  // namespace secbot_sim
+} // namespace secbot_sim
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<secbot_sim::McuSubsystemSimulator>();
   rclcpp::spin(node);

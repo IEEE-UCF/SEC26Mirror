@@ -111,17 +111,15 @@ static ImuSubsystem g_imu(g_imu_setup);
 
 // --- Wire2: I2C DMA bus + PCA9685 manager ---
 static I2CDMABus g_wire2_dma(Wire2, 1000000);
-static PCA9685DMAManager g_pca_mgr(Wire2, 1000000);
+static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
+static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
 
-static Robot::PCA9685DriverSetup g_pca_servo_setup(
-    "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2);
-static Robot::PCA9685Driver g_pca_servo_drv(g_pca_servo_setup);
-static Robot::PCA9685Driver* g_pca_servo = &g_pca_servo_drv;
-
-static Robot::PCA9685DriverSetup g_pca_motor_setup(
-    "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2);
-static Robot::PCA9685Driver g_pca_motor_drv(g_pca_motor_setup);
-static Robot::PCA9685Driver* g_pca_motor = &g_pca_motor_drv;
+static Robot::PCA9685Driver* g_pca_servo =
+    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
+        "pca_servo", I2C_ADDR_SERVO, DEFAULT_PCA9685_FREQ, Wire2));
+static Robot::PCA9685Driver* g_pca_motor =
+    g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
+        "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2));
 
 // --- Wire0 I2CDMABus (400 kHz Fast Mode) ---
 // TCA9548A mux, TCA9555 GPIO, INA219 battery
@@ -209,8 +207,8 @@ static Drive::TankDriveLocalizationSetup g_loc_setup(
     "drive_localization",
     RobotConfig::TRACK_WIDTH_M,
     RobotConfig::WHEEL_DIAMETER_M,
-    RobotConfig::RAW_TICKS_PER_REVOLUTION,
-    RobotConfig::GEAR_RATIO,
+    static_cast<int>(RobotConfig::TICKS_PER_REVOLUTION),
+    1,
     RobotConfig::START_X, RobotConfig::START_Y, RobotConfig::START_THETA);
 
 static DriveSubsystemSetup g_drive_setup(
@@ -279,6 +277,10 @@ static void configureDriveSetup() {
   g_drive_setup.poseKLinear = POSE_K_LINEAR;
   g_drive_setup.poseKAngular = POSE_K_ANGULAR;
   g_drive_setup.poseDistTol = POSE_DIST_TOL_M;
+
+  // Motor direction multipliers
+  g_drive_setup.leftMotorMultiplier = LEFT_MOTOR_MULTIPLIER;
+  g_drive_setup.rightMotorMultiplier = RIGHT_MOTOR_MULTIPLIER;
 
   // Safety
   g_drive_setup.commandTimeoutMs = COMMAND_TIMEOUT_MS;
@@ -358,12 +360,9 @@ void setup() {
   g_battery.init();      DEBUG_PRINTLN("[INIT] Battery OK");
   g_sensor.init();       DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
   g_imu.init();          DEBUG_PRINTLN("[INIT] IMU OK");
-  g_pca_servo->init();
-  g_pca_motor->init();
-  g_pca_mgr.addDriver(g_pca_servo);
-  g_pca_mgr.addDriver(g_pca_motor);
+  g_pca_mgr.init();
   g_pca_mgr.setDMABus(&g_wire2_dma);
-  DEBUG_PRINTLN("[INIT] PCA9685 DMA Bus OK");
+  DEBUG_PRINTLN("[INIT] PCA9685 Manager + DMA OK");
   g_arm_encoder.init();  DEBUG_PRINTLN("[INIT] Arm Encoder OK");
   g_arm.init();          DEBUG_PRINTLN("[INIT] Arm OK");
   g_rc.init();           DEBUG_PRINTLN("[INIT] RC Receiver OK");
@@ -458,24 +457,24 @@ void setup() {
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
   g_mr.beginThreaded(8192, 4);       // ROS agent
-  g_imu.beginThreaded(2048, 3, 10);  // 100 Hz
+  g_imu.beginThreaded(8192, 3, 30);  // target ~20 Hz (I2C + mutex overhead adds ~20ms per cycle)
   // NOTE: RC is polled from loop() — IBusBM NOTIMER mode requires main thread
-  g_servo.beginThreaded(1024, 2, 25);     // 40 Hz state pub
+  g_servo.beginThreaded(1024, 2, 100);    // 10 Hz state pub
   g_motor.beginThreaded(1024, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(1024, 2, 20);  // 50 Hz encoder reading
-  g_oled.beginThreaded(2048, 1, 25);      // 40 Hz display
-  g_battery.beginThreaded(1024, 1, 100);  // 10 Hz
-  g_sensor.beginThreaded(1024, 1, 100);   // 10 Hz TOF
-  g_dip.beginThreaded(1024, 1, 500);      // 2 Hz
-  g_btn.beginThreaded(1024, 1, 20);       // 50 Hz
-  g_led.beginThreaded(1024, 1, 50);       // 20 Hz
-  g_hb.beginThreaded(1024, 1, 200);       // 5 Hz
-  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 50);  // 20 Hz UWB ranging
-  g_arm.beginThreaded(1024, 2, 20);       // 50 Hz arm
-  g_intake.beginThreaded(1024, 2, 20);    // 50 Hz intake
-  g_deploy.beginThreaded(1024, 1, 20);    // 50 Hz deploy button
-  g_crank.beginThreaded(1024, 1, 50);     // 20 Hz crank
-  g_keypad.beginThreaded(1024, 1, 50);   // 20 Hz keypad
+  g_encoder_sub.beginThreaded(1024, 2, 50);  // 20 Hz encoder reading
+  g_oled.beginThreaded(2048, 1, 100);     // 10 Hz display
+  g_battery.beginThreaded(1024, 1, 2000); // 0.5 Hz
+  g_sensor.beginThreaded(1024, 1, 500);   // 2 Hz TOF
+  g_dip.beginThreaded(1024, 1, 2000);     // 0.5 Hz
+  g_btn.beginThreaded(1024, 1, 100);      // 10 Hz
+  g_led.beginThreaded(1024, 1, 200);      // 5 Hz
+  g_hb.beginThreaded(1024, 1, 1000);      // 1 Hz
+  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
+  g_arm.beginThreaded(1024, 2, 50);       // 20 Hz arm
+  g_intake.beginThreaded(1024, 2, 50);    // 20 Hz intake
+  g_deploy.beginThreaded(1024, 1, 100);   // 10 Hz deploy button
+  g_crank.beginThreaded(1024, 1, 200);    // 5 Hz crank
+  g_keypad.beginThreaded(1024, 1, 200);   // 5 Hz keypad
   g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
   threads.addThread(wire0_dma_task, nullptr, 1024);  // 50 Hz Wire0 DMA
   threads.addThread(pca_task, nullptr, 1024);         // 1000 Hz Wire2 DMA (PWM)
@@ -486,8 +485,9 @@ void setup() {
 void loop() {
   g_rc.update();
 
-  // RC manual drive — DIP 1 ON = RC override
-  if (g_dip.isSwitchOn(DipSwitchSubsystem::DIP_RC_OVERRIDE)) {
+  // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
+  if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
+    // MCU/RC mode — RC stick drives motors
     const auto& rc = g_rc.getData();
     bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
 
@@ -496,17 +496,12 @@ void loop() {
       float steering = static_cast<float>(rc.channels[3]) / 255.0f;
       g_drive.rcDrive(throttle, steering);
     } else {
-      // SWA off — stop if we were in manual mode
       if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
         g_drive.stop();
       }
     }
-  } else {
-    // DIP 1 OFF — not in RC mode; stop if we were in manual
-    if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
-      g_drive.stop();
-    }
   }
+  // DIP 1 ON — ROS2 controls drive via drive_base/command subscription
 
   delay(5);
 }

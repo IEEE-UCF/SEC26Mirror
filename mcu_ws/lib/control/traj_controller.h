@@ -64,7 +64,7 @@ class TrajectoryController {
     float lookahead_dist = 0.30f;
 
     // Cruise speed if waypoints dont specify v
-    float cruise_v = 0.50f;
+    float cruise_v = 0.60f;
 
     // Output clamps
     float max_v = 1.0f;
@@ -79,7 +79,7 @@ class TrajectoryController {
         0.0f;  // small creep speed, if we want we can keep it 0 for full stop
 
     // Goal tolerances
-    float pos_tol = 0.03f;      // meters
+    float pos_tol = 0.08f;      // meters
     float heading_tol = 0.08f;  // radians
 
     // Final heading behavior (rotate-in-place at the end)

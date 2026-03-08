@@ -83,7 +83,17 @@ class ServoSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
+#ifdef USE_TEENSYTHREADS
+      {
+        Threads::Scope lock(data_mutex_);
+        for (uint8_t i = 0; i < setup_.numServos_; i++)
+          pub_data_[i] = angles_[i];
+        pub_msg_.data.size = setup_.numServos_;
+        data_ready_ = true;
+      }
+#else
       publishState();
+#endif
     }
   }
 
@@ -175,18 +185,21 @@ class ServoSubsystem : public IMicroRosParticipant,
   uint32_t task_delay_ms_ = 50;
 #endif
 
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &pub_msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
  private:
   void publishState() {
     for (uint8_t i = 0; i < setup_.numServos_; i++) pub_data_[i] = angles_[i];
     pub_msg_.data.size = setup_.numServos_;
-#ifdef USE_TEENSYTHREADS
-    {
-      Threads::Scope guard(g_microros_mutex);
-      (void)rcl_publish(&pub_, &pub_msg_, NULL);
-    }
-#else
     (void)rcl_publish(&pub_, &pub_msg_, NULL);
-#endif
   }
 
   static void srvCallback(const void* req, void* res, void* ctx) {
@@ -218,6 +231,10 @@ class ServoSubsystem : public IMicroRosParticipant,
 
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

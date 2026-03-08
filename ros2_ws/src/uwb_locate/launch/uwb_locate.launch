@@ -1,0 +1,11 @@
+<launch>
+    <arg name="namespace" default="uwb_location_node" />
+    <arg name="label_name" default="x500_0" />
+
+    <node pkg="uwb_locate"
+        exec="uwb_location"
+        namespace="$(var namespace)"
+        output="screen">
+        <param name="label_name" value="$(var label_name)" />
+    </node>
+</launch>

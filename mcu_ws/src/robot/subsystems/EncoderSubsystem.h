@@ -102,7 +102,17 @@ class EncoderSubsystem : public IMicroRosParticipant,
 
     // Publish
     if (!pub_.impl) return;
+#ifdef USE_TEENSYTHREADS
+    {
+      Threads::Scope lock(data_mutex_);
+      for (uint8_t i = 0; i < NUM_CHANNELS; i++)
+        pub_data_[i] = tick_rates_[i];
+      pub_msg_.data.size = NUM_CHANNELS;
+      data_ready_ = true;
+    }
+#else
     publishData();
+#endif
   }
 
   void pause() override {}
@@ -174,18 +184,21 @@ class EncoderSubsystem : public IMicroRosParticipant,
   uint32_t task_delay_ms_ = 20;
 #endif
 
+ public:
+  void publishAll() override {
+#ifdef USE_TEENSYTHREADS
+    Threads::Scope lock(data_mutex_);
+    if (!data_ready_ || !pub_.impl) return;
+    (void)rcl_publish(&pub_, &pub_msg_, NULL);
+    data_ready_ = false;
+#endif
+  }
+
  private:
   void publishData() {
     for (uint8_t i = 0; i < NUM_CHANNELS; i++) pub_data_[i] = tick_rates_[i];
     pub_msg_.data.size = NUM_CHANNELS;
-#ifdef USE_TEENSYTHREADS
-    {
-      Threads::Scope guard(g_microros_mutex);
-      (void)rcl_publish(&pub_, &pub_msg_, NULL);
-    }
-#else
     (void)rcl_publish(&pub_, &pub_msg_, NULL);
-#endif
   }
 
   const EncoderSubsystemSetup setup_;
@@ -197,6 +210,10 @@ class EncoderSubsystem : public IMicroRosParticipant,
   std_msgs__msg__Float32MultiArray pub_msg_{};
   float pub_data_[NUM_CHANNELS] = {};
   rcl_node_t* node_ = nullptr;
+  bool data_ready_ = false;
+#ifdef USE_TEENSYTHREADS
+  Threads::Mutex data_mutex_;
+#endif
 };
 
 }  // namespace Subsystem

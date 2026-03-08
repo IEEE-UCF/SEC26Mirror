@@ -1,7 +1,7 @@
 /**
  * @file pressure_clear.cpp
  * @author Rafeed Khan
- * @brief Implementation of pressure clear task using intake bridge
+ * @brief Implementation of pressure clear task using intake rail
  */
 
 #include "secbot_autonomy/pressure_clear.hpp"
@@ -19,25 +19,21 @@ float clamp01(float x) {
 PressureClearTask::PressureClearTask(rclcpp::Node::SharedPtr node,
                                      const PressureClearConfig& cfg)
     : TaskBase(node), cfg_(cfg) {
-  bridge_cmd_pub_ = node_->create_publisher<mcu_msgs::msg::IntakeBridgeCommand>(
-      cfg_.bridge_command_topic, 10);
+  intake_cmd_pub_ = node_->create_publisher<mcu_msgs::msg::IntakeCommand>(
+      cfg_.intake_command_topic, 10);
 
-  if (cfg_.intake_speed != 0) {
-    intake_pub_ =
-        node_->create_publisher<std_msgs::msg::Int16>(cfg_.intake_topic, 10);
-  }
-
-  bridge_state_sub_ =
-      node_->create_subscription<mcu_msgs::msg::IntakeBridgeState>(
-          cfg_.bridge_state_topic, 10,
-          std::bind(&PressureClearTask::onBridgeState, this,
+  intake_state_sub_ =
+      node_->create_subscription<mcu_msgs::msg::IntakeState>(
+          cfg_.intake_state_topic, 10,
+          std::bind(&PressureClearTask::onIntakeState, this,
                     std::placeholders::_1));
 }
 
-void PressureClearTask::onBridgeState(
-    const mcu_msgs::msg::IntakeBridgeState::SharedPtr msg) {
-  bridge_state_ = msg->state;
-  bridge_duck_detected_ = msg->duck_detected;
+void PressureClearTask::onIntakeState(
+    const mcu_msgs::msg::IntakeState::SharedPtr msg) {
+  intake_position_ = msg->position;
+  intake_limit_extend_ = msg->limit_extend_active;
+  intake_limit_retract_ = msg->limit_retract_active;
 }
 
 void PressureClearTask::enterState(State s) {
@@ -45,30 +41,22 @@ void PressureClearTask::enterState(State s) {
   state_entry_time_ = node_->now();
 }
 
-void PressureClearTask::sendBridgeCommand(uint8_t cmd) {
-  mcu_msgs::msg::IntakeBridgeCommand msg;
+void PressureClearTask::sendIntakeCommand(uint8_t cmd, float value) {
+  mcu_msgs::msg::IntakeCommand msg;
   msg.command = cmd;
-  bridge_cmd_pub_->publish(msg);
-}
-
-void PressureClearTask::commandIntake(int16_t speed) {
-  if (intake_pub_) {
-    std_msgs::msg::Int16 msg;
-    msg.data = speed;
-    intake_pub_->publish(msg);
-  }
+  msg.value = value;
+  intake_cmd_pub_->publish(msg);
 }
 
 void PressureClearTask::start() {
   status_ = TaskStatus::kRunning;
   progress_ = 0.0f;
-  bridge_duck_detected_ = false;
   start_time_ = node_->now();
 
   enterState(State::kSettle);
 
   RCLCPP_INFO(node_->get_logger(),
-              "PressureClear: Starting (intake bridge mode)");
+              "PressureClear: Starting (intake rail mode)");
 }
 
 void PressureClearTask::step() {
@@ -82,8 +70,8 @@ void PressureClearTask::step() {
   // Timeout check
   if (cfg_.timeout_s > 0.0f && t_total >= cfg_.timeout_s) {
     RCLCPP_WARN(node_->get_logger(), "PressureClear: Timeout");
-    sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
-    commandIntake(0);
+    sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
+    sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
     status_ = TaskStatus::kFailed;
     state_ = State::kDone;
     return;
@@ -100,57 +88,47 @@ void PressureClearTask::step() {
   switch (state_) {
     case State::kSettle:
       if (t_state >= cfg_.settle_s) {
-        enterState(State::kExtendBridge);
-        sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_EXTEND);
-        commandIntake(cfg_.intake_speed);
+        enterState(State::kExtendRail);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_EXTEND);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_SET_INTAKE_SPEED,
+                          cfg_.intake_speed);
         RCLCPP_INFO(node_->get_logger(),
-                    "PressureClear: Extending bridge, intake on");
+                    "PressureClear: Extending rail, intake on");
       }
       break;
 
-    case State::kExtendBridge:
-      // Wait for bridge to report EXTENDED or timeout
-      if (bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_EXTENDED) {
+    case State::kExtendRail:
+      if (intake_position_ >= 0.95f || intake_limit_extend_) {
         enterState(State::kWaitCapture);
         RCLCPP_INFO(node_->get_logger(),
-                    "PressureClear: Bridge extended, waiting for duck");
+                    "PressureClear: Rail extended, waiting for duck capture");
       } else if (t_state >= cfg_.extend_timeout_s) {
-        // Timeout: bridge didn't fully extend, proceed anyway
         RCLCPP_WARN(node_->get_logger(),
-                    "PressureClear: Bridge extend timeout, proceeding");
+                    "PressureClear: Rail extend timeout, proceeding");
         enterState(State::kWaitCapture);
       }
       break;
 
     case State::kWaitCapture:
-      // Wait for duck detection from TOF or timeout
-      if (bridge_duck_detected_) {
-        // Duck detected, brief extra wait then retract
-        if (t_state >= cfg_.capture_wait_s) {
-          enterState(State::kRetractBridge);
-          sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT);
-          RCLCPP_INFO(node_->get_logger(),
-                      "PressureClear: Duck captured! Retracting bridge");
-        }
-      } else if (t_state >= cfg_.capture_timeout_s) {
-        // Timeout: no duck detected, retract anyway
-        enterState(State::kRetractBridge);
-        sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_RETRACT);
-        RCLCPP_WARN(node_->get_logger(),
-                    "PressureClear: Capture timeout, retracting");
+      if (t_state >= cfg_.capture_timeout_s) {
+        enterState(State::kRetractRail);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_RETRACT);
+        RCLCPP_INFO(node_->get_logger(),
+                    "PressureClear: Capture window elapsed, retracting rail");
       }
       break;
 
-    case State::kRetractBridge:
-      // Wait for bridge to report STOWED or timeout
-      if (bridge_state_ == mcu_msgs::msg::IntakeBridgeState::STATE_STOWED) {
-        commandIntake(0);
+    case State::kRetractRail:
+      if (intake_position_ <= 0.05f || intake_limit_retract_) {
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
         status_ = TaskStatus::kSucceeded;
         progress_ = 1.0f;
         state_ = State::kDone;
         RCLCPP_INFO(node_->get_logger(), "PressureClear: Complete!");
       } else if (t_state >= cfg_.retract_timeout_s) {
-        commandIntake(0);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
+        sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
         status_ = TaskStatus::kSucceeded;
         progress_ = 1.0f;
         state_ = State::kDone;
@@ -168,8 +146,8 @@ void PressureClearTask::step() {
 
 void PressureClearTask::cancel() {
   if (status_ == TaskStatus::kRunning) {
-    sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
-    commandIntake(0);
+    sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
+    sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
     status_ = TaskStatus::kFailed;
     state_ = State::kDone;
     RCLCPP_INFO(node_->get_logger(), "PressureClear: Cancelled");
@@ -178,10 +156,9 @@ void PressureClearTask::cancel() {
 
 void PressureClearTask::reset() {
   TaskBase::reset();
-  sendBridgeCommand(mcu_msgs::msg::IntakeBridgeCommand::CMD_STOW);
-  commandIntake(0);
+  sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_RAIL);
+  sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_STOP_INTAKE);
   state_ = State::kIdle;
-  bridge_duck_detected_ = false;
 }
 
 }  // namespace secbot

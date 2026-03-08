@@ -20,8 +20,24 @@ bool SensorSubsystem::init() {
 }
 
 void SensorSubsystem::update() {
-  if (!pub_.impl) return;
+  // Read all TOF sensors
+  for (size_t i = 0; i < setup_.drivers_.size(); i++) {
+    if (setup_.drivers_[i]) {
+      setup_.drivers_[i]->update();
+    }
+  }
+
+  if (!pub_.impl || !msg_.data.data) return;
+
+#ifdef USE_TEENSYTHREADS
+  {
+    Threads::Scope lock(data_mutex_);
+    publishData();
+    data_ready_ = true;
+  }
+#else
   publishData();
+#endif
 }
 
 void SensorSubsystem::reset() { pause(); }
@@ -76,27 +92,25 @@ void SensorSubsystem::onDestroy() {
 }
 
 void SensorSubsystem::publishData() {
-  if (!pub_.impl || setup_.drivers_.empty()) return;
+  if (!pub_.impl || setup_.drivers_.empty() || !msg_.data.data) return;
 
-  // Read all TOF sensors and convert to meters
+  // Convert sensor readings to meters
   for (size_t i = 0; i < setup_.drivers_.size(); i++) {
     if (setup_.drivers_[i]) {
-      setup_.drivers_[i]->update();
       Drivers::TOFDriverData data = setup_.drivers_[i]->read();
-      // Convert from mm to meters
       msg_.data.data[i] = data.range / 1000.0f;
     } else {
       msg_.data.data[i] = 0.0f;
     }
   }
+}
 
+void SensorSubsystem::publishAll() {
 #ifdef USE_TEENSYTHREADS
-  {
-    Threads::Scope guard(g_microros_mutex);
-    (void)rcl_publish(&pub_, &msg_, NULL);
-  }
-#else
+  Threads::Scope lock(data_mutex_);
+  if (!data_ready_ || !pub_.impl) return;
   (void)rcl_publish(&pub_, &msg_, NULL);
+  data_ready_ = false;
 #endif
 }
 

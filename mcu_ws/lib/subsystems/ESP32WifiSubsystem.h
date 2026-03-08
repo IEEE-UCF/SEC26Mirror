@@ -179,6 +179,9 @@ class ESP32WifiSubsystem : public Subsystem::TimedSubsystem {
   // Multi-AP support
   int8_t scanForBestAP();  // Returns index of best AP, -1 if none found
 
+  // Full radio power cycle (WiFi OFF → delay → STA) to clear hardware issues
+  void powerCycleRadio();
+
   // WiFi event callback (static + instance pointer pattern)
   static void onWifiEvent(WiFiEvent_t event);
   static ESP32WifiSubsystem* s_instance_;
@@ -186,10 +189,14 @@ class ESP32WifiSubsystem : public Subsystem::TimedSubsystem {
   // Configuration
   const ESP32WifiSubsystemSetup setup_;
 
+  // Power cycle the radio after this many consecutive failures
+  static constexpr uint8_t kRadioResetInterval = 3;
+
   // State machine
   WifiState state_ = WifiState::DISCONNECTED;
-  uint8_t current_ap_index_ = 0;  // Which AP we're connected/connecting to
-  uint8_t retry_count_ = 0;       // Consecutive failed connection attempts
+  uint8_t current_ap_index_ = 0;   // Which AP we're connected/connecting to
+  uint8_t retry_count_ = 0;        // Consecutive failed connection attempts
+  uint8_t consecutive_failures_ = 0;  // Total failures since last success (for radio reset)
   uint32_t state_entry_time_ms_ = 0;
   uint32_t last_attempt_time_ms_ = 0;
 

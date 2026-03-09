@@ -153,6 +153,7 @@ bool I2CDMABus::fire()
   tx_dma_.transferSize(2);         // 16-bit MTDR writes
   tx_dma_.transferCount(tx_pos_);
   tx_dma_.disableOnCompletion();
+  tx_dma_.interruptAtCompletion();
   tx_dma_.triggerAtHardwareEvent(dma_mux_src_);
 
   // Attach TX-complete ISR.

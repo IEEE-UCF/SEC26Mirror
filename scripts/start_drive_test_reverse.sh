@@ -10,7 +10,7 @@ source install/setup.bash
 
 # Zero IMU heading before test
 echo "Taring IMU..."
-ros2 service call /mcu_robot/imu/tare mcu_msgs/srv/Reset --once
+ros2 service call /mcu_robot/imu/tare mcu_msgs/srv/Reset
 sleep 1
 
 ros2 run secbot_autonomy drive_test_node --ros-args \

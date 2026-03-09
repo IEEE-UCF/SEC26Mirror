@@ -605,6 +605,11 @@ class DriveSubsystem : public IMicroRosParticipant,
     if (reverse_) vCmd = -vCmd;
     float omegaCmd = setup_.poseKAngular * angleError;
 
+    // Ramp down angular command near goal to prevent heading oscillation.
+    // At <0.1m, atan2(dy,dx) swings wildly from small offsets.
+    float angularScale = fminf(distError / 0.15f, 1.0f);
+    omegaCmd *= angularScale;
+
     // Slow down if not facing target (prevents large arcs)
     float cosAngle = cosf(angleError);
     if (cosAngle < 0.0f) cosAngle = 0.0f;

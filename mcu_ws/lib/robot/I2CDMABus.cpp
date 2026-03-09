@@ -143,7 +143,6 @@ bool I2CDMABus::fire()
     rx_dma_.transferSize(1);               // 1-byte reads from LSB of MRDR
     rx_dma_.transferCount(rx_expect_);
     rx_dma_.disableOnCompletion();
-    rx_dma_.interruptAtCompletion();
     rx_dma_.triggerAtHardwareEvent(dma_mux_src_);
 
     // Attach RX-complete ISR.
@@ -161,7 +160,6 @@ bool I2CDMABus::fire()
   tx_dma_.transferSize(2);         // 16-bit MTDR writes
   tx_dma_.transferCount(tx_pos_);
   tx_dma_.disableOnCompletion();
-  tx_dma_.interruptAtCompletion();
   tx_dma_.triggerAtHardwareEvent(dma_mux_src_);
 
   // Attach TX-complete ISR.
@@ -202,16 +200,16 @@ void I2CDMABus::onTxComplete()
   tx_dma_.clearComplete();
 
   if (rx_expect_ == 0) {
-    // TX-only cycle — we're done.
+    // TX-only cycle: we're done.
     port_->MDER = 0;
     transfer_done_ = true;
     notifyTaskFromISR();
     return;
   }
 
-  // TX done but RX DMA is already running (set up in fire()).
-  // Just disable TX DMA requests — RX continues until its own ISR fires.
-  port_->MDER = LPI2C_MDER_RDDE;
+  // TX done, RX DMA already captured all bytes (set up before TX in fire()).
+  // Disable all DMA requests on the peripheral.
+  port_->MDER = 0;
 }
 
 // ── RX complete ISR ────────────────────────────────────────────────────────

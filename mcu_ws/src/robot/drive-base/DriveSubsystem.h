@@ -306,6 +306,7 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   bool onCreate(rcl_node_t* node, rclc_executor_t* executor) override {
     node_ = node;
+    DEBUG_PRINTLN("[DRIVE] onCreate: start");
 
     // Initialize status message memory (handles variable-length fields)
     status_mem_conf_ = {};
@@ -315,8 +316,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     if (!micro_ros_utilities_create_message_memory(
             ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, DriveBase),
             &status_msg_, status_mem_conf_)) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: status msg memory");
       return false;
     }
+    DEBUG_PRINTLN("[DRIVE] onCreate: status msg OK");
 
     // Initialize command message memory (needs path capacity for TRAJ mode)
     cmd_mem_conf_ = {};
@@ -326,58 +329,75 @@ class DriveSubsystem : public IMicroRosParticipant,
     if (!micro_ros_utilities_create_message_memory(
             ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, DriveBase),
             &cmd_msg_, cmd_mem_conf_)) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: cmd msg memory");
       return false;
     }
+    DEBUG_PRINTLN("[DRIVE] onCreate: cmd msg OK");
 
     // Publisher: drive_base/status
     if (rclc_publisher_init_best_effort(
             &status_pub_, node_,
             ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, DriveBase),
             setup_.statusTopic) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: status pub");
       return false;
     }
+    DEBUG_PRINTLN("[DRIVE] onCreate: pub OK");
 
     // Subscription: drive_base/command
     if (rclc_subscription_init_default(
             &cmd_sub_, node_,
             ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, DriveBase),
             setup_.commandTopic) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: cmd sub");
       return false;
     }
     if (rclc_executor_add_subscription_with_context(
             executor, &cmd_sub_, &cmd_msg_,
             &DriveSubsystem::commandCallback, this,
             ON_NEW_DATA) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: cmd sub executor");
       return false;
     }
+    DEBUG_PRINTLN("[DRIVE] onCreate: cmd sub OK");
 
     // Subscription: drive_base/reset_pose
     if (rclc_subscription_init_default(
             &pose_sub_, node_,
             ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Pose),
             setup_.resetPoseTopic) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: pose sub");
       return false;
     }
     if (rclc_executor_add_subscription_with_context(
             executor, &pose_sub_, &pose_msg_,
             &DriveSubsystem::poseResetCallback, this,
             ON_NEW_DATA) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: pose sub executor");
       return false;
     }
+    DEBUG_PRINTLN("[DRIVE] onCreate: pose sub OK");
 
     // Service: drive config tuning
+    // TODO: re-enable after confirming micro-ROS has SetDriveConfig type support
+#if 0
     if (rclc_service_init_default(
             &config_srv_, node_,
             ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, SetDriveConfig),
             setup_.configServiceName) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: config srv");
       return false;
     }
     if (rclc_executor_add_service_with_context(
             executor, &config_srv_, &config_req_, &config_res_,
             &DriveSubsystem::configCallback, this) != RCL_RET_OK) {
+      DEBUG_PRINTLN("[DRIVE] FAIL: config srv executor");
       return false;
     }
+    DEBUG_PRINTLN("[DRIVE] onCreate: config srv OK");
+#endif
 
+    DEBUG_PRINTLN("[DRIVE] onCreate OK");
     return true;
   }
 
@@ -1150,10 +1170,11 @@ class DriveSubsystem : public IMicroRosParticipant,
     }
 
     rsp->success = true;
-    // Build response message with current values
-    // (rosidl string must use the assignment helper)
+    // Build response message with current values.
+    // Point the rosidl string at a static buffer (no dynamic alloc needed
+    // since the response is consumed before the next service call).
     static char buf[128];
-    snprintf(buf, sizeof(buf),
+    int len = snprintf(buf, sizeof(buf),
              "PID kp=%.3f ki=%.3f kd=%.3f | pose kL=%.2f kA=%.2f | "
              "vmax=%.2f wmax=%.1f",
              self->leftPID_.config().gains.kp,
@@ -1163,7 +1184,9 @@ class DriveSubsystem : public IMicroRosParticipant,
              self->setup_.poseKAngular,
              self->setup_.maxLinearVel,
              self->setup_.maxAngularVel);
-    rosidl_runtime_c__String__assign(&rsp->message, buf);
+    rsp->message.data = buf;
+    rsp->message.size = static_cast<size_t>(len);
+    rsp->message.capacity = sizeof(buf);
   }
 
   // ── Publishing ─────────────────────────────────────────────────────────

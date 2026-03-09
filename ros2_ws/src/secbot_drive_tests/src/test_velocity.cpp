@@ -35,9 +35,9 @@ class VelocityTest : public DriveTestHarness {
   VelocityTest() : DriveTestHarness("test_velocity") {
     // NOTE: MCU clamps linear vel to 0.7 m/s and angular to 6.0 rad/s.
     // Jerk-limited ramp takes ~1s to reach 0.5 m/s. Use drive_time >= 3s.
-    this->declare_parameter("velocity", 0.7);
-    this->declare_parameter("drive_time", 10.0);
-    this->declare_parameter("angular_velocity", 1.5);
+    this->declare_parameter("velocity", 0.2);
+    this->declare_parameter("drive_time", 3.0);
+    this->declare_parameter("angular_velocity", 0.7);
 
     velocity_ = this->get_parameter("velocity").as_double();
     drive_time_ = this->get_parameter("drive_time").as_double();

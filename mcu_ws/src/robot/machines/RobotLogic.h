@@ -302,18 +302,12 @@ static void wire0_dma_task(void*) {
     g_gpio.queueDMARead();
 
     if (g_dma_wire0.fire()) {
-      uint32_t start = millis();
-      while (!g_dma_wire0.isComplete()) {
-        if (millis() - start > DMA_TIMEOUT_MS) {
-          g_dma_wire0.reset();
-          break;
-        }
-        vTaskDelay(1);
-      }
-      if (g_dma_wire0.isComplete()) {
+      if (g_dma_wire0.waitComplete(DMA_TIMEOUT_MS)) {
         g_dma_wire0.dispatch();
         g_power_driver.processDMAResults();
         g_gpio.processDMAResults();
+      } else {
+        g_dma_wire0.reset();
       }
     } else {
       // fire() failed (empty or previous transfer stuck) — reset queues
@@ -324,15 +318,30 @@ static void wire0_dma_task(void*) {
   }
 }
 
-// PCA9685 DMA flush task (1000 Hz via I2CDMABus)
+// PCA9685 DMA flush task (via I2CDMABus)
+// Uses task notification for zero-latency DMA completion wake-up.
 static void pca_task(void*) {
+  static constexpr uint32_t DMA_TIMEOUT_MS = 10;
   while (true) {
     if (g_wire2_dma.isComplete()) {
       g_wire2_dma.dispatch();
       g_pca_mgr.buildInto();
-      g_wire2_dma.fire();
+      if (!g_wire2_dma.fire()) {
+        // Nothing dirty — sleep until next motor update tick
+        vTaskDelay(pdMS_TO_TICKS(1));
+        continue;
+      }
+      // Block until DMA completes (ISR wakes us) or timeout
+      if (!g_wire2_dma.waitComplete(DMA_TIMEOUT_MS)) {
+        g_wire2_dma.reset();
+      }
+    } else {
+      // Transfer still in progress — wait for notification
+      g_wire2_dma.waitComplete(DMA_TIMEOUT_MS);
+      if (!g_wire2_dma.isComplete()) {
+        g_wire2_dma.reset();
+      }
     }
-    vTaskDelay(pdMS_TO_TICKS(1));
   }
 }
 
@@ -492,33 +501,35 @@ void setup() {
   DEBUG_PRINTF("[INIT] Registered %d participants\n", 20);
 
   // 4. Start threaded tasks
+  // micro-ROS at lowest priority — publishes with leftover CPU cycles.
+  // Sensor/control tasks promoted so they never get starved by publishing.
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4, 10);   // ROS agent
-  g_imu.beginThreaded(8192, 3, 10);  // 100Hz poll — INT pin skips I2C when no data ready
-  g_servo.beginThreaded(2048, 2, 100);    // 10 Hz state pub
-  g_motor.beginThreaded(2048, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(2048, 2, 50);  // 20 Hz encoder reading
-  g_oled.beginThreaded(2048, 1, 100);     // 10 Hz display
-  g_battery.beginThreaded(2048, 1, 2000); // 0.5 Hz
-  g_sensor.beginThreaded(2048, 1, 500);   // 2 Hz TOF
-  g_dip.beginThreaded(2048, 1, 2000);     // 0.5 Hz
-  g_btn.beginThreaded(2048, 1, 100);      // 10 Hz
-  g_led.beginThreaded(2048, 1, 200);      // 5 Hz
-  g_hb.beginThreaded(2048, 1, 1000);      // 1 Hz
-  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
-  g_arm.beginThreaded(2048, 2, 50);       // 20 Hz arm
-  g_intake.beginThreaded(2048, 2, 50);    // 20 Hz intake
-  g_deploy.beginThreaded(2048, 1, 100);   // 10 Hz deploy button
-  g_crank.beginThreaded(2048, 1, 200);    // 5 Hz crank
-  g_keypad.beginThreaded(2048, 1, 200);   // 5 Hz keypad
-  g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
+  g_mr.beginThreaded(8192, 1, 10);   // ROS agent (leftover cycles)
+  g_imu.beginThreaded(8192, 4, 10);  // 100Hz poll — INT pin skips I2C when no data ready
+  g_servo.beginThreaded(2048, 3, 100);    // 10 Hz state pub
+  g_motor.beginThreaded(2048, 3, 1);      // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(2048, 3, 50);  // 20 Hz encoder reading
+  g_oled.beginThreaded(2048, 2, 100);     // 10 Hz display
+  g_battery.beginThreaded(2048, 2, 2000); // 0.5 Hz
+  g_sensor.beginThreaded(2048, 2, 500);   // 2 Hz TOF
+  g_dip.beginThreaded(2048, 2, 2000);     // 0.5 Hz
+  g_btn.beginThreaded(2048, 2, 100);      // 10 Hz
+  g_led.beginThreaded(2048, 2, 200);      // 5 Hz
+  g_hb.beginThreaded(2048, 2, 1000);      // 1 Hz
+  if (uwb_enabled) g_uwb.beginThreaded(2048, 3, 200);  // 5 Hz UWB ranging
+  g_arm.beginThreaded(2048, 3, 50);       // 20 Hz arm
+  g_intake.beginThreaded(2048, 3, 50);    // 20 Hz intake
+  g_deploy.beginThreaded(2048, 2, 100);   // 10 Hz deploy button
+  g_crank.beginThreaded(2048, 2, 200);    // 5 Hz crank
+  g_keypad.beginThreaded(2048, 2, 200);   // 5 Hz keypad
+  g_drive.beginThreaded(4096, 4, 20);     // 50 Hz drive control
   xTaskCreate(reinterpret_cast<TaskFunction_t>(wire0_dma_task),
-              "wire0_dma", 2048 / 4, nullptr, 1, nullptr);   // 50 Hz Wire0 DMA
+              "wire0_dma", 2048 / 4, nullptr, 2, nullptr);   // 50 Hz Wire0 DMA
   xTaskCreate(reinterpret_cast<TaskFunction_t>(pca_task),
-              "pca_dma", 2048 / 4, nullptr, 2, nullptr);     // 1000 Hz Wire2 DMA (pri 2)
+              "pca_dma", 2048 / 4, nullptr, 3, nullptr);     // Wire2 DMA (pri 3)
   xTaskCreate(reinterpret_cast<TaskFunction_t>(rc_drive_task),
-              "rc_drive", 2048 / 4, nullptr, 1, nullptr);    // RC polling + manual drive
+              "rc_drive", 2048 / 4, nullptr, 2, nullptr);    // RC polling + manual drive
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 

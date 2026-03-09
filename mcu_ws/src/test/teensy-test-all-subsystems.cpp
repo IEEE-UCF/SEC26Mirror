@@ -338,12 +338,24 @@ static void configureDriveSetup() {
 }
 
 // --- PCA9685 DMA flush task (1000 Hz via I2CDMABus) ---
+static volatile uint32_t pca_flush_count_ = 0;
+static volatile uint32_t pca_skip_count_ = 0;
+static volatile uint32_t pca_last_flush_us_ = 0;
+static volatile uint32_t pca_max_flush_us_ = 0;
+
 static void pca_task(void*) {
   while (true) {
     if (g_wire2_dma.isComplete()) {
+      uint32_t t0 = micros();
       g_wire2_dma.dispatch();
       g_pca_mgr.buildInto();
       g_wire2_dma.fire();
+      uint32_t dt = micros() - t0;
+      pca_last_flush_us_ = dt;
+      if (dt > pca_max_flush_us_) pca_max_flush_us_ = dt;
+      ++pca_flush_count_;
+    } else {
+      ++pca_skip_count_;
     }
     vTaskDelay(pdMS_TO_TICKS(1));
   }
@@ -634,6 +646,26 @@ static void debugMonitorTask(void*) {
                    imu_data.yaw);
       DEBUG_PRINTF("  IMU diag   : updates=%lu pubs=%lu\n",
                    g_imu.diag_update_count_, g_imu.diag_pub_count_);
+    }
+#endif
+
+#if DEBUG_STAGE >= 3
+    {
+      static uint32_t prev_flush = 0;
+      static uint32_t prev_skip = 0;
+      static uint32_t prev_ms = 0;
+      uint32_t f = pca_flush_count_;
+      uint32_t s = pca_skip_count_;
+      uint32_t dt_ms = now - prev_ms;
+      float flush_hz = dt_ms > 0 ? (float)(f - prev_flush) * 1000.0f / dt_ms : 0;
+      float skip_hz = dt_ms > 0 ? (float)(s - prev_skip) * 1000.0f / dt_ms : 0;
+      DEBUG_PRINTF("  PCA DMA    : %.0f Hz flush, %.0f Hz skip, last=%luus max=%luus\n",
+                   flush_hz, skip_hz,
+                   (unsigned long)pca_last_flush_us_,
+                   (unsigned long)pca_max_flush_us_);
+      prev_flush = f;
+      prev_skip = s;
+      prev_ms = now;
     }
 #endif
 

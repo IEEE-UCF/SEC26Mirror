@@ -135,6 +135,25 @@ bool I2CDMABus::fire()
   if ((uint32_t)tx_buf_ >= 0x20200000u)
     arm_dcache_flush((void *)tx_buf_, tx_pos_ * sizeof(uint16_t));
 
+  // ── RX DMA setup (must be ready BEFORE TX starts sending RECEIVE cmds) ──
+  if (rx_expect_ > 0) {
+    rx_dma_.clearComplete();
+    rx_dma_.source(port_->MRDR);
+    rx_dma_.destinationBuffer(rx_buf_, rx_expect_);
+    rx_dma_.transferSize(1);               // 1-byte reads from LSB of MRDR
+    rx_dma_.transferCount(rx_expect_);
+    rx_dma_.disableOnCompletion();
+    rx_dma_.interruptAtCompletion();
+    rx_dma_.triggerAtHardwareEvent(dma_mux_src_);
+
+    // Attach RX-complete ISR.
+    switch (instance_idx_) {
+      case 0: rx_dma_.attachInterrupt(rxISR0); break;
+      case 1: rx_dma_.attachInterrupt(rxISR1); break;
+      case 2: rx_dma_.attachInterrupt(rxISR2); break;
+    }
+  }
+
   // ── TX DMA setup ───────────────────────────────────────────────────
   tx_dma_.clearComplete();
   tx_dma_.sourceBuffer(tx_buf_, tx_pos_ * sizeof(uint16_t));
@@ -142,6 +161,7 @@ bool I2CDMABus::fire()
   tx_dma_.transferSize(2);         // 16-bit MTDR writes
   tx_dma_.transferCount(tx_pos_);
   tx_dma_.disableOnCompletion();
+  tx_dma_.interruptAtCompletion();
   tx_dma_.triggerAtHardwareEvent(dma_mux_src_);
 
   // Attach TX-complete ISR.
@@ -151,11 +171,10 @@ bool I2CDMABus::fire()
     case 2: tx_dma_.attachInterrupt(txISR2); break;
   }
 
-  // If there are reads pending, we need the two-phase handoff.
-  // If TX-only, we just let TX complete and mark done.
-
-  // Enable TX DMA requests on the LPI2C peripheral.
-  port_->MDER = LPI2C_MDER_TDDE;
+  // Enable both TX and RX DMA requests simultaneously so the peripheral
+  // can drain MRDR via DMA as soon as RECEIVE commands produce data.
+  port_->MDER = LPI2C_MDER_TDDE | (rx_expect_ > 0 ? LPI2C_MDER_RDDE : 0);
+  if (rx_expect_ > 0) rx_dma_.enable();
   tx_dma_.enable();
 
   return true;
@@ -190,26 +209,9 @@ void I2CDMABus::onTxComplete()
     return;
   }
 
-  // ── Phase 2: set up RX DMA ──────────────────────────────────────────
-  // Disable TX DMA requests, enable RX DMA requests.
+  // TX done but RX DMA is already running (set up in fire()).
+  // Just disable TX DMA requests — RX continues until its own ISR fires.
   port_->MDER = LPI2C_MDER_RDDE;
-
-  rx_dma_.clearComplete();
-  rx_dma_.source(port_->MRDR);           // read from MRDR register
-  rx_dma_.destinationBuffer(rx_buf_, rx_expect_);
-  rx_dma_.transferSize(1);                // 1-byte reads from LSB of MRDR
-  rx_dma_.transferCount(rx_expect_);
-  rx_dma_.disableOnCompletion();
-  rx_dma_.triggerAtHardwareEvent(dma_mux_src_);
-
-  // Attach RX-complete ISR.
-  switch (instance_idx_) {
-    case 0: rx_dma_.attachInterrupt(rxISR0); break;
-    case 1: rx_dma_.attachInterrupt(rxISR1); break;
-    case 2: rx_dma_.attachInterrupt(rxISR2); break;
-  }
-
-  rx_dma_.enable();
 }
 
 // ── RX complete ISR ────────────────────────────────────────────────────────

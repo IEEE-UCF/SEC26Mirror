@@ -268,14 +268,22 @@ static void configureDriveSetup() {
   g_drive_setup.trajConfig.k_heading = TRAJ_K_HEADING;
   g_drive_setup.trajConfig.advance_tol = TRAJ_ADVANCE_TOL_M;
 
-  // Limits
+  // Limits — effective wheel cap is min(physical motor limit, user override)
+  // WHEEL_VEL_AT_RATED_RPM is the hard ceiling from motor specs.
+  // MAX_WHEEL_VEL_MPS is user-tunable (defaults to rated, can be lowered).
   g_drive_setup.maxLinearVel = MAX_LINEAR_VEL_MPS;
   g_drive_setup.maxAngularVel = MAX_ANGULAR_VEL_RADPS;
+  g_drive_setup.maxWheelVel = fminf(WHEEL_VEL_AT_RATED_RPM, MAX_WHEEL_VEL_MPS);
 
   // Pose drive gains
   g_drive_setup.poseKLinear = POSE_K_LINEAR;
   g_drive_setup.poseKAngular = POSE_K_ANGULAR;
   g_drive_setup.poseDistTol = POSE_DIST_TOL_M;
+  g_drive_setup.poseHeadingTol = POSE_HEADING_TOL_RAD;
+
+  // Gyro heading hold
+  g_drive_setup.gyroHoldKp = GYRO_HOLD_KP;
+  g_drive_setup.gyroHoldThreshold = GYRO_HOLD_THRESHOLD;
 
   // Motor direction multipliers
   g_drive_setup.leftMotorMultiplier = LEFT_MOTOR_MULTIPLIER;

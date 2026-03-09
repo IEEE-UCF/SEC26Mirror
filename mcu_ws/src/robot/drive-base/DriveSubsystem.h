@@ -83,13 +83,21 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   TrajectoryController::Config trajConfig;
 
   // Limits
-  float maxLinearVel = 0.76f;    // m/s
-  float maxAngularVel = 4.0f;    // rad/s
+  float maxLinearVel = 0.7f;     // m/s — chassis speed limit
+  float maxAngularVel = 6.0f;    // rad/s
+  float maxWheelVel = 0.73f;     // m/s — effective wheel limit (min of physical & user)
 
   // Pose drive gains
   float poseKLinear = 2.0f;
   float poseKAngular = 4.0f;
   float poseDistTol = 0.015f;    // meters
+  float poseHeadingTol = 0.05f;  // radians (~3 deg)
+
+  // Gyro heading hold: corrects drift when commanding straight-line velocity.
+  // When |targetAngularVel| < threshold, locks current heading and applies
+  // a P-correction to omega. Set kp=0 to disable.
+  float gyroHoldKp = 2.0f;                 // P gain for heading correction
+  float gyroHoldThreshold = 0.05f;         // rad/s — below this, hold heading
 
   // Motor direction multipliers (1.0 or -1.0 to reverse a motor)
   float leftMotorMultiplier = -1.0f;
@@ -277,6 +285,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     currentAngularVel_ = 0.0f;
     targetLinearVel_ = 0.0f;
     targetAngularVel_ = 0.0f;
+    velLinAccel_ = 0.0f;
+    velAngAccel_ = 0.0f;
+    goalLinAccel_ = 0.0f;
+    goalAngAccel_ = 0.0f;
   }
 
   const char* getInfo() override {
@@ -371,20 +383,23 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   /** @brief Command velocity (tank drive: vx forward, omega turn). */
   void setVelocity(float vx_mps, float omega_radps) {
+    bool modeChange = (mode_ != DriveMode::VELOCITY);
     mode_ = DriveMode::VELOCITY;
     targetLinearVel_ = secbot::utils::clamp(
         vx_mps, -setup_.maxLinearVel, setup_.maxLinearVel);
     targetAngularVel_ = secbot::utils::clamp(
         omega_radps, -setup_.maxAngularVel, setup_.maxAngularVel);
 
-    // Reset profiles to current state for smooth transition
-    linearProfile_.reset({0.0f, currentLinearVel_, 0.0f});
-    angularProfile_.reset({0.0f, currentAngularVel_, 0.0f});
-    linearProfile_.setGoal({0.0f, targetLinearVel_});
-    angularProfile_.setGoal({0.0f, targetAngularVel_});
+    // Reset heading hold so it re-captures on next straight-line command
+    gyroHoldActive_ = false;
 
-    leftPID_.reset();
-    rightPID_.reset();
+    if (modeChange) {
+      velLinAccel_ = 0.0f;
+      velAngAccel_ = 0.0f;
+      syncVelTicks();
+      leftPID_.reset();
+      rightPID_.reset();
+    }
     lastCommandMs_ = millis();
   }
 
@@ -394,16 +409,28 @@ class DriveSubsystem : public IMicroRosParticipant,
     mode_ = DriveMode::GOAL;
     reverse_ = reverse;
     targetPose_ = Pose2D(x_m, y_m, theta_rad);
+    goalLinAccel_ = 0.0f;
+    goalAngAccel_ = 0.0f;
+    syncVelTicks();
     leftPID_.reset();
     rightPID_.reset();
     lastCommandMs_ = millis();
   }
 
-  /** @brief Follow a trajectory of waypoints (pure pursuit). */
+  /** @brief Follow a trajectory of waypoints (pure pursuit).
+   *  Copies waypoints into internal storage — caller's array can be temporary. */
   void setTrajectory(const TrajectoryController::Waypoint* wps, size_t count) {
+    if (!wps || count == 0) return;
+    if (count > MAX_TRAJECTORY_POINTS) count = MAX_TRAJECTORY_POINTS;
+
+    // Copy into persistent storage (fixes use-after-free from stack-local arrays)
+    for (size_t i = 0; i < count; i++) trajWaypoints_[i] = wps[i];
+    trajWaypointCount_ = count;
+
     mode_ = DriveMode::TRAJECTORY;
-    trajController_.setTrajectory(wps, count);
+    trajController_.setTrajectory(trajWaypoints_, trajWaypointCount_);
     trajController_.reset();
+    syncVelTicks();
     leftPID_.reset();
     rightPID_.reset();
     lastCommandMs_ = millis();
@@ -435,8 +462,26 @@ class DriveSubsystem : public IMicroRosParticipant,
     throttle = rcThrottleFilter_.update(throttle);
     steering = rcSteeringFilter_.update(steering);
 
-    float left = secbot::utils::clamp(throttle + steering, -1.0f, 1.0f);
-    float right = secbot::utils::clamp(throttle - steering, -1.0f, 1.0f);
+    float left = throttle + steering;
+    float right = throttle - steering;
+
+    // Proportional saturation: if either exceeds [-1,1], scale both to preserve
+    // the left/right ratio (curvature). Independent clamping distorts the ratio.
+    float maxAbs = fmaxf(fabsf(left), fabsf(right));
+    if (maxAbs > 1.0f) {
+      float scale = 1.0f / maxAbs;
+      left *= scale;
+      right *= scale;
+    }
+
+    // Scale duty so full stick ≈ configured max velocity (not physical max)
+    float dutyScale = fminf(1.0f, setup_.maxLinearVel / setup_.maxWheelVel);
+    left *= dutyScale;
+    right *= dutyScale;
+
+    // Gyro hold: when steering is zero, correct drift
+    applyManualGyroHold(steering, left, right);
+
     lastCommandMs_ = millis();
     manualDrive(left, right);
   }
@@ -461,8 +506,25 @@ class DriveSubsystem : public IMicroRosParticipant,
     angular = cmdVelAngularFilter_.update(angular);
 
     // Differential drive mix: positive angular = CCW = left slower, right faster
-    float left = secbot::utils::clamp(linear - angular, -1.0f, 1.0f);
-    float right = secbot::utils::clamp(linear + angular, -1.0f, 1.0f);
+    float left = linear - angular;
+    float right = linear + angular;
+
+    // Proportional saturation to preserve curvature
+    float maxAbs = fmaxf(fabsf(left), fabsf(right));
+    if (maxAbs > 1.0f) {
+      float scale = 1.0f / maxAbs;
+      left *= scale;
+      right *= scale;
+    }
+
+    // Scale duty so full input ≈ configured max velocity (not physical max)
+    float dutyScale = fminf(1.0f, setup_.maxLinearVel / setup_.maxWheelVel);
+    left *= dutyScale;
+    right *= dutyScale;
+
+    // Gyro hold: when angular is zero, correct drift
+    applyManualGyroHold(angular, left, right);
+
     lastCommandMs_ = millis();
     manualDrive(left, right);
   }
@@ -470,6 +532,7 @@ class DriveSubsystem : public IMicroRosParticipant,
   /** @brief Stop all motors and enter IDLE mode. */
   void stop() {
     mode_ = DriveMode::IDLE;
+    gyroHoldActive_ = false;
     stopMotors();
     leftPID_.reset();
     rightPID_.reset();
@@ -515,6 +578,40 @@ class DriveSubsystem : public IMicroRosParticipant,
 
   static constexpr size_t MAX_TRAJECTORY_POINTS = 32;
 
+  // ── Gyro hold for manual/RC modes ──────────────────────────────────
+
+  /**
+   * @brief Apply gyro heading hold to manual-mode left/right motor outputs.
+   * @param steeringInput The steering/angular input (pre-mix). If ~0, hold heading.
+   * @param left  [in/out] Left motor command (-1 to 1).
+   * @param right [in/out] Right motor command (-1 to 1).
+   *
+   * Converts the gyro heading error to a normalized differential correction
+   * and applies it to the motor split. Lightweight — no PID, just P on heading.
+   */
+  void applyManualGyroHold(float steeringInput, float& left, float& right) {
+    if (setup_.gyroHoldKp <= 0.0f || !setup_.imuSub) return;
+
+    if (fabsf(steeringInput) < 0.01f) {
+      float yaw = setup_.imuSub->getYaw();
+      if (yaw != yaw) return;  // NaN guard — IMU fault or startup
+      if (!gyroHoldActive_) {
+        gyroHoldHeading_ = yaw;
+        gyroHoldActive_ = true;
+      }
+      float headingErr = secbot::utils::normalizeAngleRad(
+          gyroHoldHeading_ - yaw);
+      // Scale rad/s correction to normalized [-1,1] motor range
+      float correction = (setup_.gyroHoldKp * headingErr) /
+                          setup_.maxAngularVel;
+      correction = secbot::utils::clamp(correction, -0.3f, 0.3f);
+      left = secbot::utils::clamp(left - correction, -1.0f, 1.0f);
+      right = secbot::utils::clamp(right + correction, -1.0f, 1.0f);
+    } else {
+      gyroHoldActive_ = false;
+    }
+  }
+
   // ── Encoder capture ──────────────────────────────────────────────────
 
   /**
@@ -531,23 +628,131 @@ class DriveSubsystem : public IMicroRosParticipant,
     setup_.encoder->captureAll(dirs);
   }
 
+  /** @brief Sync velocity tick trackers to current ticks (call on mode entry). */
+  void syncVelTicks() {
+    velPrevLeftTicks_ = prevLeftTicks_;
+    velPrevRightTicks_ = prevRightTicks_;
+  }
+
+  /**
+   * @brief Proportionally scale wheel velocities if either exceeds the
+   *        physical motor limit. Preserves the left/right ratio (curvature).
+   */
+  void saturateWheelSpeeds(float& left, float& right) {
+    float maxAbs = fmaxf(fabsf(left), fabsf(right));
+    if (maxAbs > setup_.maxWheelVel) {
+      float scale = setup_.maxWheelVel / maxAbs;
+      left *= scale;
+      right *= scale;
+    }
+  }
+
+  /**
+   * @brief Jerk-limited velocity ramp (velocity-only, no position logic).
+   *
+   * The S-curve profile uses position-based braking which is degenerate when
+   * used as a velocity shaper (pos=0/goal=0 → always brakes). This helper
+   * does pure velocity tracking with jerk and acceleration limits.
+   *
+   * @param current   Current velocity (m/s or rad/s)
+   * @param target    Desired velocity
+   * @param accel     [in/out] Current acceleration state (preserved across calls)
+   * @param a_max     Max acceleration magnitude
+   * @param d_max     Max deceleration magnitude
+   * @param j_max     Max jerk (rate of change of acceleration)
+   * @param v_max     Max velocity magnitude (clamp output)
+   * @param dt        Time step
+   * @return          Ramped velocity
+   */
+  static float rampVelocity(float current, float target, float& accel,
+                             float a_max, float d_max, float j_max,
+                             float v_max, float dt) {
+    float dv = target - current;
+
+    // Choose acceleration or deceleration limit
+    float a_target;
+    if (fabsf(dv) < 1e-4f) {
+      a_target = 0.0f;
+    } else if (dv > 0.0f) {
+      a_target = a_max;
+    } else {
+      a_target = -d_max;
+    }
+
+    // Jerk-limited approach to a_target
+    if (j_max > 0.0f) {
+      float da = a_target - accel;
+      float maxStep = j_max * dt;
+      if (da > maxStep) da = maxStep;
+      if (da < -maxStep) da = -maxStep;
+      accel += da;
+    } else {
+      accel = a_target;
+    }
+
+    float v_next = current + accel * dt;
+
+    // Don't overshoot target velocity
+    if ((target > current && v_next > target) ||
+        (target < current && v_next < target)) {
+      v_next = target;
+      accel = 0.0f;
+    }
+
+    // Clamp to max velocity
+    if (v_next > v_max) { v_next = v_max; if (accel > 0.0f) accel = 0.0f; }
+    if (v_next < -v_max) { v_next = -v_max; if (accel < 0.0f) accel = 0.0f; }
+
+    return v_next;
+  }
+
   // ── Control methods ────────────────────────────────────────────────────
 
   void velocityControl(float dt) {
     if (dt < 0.001f) return;
 
-    // S-curve ramp to target velocity
-    MotionState linState = linearProfile_.update(dt);
-    MotionState angState = angularProfile_.update(dt);
+    // Jerk-limited velocity ramp (replaces degenerate S-curve pos=0/goal=0 pattern)
+    auto& linLimits = setup_.linearProfile.limits;
+    auto& angLimits = setup_.angularProfile.limits;
+    float rampedV = rampVelocity(
+        currentLinearVel_, targetLinearVel_, velLinAccel_,
+        linLimits.a_max, linLimits.d_max, linLimits.j_max,
+        linLimits.v_max, dt);
+    float rampedOmega = rampVelocity(
+        currentAngularVel_, targetAngularVel_, velAngAccel_,
+        angLimits.a_max, angLimits.d_max, angLimits.j_max,
+        angLimits.v_max, dt);
 
-    float rampedV = linState.vel;
-    float rampedOmega = angState.vel;
+    // Gyro heading hold: when commanding straight-line driving (omega ≈ 0),
+    // lock the current heading and apply a small correction to prevent drift.
+    if (setup_.gyroHoldKp > 0.0f &&
+        fabsf(targetAngularVel_) < setup_.gyroHoldThreshold) {
+      float yaw = setup_.imuSub->getYaw();
+      if (yaw == yaw) {  // NaN guard — skip if IMU fault
+        if (!gyroHoldActive_) {
+          gyroHoldHeading_ = yaw;
+          gyroHoldActive_ = true;
+        }
+        float headingErr = secbot::utils::normalizeAngleRad(
+            gyroHoldHeading_ - yaw);
+        float correction = secbot::utils::clamp(
+            setup_.gyroHoldKp * headingErr,
+            -setup_.maxAngularVel * 0.3f, setup_.maxAngularVel * 0.3f);
+        rampedOmega += correction;
+      }
+    } else {
+      gyroHoldActive_ = false;
+    }
 
     // Differential drive inverse kinematics: (v, omega) → wheel velocities
     float targetLeftVel =
         rampedV - (rampedOmega * setup_.locSetup.track_width * 0.5f);
     float targetRightVel =
         rampedV + (rampedOmega * setup_.locSetup.track_width * 0.5f);
+
+    // Saturate: if either wheel exceeds physical motor limit, scale both
+    // proportionally to preserve curvature (turn radius).
+    saturateWheelSpeeds(targetLeftVel, targetRightVel);
 
     // Actual wheel velocities from encoder deltas
     int32_t leftTicks = setup_.encoderSub->getAccumulatedTicks(
@@ -573,64 +778,105 @@ class DriveSubsystem : public IMicroRosParticipant,
     writeMotorSpeeds(leftOut, rightOut);
   }
 
+  /**
+   * @brief GOAL mode: drive to targetPose_ with jerk-limited velocity ramping.
+   *
+   * Uses rampVelocity() instead of S-curve profiles because the profiles'
+   * position-based braking logic is degenerate when used as a velocity shaper
+   * (pos=0/goal_pos=0 → always triggers braking → profile outputs ~0).
+   */
   void setPointControl(float dt) {
+    if (dt < 0.001f) return;
+
     Pose2D pose = localization_.getPose();
 
     float dx = targetPose_.getX() - pose.getX();
     float dy = targetPose_.getY() - pose.getY();
     float distError = sqrtf(dx * dx + dy * dy);
 
-    // Close enough — stop
+    float vCmd = 0.0f;
+    float omegaCmd = 0.0f;
+
     if (distError < setup_.poseDistTol) {
-      targetLinearVel_ = 0.0f;
-      targetAngularVel_ = 0.0f;
+      // ── Phase: Position reached — align to target heading ──
+      float headingError = secbot::utils::normalizeAngleRad(
+          targetPose_.getTheta() - pose.getTheta());
 
-      // Reset profiles to decel smoothly
-      linearProfile_.reset({0.0f, currentLinearVel_, 0.0f});
-      angularProfile_.reset({0.0f, currentAngularVel_, 0.0f});
-      linearProfile_.setGoal({0.0f, 0.0f});
-      angularProfile_.setGoal({0.0f, 0.0f});
+      if (fabsf(headingError) > setup_.poseHeadingTol) {
+        omegaCmd = setup_.poseKAngular * headingError;
+        omegaCmd = secbot::utils::clamp(
+            omegaCmd, -setup_.maxAngularVel, setup_.maxAngularVel);
+      }
+      // else: both within tolerance → vCmd=0, omegaCmd=0 → stop
+    } else {
+      // ── Phase: Drive toward goal position ──
+      float targetAngle = atan2f(dy, dx);
+      if (reverse_) targetAngle += static_cast<float>(M_PI);
+      float angleError = secbot::utils::normalizeAngleRad(
+          targetAngle - pose.getTheta());
 
-      velocityControl(dt);
-      return;
+      vCmd = setup_.poseKLinear * distError;
+      if (reverse_) vCmd = -vCmd;
+      omegaCmd = setup_.poseKAngular * angleError;
+
+      // Squared angular rampdown near goal (prevents atan2 noise oscillation)
+      float angularScale = fminf(distError / 0.15f, 1.0f);
+      angularScale *= angularScale;
+      omegaCmd *= angularScale;
+
+      // Slow down if not facing target (prevents large arcs)
+      float cosAngle = cosf(angleError);
+      if (cosAngle < 0.0f) cosAngle = 0.0f;
+      vCmd *= cosAngle;
+
+      // Clamp to configured limits
+      vCmd = secbot::utils::clamp(
+          vCmd, -setup_.maxLinearVel, setup_.maxLinearVel);
+      omegaCmd = secbot::utils::clamp(
+          omegaCmd, -setup_.maxAngularVel, setup_.maxAngularVel);
     }
 
-    // Reverse: point the back of the robot toward the goal
-    float targetAngle = atan2f(dy, dx);
-    if (reverse_) targetAngle += static_cast<float>(M_PI);
-    float angleError = secbot::utils::normalizeAngleRad(
-        targetAngle - pose.getTheta());
+    // Jerk-limited velocity ramp (no position-based braking)
+    auto& linLimits = setup_.linearProfile.limits;
+    auto& angLimits = setup_.angularProfile.limits;
+    float rampedV = rampVelocity(
+        currentLinearVel_, vCmd, goalLinAccel_,
+        linLimits.a_max, linLimits.d_max, linLimits.j_max,
+        linLimits.v_max, dt);
+    float rampedOmega = rampVelocity(
+        currentAngularVel_, omegaCmd, goalAngAccel_,
+        angLimits.a_max, angLimits.d_max, angLimits.j_max,
+        angLimits.v_max, dt);
 
-    float vCmd = setup_.poseKLinear * distError;
-    if (reverse_) vCmd = -vCmd;
-    float omegaCmd = setup_.poseKAngular * angleError;
+    // IK → wheel velocities
+    float targetLeftVel =
+        rampedV - (rampedOmega * setup_.locSetup.track_width * 0.5f);
+    float targetRightVel =
+        rampedV + (rampedOmega * setup_.locSetup.track_width * 0.5f);
 
-    // Ramp down angular command near goal to prevent heading oscillation.
-    // At <0.1m, atan2(dy,dx) swings wildly from small offsets.
-    float angularScale = fminf(distError / 0.15f, 1.0f);
-    omegaCmd *= angularScale;
+    saturateWheelSpeeds(targetLeftVel, targetRightVel);
 
-    // Slow down if not facing target (prevents large arcs)
-    float cosAngle = cosf(angleError);
-    if (cosAngle < 0.0f) cosAngle = 0.0f;
-    vCmd *= cosAngle;
+    // Actual wheel velocities from encoder deltas
+    int32_t leftTicks = setup_.encoderSub->getAccumulatedTicks(
+        setup_.leftEncoderIdx);
+    int32_t rightTicks = setup_.encoderSub->getAccumulatedTicks(
+        setup_.rightEncoderIdx);
+    if (setup_.leftEncoderInverted) leftTicks = -leftTicks;
+    if (setup_.rightEncoderInverted) rightTicks = -rightTicks;
 
-    // Clamp
-    vCmd = secbot::utils::clamp(vCmd, -setup_.maxLinearVel,
-                                setup_.maxLinearVel);
-    omegaCmd = secbot::utils::clamp(omegaCmd, -setup_.maxAngularVel,
-                                    setup_.maxAngularVel);
+    float actualLeftVel =
+        static_cast<float>(leftTicks - velPrevLeftTicks_) *
+        setup_.locSetup.dist_per_tick / dt;
+    float actualRightVel =
+        static_cast<float>(rightTicks - velPrevRightTicks_) *
+        setup_.locSetup.dist_per_tick / dt;
+    velPrevLeftTicks_ = leftTicks;
+    velPrevRightTicks_ = rightTicks;
 
-    targetLinearVel_ = vCmd;
-    targetAngularVel_ = omegaCmd;
+    float leftOut = leftPID_.update(targetLeftVel, actualLeftVel, dt);
+    float rightOut = rightPID_.update(targetRightVel, actualRightVel, dt);
 
-    // Update profiles for smooth ramping
-    linearProfile_.reset({0.0f, currentLinearVel_, 0.0f});
-    angularProfile_.reset({0.0f, currentAngularVel_, 0.0f});
-    linearProfile_.setGoal({0.0f, targetLinearVel_});
-    angularProfile_.setGoal({0.0f, targetAngularVel_});
-
-    velocityControl(dt);
+    writeMotorSpeeds(leftOut, rightOut);
   }
 
   void trajectoryControl(float dt) {
@@ -655,6 +901,9 @@ class DriveSubsystem : public IMicroRosParticipant,
     TrajectoryController::chassisToWheelSpeeds(
         cmd.v, cmd.w, setup_.locSetup.track_width,
         &targetLeftVel, &targetRightVel);
+
+    // Saturate: scale both wheels proportionally if either exceeds motor limit
+    saturateWheelSpeeds(targetLeftVel, targetRightVel);
 
     // Actual wheel velocities
     int32_t leftTicks = setup_.encoderSub->getAccumulatedTicks(
@@ -758,13 +1007,22 @@ class DriveSubsystem : public IMicroRosParticipant,
 
         TrajectoryController::Waypoint wps[MAX_TRAJECTORY_POINTS];
         for (size_t i = 0; i < count; i++) {
-          wps[i].x = static_cast<float>(
-              msg->goal_path.poses.data[i].pose.position.x);
-          wps[i].y = static_cast<float>(
-              msg->goal_path.poses.data[i].pose.position.y);
+          auto& pose = msg->goal_path.poses.data[i].pose;
+          wps[i].x = static_cast<float>(pose.position.x);
+          wps[i].y = static_cast<float>(pose.position.y);
           wps[i].has_vel = 0;
           wps[i].has_heading = 0;
         }
+
+        // Extract final heading from last waypoint's quaternion (if non-identity)
+        auto& last_orient = msg->goal_path.poses.data[count - 1].pose.orientation;
+        float qz = static_cast<float>(last_orient.z);
+        float qw = static_cast<float>(last_orient.w);
+        if (fabsf(qz) > 1e-4f || fabsf(qw - 1.0f) > 1e-4f) {
+          wps[count - 1].heading = 2.0f * atan2f(qz, qw);
+          wps[count - 1].has_heading = 1;
+        }
+
         self->setTrajectory(wps, count);
         break;
       }
@@ -878,6 +1136,20 @@ class DriveSubsystem : public IMicroRosParticipant,
   float currentAngularVel_ = 0.0f;
   Pose2D targetPose_;
   bool reverse_ = false;
+
+  // Velocity ramp acceleration state (persists across ticks within each mode)
+  float velLinAccel_ = 0.0f;   // VELOCITY mode
+  float velAngAccel_ = 0.0f;
+  float goalLinAccel_ = 0.0f;  // GOAL mode
+  float goalAngAccel_ = 0.0f;
+
+  // Gyro heading hold state
+  float gyroHoldHeading_ = 0.0f;  // locked heading when driving straight
+  bool gyroHoldActive_ = false;   // true when heading is being held
+
+  // Persistent waypoint storage (trajectory controller borrows pointer, must outlive it)
+  TrajectoryController::Waypoint trajWaypoints_[MAX_TRAJECTORY_POINTS] = {};
+  size_t trajWaypointCount_ = 0;
 
   // RC input smoothing
   secbot::utils::LowPass1P rcThrottleFilter_;

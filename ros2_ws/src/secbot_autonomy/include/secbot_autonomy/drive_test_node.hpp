@@ -24,7 +24,7 @@ class DriveTestNode : public rclcpp::Node {
 
  private:
   void tick();
-  void sendGoal(double x, double y, double theta);
+  void sendGoal(double x, double y, double theta, bool reverse = false);
   void stopRobot();
   void onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg);
   void onImu(const sensor_msgs::msg::Imu::SharedPtr msg);
@@ -50,6 +50,7 @@ class DriveTestNode : public rclcpp::Node {
   double turn_angle_;
   bool with_turn_;
   bool loop_;
+  bool reverse_;
   double pause_time_;
   double goal_tolerance_;
   double goal_timeout_;

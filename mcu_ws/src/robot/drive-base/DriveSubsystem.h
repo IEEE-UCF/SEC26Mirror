@@ -388,9 +388,11 @@ class DriveSubsystem : public IMicroRosParticipant,
     lastCommandMs_ = millis();
   }
 
-  /** @brief Drive to a target pose (x, y in meters, theta in radians). */
-  void setGoal(float x_m, float y_m, float theta_rad) {
+  /** @brief Drive to a target pose (x, y in meters, theta in radians).
+   *  @param reverse If true, drive backwards to the goal. */
+  void setGoal(float x_m, float y_m, float theta_rad, bool reverse = false) {
     mode_ = DriveMode::GOAL;
+    reverse_ = reverse;
     targetPose_ = Pose2D(x_m, y_m, theta_rad);
     leftPID_.reset();
     rightPID_.reset();
@@ -593,11 +595,14 @@ class DriveSubsystem : public IMicroRosParticipant,
       return;
     }
 
+    // Reverse: point the back of the robot toward the goal
     float targetAngle = atan2f(dy, dx);
+    if (reverse_) targetAngle += static_cast<float>(M_PI);
     float angleError = secbot::utils::normalizeAngleRad(
         targetAngle - pose.getTheta());
 
     float vCmd = setup_.poseKLinear * distError;
+    if (reverse_) vCmd = -vCmd;
     float omegaCmd = setup_.poseKAngular * angleError;
 
     // Slow down if not facing target (prevents large arcs)
@@ -725,6 +730,7 @@ class DriveSubsystem : public IMicroRosParticipant,
             msg->goal_transform.transform.translation.x);
         float y = static_cast<float>(
             msg->goal_transform.transform.translation.y);
+        bool reverse = msg->goal_transform.transform.translation.z < 0.0;
         // Extract yaw from quaternion
         float qz = static_cast<float>(
             msg->goal_transform.transform.rotation.z);
@@ -735,8 +741,9 @@ class DriveSubsystem : public IMicroRosParticipant,
         if (self->mode_ != DriveMode::GOAL ||
             fabsf(x - self->targetPose_.getX()) > 0.001f ||
             fabsf(y - self->targetPose_.getY()) > 0.001f ||
-            fabsf(theta - self->targetPose_.getTheta()) > 0.01f) {
-          self->setGoal(x, y, theta);
+            fabsf(theta - self->targetPose_.getTheta()) > 0.01f ||
+            reverse != self->reverse_) {
+          self->setGoal(x, y, theta, reverse);
         }
         break;
       }
@@ -865,6 +872,7 @@ class DriveSubsystem : public IMicroRosParticipant,
   float currentLinearVel_ = 0.0f;
   float currentAngularVel_ = 0.0f;
   Pose2D targetPose_;
+  bool reverse_ = false;
 
   // RC input smoothing
   secbot::utils::LowPass1P rcThrottleFilter_;

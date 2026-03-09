@@ -16,12 +16,14 @@
  * Usage:
  *   ros2 run secbot_autonomy drive_test_node
  *   ros2 run secbot_autonomy drive_test_node --ros-args -p loop:=true -p with_turn:=true
+ *   ros2 run secbot_autonomy drive_test_node --ros-args -p loop:=true -p reverse:=true
  *
  * Parameters:
  *   distance       (double, 0.5)   goal distance in meters
  *   turn_angle     (double, 1.571) turn goal in radians (default 90deg)
  *   with_turn      (bool, false)   add CW/CCW turn goals
  *   loop           (bool, false)   infinite back-and-forth mode
+ *   reverse        (bool, false)   drive backwards to backward goals
  *   pause_time     (double, 1.0)   pause between goals in seconds
  *   goal_tolerance (double, 0.03)  position tolerance in meters
  *   goal_timeout   (double, 10.0)  timeout per goal in seconds
@@ -43,11 +45,13 @@ DriveTestNode::DriveTestNode() : Node("drive_test_node") {
   this->declare_parameter("goal_tolerance", 0.03);
   this->declare_parameter("goal_timeout", 10.0);
   this->declare_parameter("calibrate_time", 3.0);
+  this->declare_parameter("reverse", false);
 
   distance_ = this->get_parameter("distance").as_double();
   turn_angle_ = this->get_parameter("turn_angle").as_double();
   with_turn_ = this->get_parameter("with_turn").as_bool();
   loop_ = this->get_parameter("loop").as_bool();
+  reverse_ = this->get_parameter("reverse").as_bool();
   pause_time_ = this->get_parameter("pause_time").as_double();
   goal_tolerance_ = this->get_parameter("goal_tolerance").as_double();
   goal_timeout_ = this->get_parameter("goal_timeout").as_double();
@@ -72,8 +76,9 @@ DriveTestNode::DriveTestNode() : Node("drive_test_node") {
     RCLCPP_INFO(this->get_logger(),
                 "  DRIVE TEST: Verify encoder + IMU accuracy");
     RCLCPP_INFO(this->get_logger(),
-                "  Mode: DRIVE_GOAL back-and-forth%s",
-                with_turn_ ? " + turns" : "");
+                "  Mode: DRIVE_GOAL back-and-forth%s%s",
+                with_turn_ ? " + turns" : "",
+                reverse_ ? " (REVERSE)" : "");
     RCLCPP_INFO(this->get_logger(),
                 "  Distance: %.2f m, tolerance: %.3f m",
                 distance_, goal_tolerance_);
@@ -131,7 +136,7 @@ void DriveTestNode::onImu(const sensor_msgs::msg::Imu::SharedPtr msg) {
   gyro_samples_++;
 }
 
-void DriveTestNode::sendGoal(double x, double y, double theta) {
+void DriveTestNode::sendGoal(double x, double y, double theta, bool reverse) {
   goal_x_ = x;
   goal_y_ = y;
   goal_theta_ = theta;
@@ -140,7 +145,7 @@ void DriveTestNode::sendGoal(double x, double y, double theta) {
   msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
   msg.goal_transform.transform.translation.x = x;
   msg.goal_transform.transform.translation.y = y;
-  msg.goal_transform.transform.translation.z = 0.0;
+  msg.goal_transform.transform.translation.z = reverse ? -1.0 : 0.0;
 
   float half = static_cast<float>(theta) * 0.5f;
   msg.goal_transform.transform.rotation.x = 0.0;
@@ -274,15 +279,17 @@ void DriveTestNode::tick() {
       if (elapsed >= pause_time_) {
         if (!loop_) {
           RCLCPP_INFO(this->get_logger(),
-                      "  DRIVE_GOAL -> back to origin (%.3f, %.3f)",
+                      "  DRIVE_GOAL%s -> back to origin (%.3f, %.3f)",
+                      reverse_ ? " (REVERSE)" : "",
                       origin_x_, origin_y_);
-          sendGoal(origin_x_, origin_y_, origin_theta_);
+          sendGoal(origin_x_, origin_y_, origin_theta_, reverse_);
           enterPhase(Phase::GOAL_BACKWARD);
         } else {
           RCLCPP_INFO(this->get_logger(),
-                      "  DRIVE_GOAL -> back to origin (%.3f, %.3f)",
+                      "  DRIVE_GOAL%s -> back to origin (%.3f, %.3f)",
+                      reverse_ ? " (REVERSE)" : "",
                       origin_x_, origin_y_);
-          sendGoal(origin_x_, origin_y_, origin_theta_);
+          sendGoal(origin_x_, origin_y_, origin_theta_, reverse_);
           enterPhase(Phase::GOAL_BACKWARD);
         }
       }
@@ -290,7 +297,7 @@ void DriveTestNode::tick() {
     }
 
     case Phase::GOAL_BACKWARD: {
-      sendGoal(goal_x_, goal_y_, goal_theta_);
+      sendGoal(goal_x_, goal_y_, goal_theta_, reverse_);
       if (reachedGoal()) {
         RCLCPP_INFO(this->get_logger(), "  Reached backward goal");
         logPose("AT_GOAL_BWD");

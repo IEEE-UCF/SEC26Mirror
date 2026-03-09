@@ -505,7 +505,7 @@ void setup() {
   // Sensor/control tasks promoted so they never get starved by publishing.
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 1, 1);    // ROS agent (leftover cycles, 1ms for fast publish)
+  g_mr.beginThreaded(8192, 2, 1);    // ROS agent (pri 2, 1ms for fast publish)
   g_imu.beginThreaded(8192, 4, 10);  // 100Hz poll — INT pin skips I2C when no data ready
   g_servo.beginThreaded(2048, 3, 100);    // 10 Hz state pub
   g_motor.beginThreaded(2048, 3, 1);      // 1000 Hz — NFPShop reverse-pulse

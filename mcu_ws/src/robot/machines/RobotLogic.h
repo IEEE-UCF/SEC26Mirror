@@ -335,6 +335,9 @@ static void pca_task(void*) {
       if (!g_wire2_dma.waitComplete(DMA_TIMEOUT_MS)) {
         g_wire2_dma.reset();
       }
+      // Yield for 1ms to match old motor manager timing (1000 Hz)
+      // and prevent starving lower-priority tasks (MicrorosManager).
+      vTaskDelay(pdMS_TO_TICKS(1));
     } else {
       // Transfer still in progress — wait for notification
       g_wire2_dma.waitComplete(DMA_TIMEOUT_MS);

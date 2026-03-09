@@ -11,9 +11,14 @@
  *   6. Stop command — verify robot stops within tolerance
  *   7. Heading hold — drive straight, verify no yaw drift
  *
+ * NOTE: The MCU clamps velocity to MAX_LINEAR_VEL (0.7 m/s) and applies
+ *   jerk-limited ramping (a_max=0.7 m/s², j_max=3.05 m/s³), so it takes
+ *   ~1s to reach full speed. Values above 0.7 are clamped on the Teensy.
+ *   Use drive_time >= 3s for the robot to actually reach and sustain speed.
+ *
  * Usage:
  *   ros2 run secbot_drive_tests test_velocity
- *   ros2 run secbot_drive_tests test_velocity --ros-args -p velocity:=0.2
+ *   ros2 run secbot_drive_tests test_velocity --ros-args -p velocity:=0.5
  */
 
 #include "secbot_drive_tests/test_harness.hpp"
@@ -25,9 +30,11 @@ namespace secbot_drive_tests {
 class VelocityTest : public DriveTestHarness {
  public:
   VelocityTest() : DriveTestHarness("test_velocity") {
-    this->declare_parameter("velocity", 0.3);
-    this->declare_parameter("drive_time", 2.0);
-    this->declare_parameter("angular_velocity", 1.0);
+    // NOTE: MCU clamps linear vel to 0.7 m/s and angular to 6.0 rad/s.
+    // Jerk-limited ramp takes ~1s to reach 0.5 m/s. Use drive_time >= 3s.
+    this->declare_parameter("velocity", 0.5);
+    this->declare_parameter("drive_time", 3.0);
+    this->declare_parameter("angular_velocity", 1.5);
 
     velocity_ = this->get_parameter("velocity").as_double();
     drive_time_ = this->get_parameter("drive_time").as_double();

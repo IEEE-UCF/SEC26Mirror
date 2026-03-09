@@ -648,6 +648,22 @@ class DriveSubsystem : public IMicroRosParticipant,
   }
 
   /**
+   * @brief Compute velocity feedforward: maps target wheel velocity to
+   *        an approximate motor duty [-1, 1].
+   *
+   * Without feedforward the PID must generate the entire motor command from
+   * error alone.  With Kp=0.8, a 0.2 m/s target only produces 0.16 duty —
+   * well below the NFPShop motor deadband (~0.3).  Feedforward provides
+   * the baseline duty so the PID only corrects small errors.
+   *
+   * feedforward = targetVel / maxWheelVel  (linear model: duty 1.0 ≈ max speed)
+   */
+  float velocityFeedforward(float targetWheelVel) const {
+    if (setup_.maxWheelVel <= 0.0f) return 0.0f;
+    return targetWheelVel / setup_.maxWheelVel;
+  }
+
+  /**
    * @brief Jerk-limited velocity ramp (velocity-only, no position logic).
    *
    * The S-curve profile uses position-based braking which is degenerate when
@@ -771,9 +787,13 @@ class DriveSubsystem : public IMicroRosParticipant,
     velPrevLeftTicks_ = leftTicks;
     velPrevRightTicks_ = rightTicks;
 
-    // PID → motor speed [-1.0, 1.0]
-    float leftOut = leftPID_.update(targetLeftVel, actualLeftVel, dt);
-    float rightOut = rightPID_.update(targetRightVel, actualRightVel, dt);
+    // PID + feedforward → motor speed [-1.0, 1.0]
+    // Feedforward maps target wheel vel to approximate duty so the PID
+    // doesn't have to generate the entire command from error alone.
+    float leftFF = velocityFeedforward(targetLeftVel);
+    float rightFF = velocityFeedforward(targetRightVel);
+    float leftOut = leftPID_.update(targetLeftVel, actualLeftVel, dt, leftFF);
+    float rightOut = rightPID_.update(targetRightVel, actualRightVel, dt, rightFF);
 
     writeMotorSpeeds(leftOut, rightOut);
   }
@@ -873,8 +893,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     velPrevLeftTicks_ = leftTicks;
     velPrevRightTicks_ = rightTicks;
 
-    float leftOut = leftPID_.update(targetLeftVel, actualLeftVel, dt);
-    float rightOut = rightPID_.update(targetRightVel, actualRightVel, dt);
+    float leftFF = velocityFeedforward(targetLeftVel);
+    float rightFF = velocityFeedforward(targetRightVel);
+    float leftOut = leftPID_.update(targetLeftVel, actualLeftVel, dt, leftFF);
+    float rightOut = rightPID_.update(targetRightVel, actualRightVel, dt, rightFF);
 
     writeMotorSpeeds(leftOut, rightOut);
   }
@@ -922,8 +944,10 @@ class DriveSubsystem : public IMicroRosParticipant,
     velPrevLeftTicks_ = leftTicks;
     velPrevRightTicks_ = rightTicks;
 
-    float leftOut = leftPID_.update(targetLeftVel, actualLeftVel, dt);
-    float rightOut = rightPID_.update(targetRightVel, actualRightVel, dt);
+    float leftFF = velocityFeedforward(targetLeftVel);
+    float rightFF = velocityFeedforward(targetRightVel);
+    float leftOut = leftPID_.update(targetLeftVel, actualLeftVel, dt, leftFF);
+    float rightOut = rightPID_.update(targetRightVel, actualRightVel, dt, rightFF);
 
     writeMotorSpeeds(leftOut, rightOut);
   }

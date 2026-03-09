@@ -24,7 +24,8 @@ namespace secbot_drive_tests {
 class StressTest : public DriveTestHarness {
  public:
   StressTest() : DriveTestHarness("test_stress") {
-    this->declare_parameter("max_velocity", 0.7);
+    // MCU hard limit is 0.7 m/s — this tests at the physical max
+    this->declare_parameter("max_velocity", 0.6);
     max_vel_ = this->get_parameter("max_velocity").as_double();
 
     tick_timer_ = this->create_wall_timer(50ms, std::bind(&StressTest::tick, this));

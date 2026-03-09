@@ -3,11 +3,9 @@
  * @brief Two-phase DMA engine for I2C buses on Teensy 4.1 (i.MX RT1062).
  *
  * Batches writes AND reads into a single DMA transfer cycle:
- *   1. **TX phase**: DMA pushes MTDR command words (START, addr, reg, data,
- *      STOP, RECEIVE commands for reads).  MDER = TDDE only.
- *   2. **TX-complete ISR**: disables TDDE, sets up RX DMA, enables RDDE.
- *   3. **RX phase**: DMA drains received bytes from MRDR.  MDER = RDDE only.
- *   4. **RX-complete ISR**: marks transfer done.
+ *   1. **fire()**: sets up both TX and RX DMA channels, enables TDDE + RDDE.
+ *   2. **TX + RX run simultaneously**: TX pushes MTDR commands, RX drains MRDR.
+ *   3. **TX-complete ISR**: RX already finished, marks transfer done.
  *
  * One instance per Wire bus.  Thread-safe via I2CBusLock — fire() acquires
  * the bus mutex, dispatch() releases it.
@@ -220,7 +218,7 @@ class I2CDMABus {
   TaskHandle_t waiting_task_ = nullptr;  ///< Task to notify on DMA completion.
 #endif
 
-  /// Notify waiting task from ISR context (called by onTxComplete/onRxComplete).
+  /// Notify waiting task from ISR context (called by onTxComplete).
   void notifyTaskFromISR();
 
   // ── ISR routing ───────────────────────────────────────────────────
@@ -228,18 +226,11 @@ class I2CDMABus {
   static I2CDMABus *instances_[MAX_INSTANCES];  ///< Static instance table.
   uint8_t instance_idx_ = 0;                   ///< This instance's table index.
 
-  /** @brief TX-complete ISR handler: transitions from TX to RX phase. */
+  /** @brief TX-complete ISR handler: marks transfer done (RX already finished). */
   void onTxComplete();
-
-  /** @brief RX-complete ISR handler: marks transfer done. */
-  void onRxComplete();
 
   // Static ISR trampolines (one per possible instance).
   static void txISR0() { if (instances_[0]) instances_[0]->onTxComplete(); }
   static void txISR1() { if (instances_[1]) instances_[1]->onTxComplete(); }
   static void txISR2() { if (instances_[2]) instances_[2]->onTxComplete(); }
-
-  static void rxISR0() { if (instances_[0]) instances_[0]->onRxComplete(); }
-  static void rxISR1() { if (instances_[1]) instances_[1]->onRxComplete(); }
-  static void rxISR2() { if (instances_[2]) instances_[2]->onRxComplete(); }
 };

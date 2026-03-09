@@ -144,13 +144,6 @@ bool I2CDMABus::fire()
     rx_dma_.transferCount(rx_expect_);
     rx_dma_.disableOnCompletion();
     rx_dma_.triggerAtHardwareEvent(dma_mux_src_);
-
-    // Attach RX-complete ISR.
-    switch (instance_idx_) {
-      case 0: rx_dma_.attachInterrupt(rxISR0); break;
-      case 1: rx_dma_.attachInterrupt(rxISR1); break;
-      case 2: rx_dma_.attachInterrupt(rxISR2); break;
-    }
   }
 
   // ── TX DMA setup ───────────────────────────────────────────────────
@@ -199,32 +192,12 @@ void I2CDMABus::onTxComplete()
   tx_dma_.clearInterrupt();
   tx_dma_.clearComplete();
 
-  if (rx_expect_ == 0) {
-    // TX-only cycle: we're done.
-    port_->MDER = 0;
-    transfer_done_ = true;
-    notifyTaskFromISR();
-    return;
-  }
-
-  // TX done, RX DMA already captured all bytes (set up before TX in fire()).
-  // Disable all DMA requests on the peripheral.
+  // RX DMA (if any) already completed during the TX phase.
   port_->MDER = 0;
-}
-
-// ── RX complete ISR ────────────────────────────────────────────────────────
-
-void I2CDMABus::onRxComplete()
-{
-  rx_dma_.clearInterrupt();
-  rx_dma_.clearComplete();
-
-  // Disable all DMA requests on the peripheral.
-  port_->MDER = 0;
-
   transfer_done_ = true;
   notifyTaskFromISR();
 }
+
 
 // ── Wait for completion (FreeRTOS) ──────────────────────────────────────────
 

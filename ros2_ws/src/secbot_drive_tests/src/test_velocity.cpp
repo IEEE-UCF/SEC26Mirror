@@ -11,14 +11,17 @@
  *   6. Stop command — verify robot stops within tolerance
  *   7. Heading hold — drive straight, verify no yaw drift
  *
+ * Pre-test: Calls IMU tare, applies drive config overrides, resets pose to (0,0,0).
+ *
  * NOTE: The MCU clamps velocity to MAX_LINEAR_VEL (0.7 m/s) and applies
- *   jerk-limited ramping (a_max=0.7 m/s², j_max=3.05 m/s³), so it takes
+ *   jerk-limited ramping (a_max=0.7 m/s^2, j_max=3.05 m/s^3), so it takes
  *   ~1s to reach full speed. Values above 0.7 are clamped on the Teensy.
  *   Use drive_time >= 3s for the robot to actually reach and sustain speed.
  *
  * Usage:
  *   ros2 run secbot_drive_tests test_velocity
  *   ros2 run secbot_drive_tests test_velocity --ros-args -p velocity:=0.5
+ *   ros2 run secbot_drive_tests test_velocity --ros-args -p wheel_kp:=0.3 -p wheel_ki:=0.02
  */
 
 #include "secbot_drive_tests/test_harness.hpp"
@@ -32,8 +35,8 @@ class VelocityTest : public DriveTestHarness {
   VelocityTest() : DriveTestHarness("test_velocity") {
     // NOTE: MCU clamps linear vel to 0.7 m/s and angular to 6.0 rad/s.
     // Jerk-limited ramp takes ~1s to reach 0.5 m/s. Use drive_time >= 3s.
-    this->declare_parameter("velocity", 0.5);
-    this->declare_parameter("drive_time", 3.0);
+    this->declare_parameter("velocity", 0.7);
+    this->declare_parameter("drive_time", 10.0);
     this->declare_parameter("angular_velocity", 1.5);
 
     velocity_ = this->get_parameter("velocity").as_double();
@@ -53,6 +56,7 @@ class VelocityTest : public DriveTestHarness {
  private:
   enum class Phase {
     WAIT_STATUS,
+    SETUP,
     // Test 1: Forward
     FWD_DRIVE, FWD_STOP, FWD_SETTLE, FWD_RECORD,
     // Test 2: Backward
@@ -95,8 +99,15 @@ class VelocityTest : public DriveTestHarness {
       // ── Wait for drive_base/status ──
       case Phase::WAIT_STATUS:
         if (!has_status_) return;
+        startSetup();
+        enterPhase(Phase::SETUP);
+        break;
+
+      // ── Pre-test setup (IMU tare + config + pose reset) ──
+      case Phase::SETUP:
+        if (!setupComplete()) return;
         captureOrigin();
-        RCLCPP_INFO(this->get_logger(), "Status received, starting tests...");
+        RCLCPP_INFO(this->get_logger(), "Setup complete, starting tests...");
         logPose("ORIGIN");
         snapshot();
         RCLCPP_INFO(this->get_logger(), "\n--- Test 1: Forward velocity ---");

@@ -120,9 +120,9 @@ constexpr float MAX_WHEEL_VEL_MPS = WHEEL_VEL_AT_RATED_RPM;
 
 // These control individual wheel speed tracking.
 // Output range maps to MotorManagerSubsystem::setSpeed() range [-1.0, 1.0].
-constexpr float WHEEL_PID_KP = 0.8f;
-constexpr float WHEEL_PID_KI = 0.1f;
-constexpr float WHEEL_PID_KD = 0.05f;
+constexpr float WHEEL_PID_KP = 0.4f;
+constexpr float WHEEL_PID_KI = 0.05f;
+constexpr float WHEEL_PID_KD = 0.025f;
 constexpr float WHEEL_PID_OUT_MIN = -1.0f;
 constexpr float WHEEL_PID_OUT_MAX = 1.0f;
 constexpr float WHEEL_PID_I_MIN = -0.3f;
@@ -133,8 +133,8 @@ constexpr float WHEEL_PID_D_FILTER = 0.1f;
 //  Pose drive gains
 // ═══════════════════════════════════════════════════════════════════════════
 
-constexpr float POSE_K_LINEAR = 2.0f;     // P gain for distance error
-constexpr float POSE_K_ANGULAR = 4.0f;    // P gain for heading error
+constexpr float POSE_K_LINEAR = 1.0f;     // P gain for distance error
+constexpr float POSE_K_ANGULAR = 2.0f;    // P gain for heading error
 constexpr float POSE_DIST_TOL_M = 0.015f; // 1.5cm goal tolerance
 constexpr float POSE_HEADING_TOL_RAD = 0.05f; // ~3 deg final heading tolerance
 

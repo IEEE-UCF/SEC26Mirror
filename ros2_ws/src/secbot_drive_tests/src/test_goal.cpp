@@ -8,13 +8,17 @@
  *   3. Turn in place 90 CW — heading-only goal
  *   4. Turn in place 90 CCW — heading-only goal
  *   5. Turn 180 — stress test for heading wrap
- *   6. Diagonal goal — drive to (0.3, 0.3) from origin
- *   7. Square path — 4 sequential goals forming a square, return to origin
- *   8. Return to origin — verify cumulative drift after square
+ *   6. Turn back to 0 — verify heading return accuracy
+ *   7. Diagonal goal — drive to (0.3, 0.3) from origin
+ *   8. Return to origin from diagonal — verify cumulative drift
+ *   9-12. Square path — 4 sequential goals forming a square, return to origin
+ *
+ * Pre-test: Calls IMU tare, applies drive config overrides, resets pose to (0,0,0).
  *
  * Usage:
  *   ros2 run secbot_drive_tests test_goal
  *   ros2 run secbot_drive_tests test_goal --ros-args -p distance:=0.3
+ *   ros2 run secbot_drive_tests test_goal --ros-args -p pose_k_linear:=1.5 -p pose_k_angular:=3.0
  */
 
 #include "secbot_drive_tests/test_harness.hpp"
@@ -41,6 +45,7 @@ class GoalTest : public DriveTestHarness {
  private:
   enum class Phase {
     WAIT_STATUS,
+    SETUP,
     // Test 1: Forward goal
     FWD_GOAL, FWD_PAUSE, FWD_RECORD,
     // Test 2: Backward goal (reverse flag)
@@ -98,8 +103,14 @@ class GoalTest : public DriveTestHarness {
     switch (phase_) {
       case Phase::WAIT_STATUS:
         if (!has_status_) return;
+        startSetup();
+        enterPhase(Phase::SETUP);
+        break;
+
+      case Phase::SETUP:
+        if (!setupComplete()) return;
         captureOrigin();
-        RCLCPP_INFO(this->get_logger(), "Status received, starting tests...");
+        RCLCPP_INFO(this->get_logger(), "Setup complete, starting tests...");
         logPose("ORIGIN");
         // Test 1: Forward goal
         RCLCPP_INFO(this->get_logger(), "\n--- Test 1: Forward goal (%.2fm) ---", distance_);

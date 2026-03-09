@@ -1,5 +1,7 @@
 #include "secbot_drive_tests/test_harness.hpp"
 
+#include <geometry_msgs/msg/pose.hpp>
+
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
@@ -7,6 +9,7 @@ namespace secbot_drive_tests {
 
 DriveTestHarness::DriveTestHarness(const std::string& node_name)
     : Node(node_name) {
+  // ── Common test parameters ──
   this->declare_parameter("goal_tolerance", 0.03);
   this->declare_parameter("heading_tolerance", 0.1);
   this->declare_parameter("goal_timeout", 10.0);
@@ -17,12 +20,48 @@ DriveTestHarness::DriveTestHarness(const std::string& node_name)
   goal_timeout_ = this->get_parameter("goal_timeout").as_double();
   pause_time_ = this->get_parameter("pause_time").as_double();
 
+  // ── Drive config parameters (0 = don't change on MCU) ──
+  this->declare_parameter("wheel_kp", 0.0);
+  this->declare_parameter("wheel_ki", 0.0);
+  this->declare_parameter("wheel_kd", 0.0);
+  this->declare_parameter("wheel_i_min", 0.0);
+  this->declare_parameter("wheel_i_max", 0.0);
+  this->declare_parameter("pose_k_linear", 0.0);
+  this->declare_parameter("pose_k_angular", 0.0);
+  this->declare_parameter("max_linear_vel", 0.0);
+  this->declare_parameter("max_angular_vel", 0.0);
+  this->declare_parameter("max_linear_accel", 0.0);
+  this->declare_parameter("max_angular_accel", 0.0);
+
+  cfg_wheel_kp_ = this->get_parameter("wheel_kp").as_double();
+  cfg_wheel_ki_ = this->get_parameter("wheel_ki").as_double();
+  cfg_wheel_kd_ = this->get_parameter("wheel_kd").as_double();
+  cfg_wheel_i_min_ = this->get_parameter("wheel_i_min").as_double();
+  cfg_wheel_i_max_ = this->get_parameter("wheel_i_max").as_double();
+  cfg_pose_k_linear_ = this->get_parameter("pose_k_linear").as_double();
+  cfg_pose_k_angular_ = this->get_parameter("pose_k_angular").as_double();
+  cfg_max_linear_vel_ = this->get_parameter("max_linear_vel").as_double();
+  cfg_max_angular_vel_ = this->get_parameter("max_angular_vel").as_double();
+  cfg_max_linear_accel_ = this->get_parameter("max_linear_accel").as_double();
+  cfg_max_angular_accel_ = this->get_parameter("max_angular_accel").as_double();
+
+  // ── Publishers / Subscribers ──
   drive_cmd_pub_ =
       this->create_publisher<mcu_msgs::msg::DriveBase>("drive_base/command", 10);
 
   drive_status_sub_ = this->create_subscription<mcu_msgs::msg::DriveBase>(
       "drive_base/status", rclcpp::SensorDataQoS(),
       std::bind(&DriveTestHarness::onDriveStatus, this, _1));
+
+  // ── Pose reset publisher ──
+  pose_reset_pub_ =
+      this->create_publisher<geometry_msgs::msg::Pose>("drive_base/reset_pose", 10);
+
+  // ── Service clients ──
+  imu_tare_client_ =
+      this->create_client<mcu_msgs::srv::Reset>("/mcu_robot/imu/tare");
+  drive_config_client_ =
+      this->create_client<mcu_msgs::srv::SetDriveConfig>("/mcu_robot/drive/config");
 }
 
 void DriveTestHarness::onDriveStatus(
@@ -35,6 +74,157 @@ void DriveTestHarness::onDriveStatus(
   robot_vx_ = msg->twist.linear.x;
   robot_omega_ = msg->twist.angular.z;
   has_status_ = true;
+}
+
+// ── Pre-test setup ──
+
+void DriveTestHarness::startSetup() {
+  setup_state_ = SetupState::TARE_WAIT;
+  tare_sent_ = false;
+  config_sent_ = false;
+  RCLCPP_INFO(this->get_logger(), "[SETUP] Starting pre-test initialization...");
+}
+
+bool DriveTestHarness::setupComplete() {
+  switch (setup_state_) {
+    case SetupState::IDLE:
+      return false;
+
+    case SetupState::TARE_WAIT: {
+      // Step 1: Call IMU tare
+      if (!tare_sent_) {
+        if (!imu_tare_client_->wait_for_service(0s)) {
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                               "[SETUP] Waiting for /mcu_robot/imu/tare service...");
+          return false;
+        }
+        auto req = std::make_shared<mcu_msgs::srv::Reset::Request>();
+        tare_future_ = imu_tare_client_->async_send_request(req);
+        tare_sent_ = true;
+        RCLCPP_INFO(this->get_logger(), "[SETUP] IMU tare request sent");
+      }
+
+      if (tare_future_.wait_for(0s) == std::future_status::ready) {
+        auto result = tare_future_.get();
+        if (result->success) {
+          RCLCPP_INFO(this->get_logger(), "[SETUP] IMU tare SUCCESS");
+        } else {
+          RCLCPP_WARN(this->get_logger(), "[SETUP] IMU tare returned false");
+        }
+        setup_state_ = SetupState::CONFIG_WAIT;
+      }
+      return false;
+    }
+
+    case SetupState::CONFIG_WAIT: {
+      // Step 2: Send drive config (if any non-zero params)
+      bool has_config = cfg_wheel_kp_ != 0.0 || cfg_wheel_ki_ != 0.0 ||
+                        cfg_wheel_kd_ != 0.0 || cfg_wheel_i_min_ != 0.0 ||
+                        cfg_wheel_i_max_ != 0.0 || cfg_pose_k_linear_ != 0.0 ||
+                        cfg_pose_k_angular_ != 0.0 || cfg_max_linear_vel_ != 0.0 ||
+                        cfg_max_angular_vel_ != 0.0 || cfg_max_linear_accel_ != 0.0 ||
+                        cfg_max_angular_accel_ != 0.0;
+
+      if (!has_config) {
+        RCLCPP_INFO(this->get_logger(), "[SETUP] No drive config overrides, skipping");
+        setup_state_ = SetupState::POSE_RESET;
+        return false;
+      }
+
+      if (!config_sent_) {
+        if (!drive_config_client_->wait_for_service(0s)) {
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                               "[SETUP] Waiting for /mcu_robot/drive/config service...");
+          return false;
+        }
+        auto req = std::make_shared<mcu_msgs::srv::SetDriveConfig::Request>();
+        req->wheel_kp = static_cast<float>(cfg_wheel_kp_);
+        req->wheel_ki = static_cast<float>(cfg_wheel_ki_);
+        req->wheel_kd = static_cast<float>(cfg_wheel_kd_);
+        req->wheel_i_min = static_cast<float>(cfg_wheel_i_min_);
+        req->wheel_i_max = static_cast<float>(cfg_wheel_i_max_);
+        req->pose_k_linear = static_cast<float>(cfg_pose_k_linear_);
+        req->pose_k_angular = static_cast<float>(cfg_pose_k_angular_);
+        req->max_linear_vel = static_cast<float>(cfg_max_linear_vel_);
+        req->max_angular_vel = static_cast<float>(cfg_max_angular_vel_);
+        req->max_linear_accel = static_cast<float>(cfg_max_linear_accel_);
+        req->max_angular_accel = static_cast<float>(cfg_max_angular_accel_);
+        config_future_ = drive_config_client_->async_send_request(req);
+        config_sent_ = true;
+        RCLCPP_INFO(this->get_logger(), "[SETUP] Drive config request sent");
+      }
+
+      if (config_future_.wait_for(0s) == std::future_status::ready) {
+        auto result = config_future_.get();
+        if (result->success) {
+          RCLCPP_INFO(this->get_logger(), "[SETUP] Drive config applied: %s",
+                      result->message.c_str());
+        } else {
+          RCLCPP_WARN(this->get_logger(), "[SETUP] Drive config FAILED: %s",
+                      result->message.c_str());
+        }
+        setup_state_ = SetupState::POSE_RESET;
+      }
+      return false;
+    }
+
+    case SetupState::POSE_RESET: {
+      // Step 3: Reset pose to origin (0,0,0)
+      auto msg = geometry_msgs::msg::Pose();
+      msg.position.x = 0.0;
+      msg.position.y = 0.0;
+      msg.position.z = 0.0;
+      msg.orientation.x = 0.0;
+      msg.orientation.y = 0.0;
+      msg.orientation.z = 0.0;
+      msg.orientation.w = 1.0;
+      pose_reset_pub_->publish(msg);
+      RCLCPP_INFO(this->get_logger(), "[SETUP] Pose reset to (0, 0, 0)");
+
+      // Log all active config for reference
+      RCLCPP_INFO(this->get_logger(), "[SETUP] Config params:");
+      if (cfg_wheel_kp_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  wheel_kp=%.4f", cfg_wheel_kp_);
+      if (cfg_wheel_ki_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  wheel_ki=%.4f", cfg_wheel_ki_);
+      if (cfg_wheel_kd_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  wheel_kd=%.4f", cfg_wheel_kd_);
+      if (cfg_wheel_i_min_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  wheel_i_min=%.4f", cfg_wheel_i_min_);
+      if (cfg_wheel_i_max_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  wheel_i_max=%.4f", cfg_wheel_i_max_);
+      if (cfg_pose_k_linear_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  pose_k_linear=%.4f", cfg_pose_k_linear_);
+      if (cfg_pose_k_angular_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  pose_k_angular=%.4f", cfg_pose_k_angular_);
+      if (cfg_max_linear_vel_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  max_linear_vel=%.4f", cfg_max_linear_vel_);
+      if (cfg_max_angular_vel_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  max_angular_vel=%.4f", cfg_max_angular_vel_);
+      if (cfg_max_linear_accel_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  max_linear_accel=%.4f", cfg_max_linear_accel_);
+      if (cfg_max_angular_accel_ != 0.0)
+        RCLCPP_INFO(this->get_logger(), "  max_angular_accel=%.4f", cfg_max_angular_accel_);
+
+      bool all_default = cfg_wheel_kp_ == 0.0 && cfg_wheel_ki_ == 0.0 &&
+                         cfg_wheel_kd_ == 0.0 && cfg_wheel_i_min_ == 0.0 &&
+                         cfg_wheel_i_max_ == 0.0 && cfg_pose_k_linear_ == 0.0 &&
+                         cfg_pose_k_angular_ == 0.0 && cfg_max_linear_vel_ == 0.0 &&
+                         cfg_max_angular_vel_ == 0.0 && cfg_max_linear_accel_ == 0.0 &&
+                         cfg_max_angular_accel_ == 0.0;
+      if (all_default) {
+        RCLCPP_INFO(this->get_logger(), "  (all defaults — no overrides)");
+      }
+
+      setup_state_ = SetupState::DONE;
+      RCLCPP_INFO(this->get_logger(), "[SETUP] Pre-test initialization complete");
+      return false;  // return false one more time so next tick captures fresh pose
+    }
+
+    case SetupState::DONE:
+      return true;
+  }
+  return false;
 }
 
 // ── Command helpers ──

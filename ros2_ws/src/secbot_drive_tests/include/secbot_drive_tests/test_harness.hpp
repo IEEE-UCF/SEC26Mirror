@@ -4,8 +4,8 @@
  * @brief Common test harness for drive base integration tests
  *
  * Provides shared infrastructure: drive_base publisher/subscriber,
- * pose tracking, goal helpers, result reporting, and a phase-based
- * state machine framework.
+ * pose tracking, goal helpers, result reporting, a phase-based
+ * state machine framework, and pre-test setup (IMU tare + drive config).
  */
 
 #include <chrono>
@@ -15,6 +15,8 @@
 #include <vector>
 
 #include <mcu_msgs/msg/drive_base.hpp>
+#include <mcu_msgs/srv/reset.hpp>
+#include <mcu_msgs/srv/set_drive_config.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -88,12 +90,44 @@ class DriveTestHarness : public rclcpp::Node {
   double elapsed() const;
   void resetPhaseTimer();
 
+  // ── Pre-test setup (IMU tare + drive config + pose reset) ──
+  // Call startSetup() once from WAIT_STATUS, then poll setupComplete() each tick.
+  void startSetup();
+  bool setupComplete();
+
   // ── Publishers ──
   rclcpp::Publisher<mcu_msgs::msg::DriveBase>::SharedPtr drive_cmd_pub_;
 
  private:
   void onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg);
   rclcpp::Subscription<mcu_msgs::msg::DriveBase>::SharedPtr drive_status_sub_;
+
+  // ── Service clients for pre-test setup ──
+  rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr imu_tare_client_;
+  rclcpp::Client<mcu_msgs::srv::SetDriveConfig>::SharedPtr drive_config_client_;
+  rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr pose_reset_pub_;
+
+  // Setup state machine
+  enum class SetupState { IDLE, TARE_WAIT, CONFIG_WAIT, POSE_RESET, DONE };
+  SetupState setup_state_ = SetupState::IDLE;
+
+  rclcpp::Client<mcu_msgs::srv::Reset>::SharedFuture tare_future_;
+  rclcpp::Client<mcu_msgs::srv::SetDriveConfig>::SharedFuture config_future_;
+  bool tare_sent_ = false;
+  bool config_sent_ = false;
+
+  // Drive config parameters (0 = don't change)
+  double cfg_wheel_kp_;
+  double cfg_wheel_ki_;
+  double cfg_wheel_kd_;
+  double cfg_wheel_i_min_;
+  double cfg_wheel_i_max_;
+  double cfg_pose_k_linear_;
+  double cfg_pose_k_angular_;
+  double cfg_max_linear_vel_;
+  double cfg_max_angular_vel_;
+  double cfg_max_linear_accel_;
+  double cfg_max_angular_accel_;
 };
 
 }  // namespace secbot_drive_tests

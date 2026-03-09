@@ -12,9 +12,12 @@
  *   7. Long straight — extended distance with many waypoints
  *   8. Single waypoint — degenerate case with just 1 point
  *
+ * Pre-test: Calls IMU tare, applies drive config overrides, resets pose to (0,0,0).
+ *
  * Usage:
  *   ros2 run secbot_drive_tests test_trajectory
  *   ros2 run secbot_drive_tests test_trajectory --ros-args -p scale:=0.5
+ *   ros2 run secbot_drive_tests test_trajectory --ros-args -p wheel_kp:=0.5 -p max_linear_vel:=0.5
  */
 
 #include "secbot_drive_tests/test_harness.hpp"
@@ -45,6 +48,7 @@ class TrajectoryTest : public DriveTestHarness {
  private:
   enum class Phase {
     WAIT_STATUS,
+    SETUP,
     // Test 1: Straight line
     STRAIGHT_TRAJ, STRAIGHT_PAUSE, STRAIGHT_RECORD,
     // Test 2: L-shaped
@@ -101,11 +105,6 @@ class TrajectoryTest : public DriveTestHarness {
 
   bool timedOut() {
     return elapsed() > traj_timeout_;
-  }
-
-  void returnToOrigin(Phase next_phase) {
-    sendGoal(origin_x_, origin_y_, origin_theta_);
-    // We'll check in the RTN phases
   }
 
   // ── Path generators ──
@@ -175,8 +174,14 @@ class TrajectoryTest : public DriveTestHarness {
     switch (phase_) {
       case Phase::WAIT_STATUS:
         if (!has_status_) return;
+        startSetup();
+        enterPhase(Phase::SETUP);
+        break;
+
+      case Phase::SETUP:
+        if (!setupComplete()) return;
         captureOrigin();
-        RCLCPP_INFO(this->get_logger(), "Status received, starting trajectory tests...");
+        RCLCPP_INFO(this->get_logger(), "Setup complete, starting trajectory tests...");
         logPose("ORIGIN");
 
         // Test 1: Straight line

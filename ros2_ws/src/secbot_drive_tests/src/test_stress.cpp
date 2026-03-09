@@ -11,8 +11,11 @@
  *   6. Repeated back-and-forth — 5 cycles, check cumulative drift
  *   7. Spin test — 360deg CW then 360deg CCW, check heading return
  *
+ * Pre-test: Calls IMU tare, applies drive config overrides, resets pose to (0,0,0).
+ *
  * Usage:
  *   ros2 run secbot_drive_tests test_stress
+ *   ros2 run secbot_drive_tests test_stress --ros-args -p wheel_kp:=0.5 -p max_linear_vel:=0.5
  */
 
 #include "secbot_drive_tests/test_harness.hpp"
@@ -39,6 +42,7 @@ class StressTest : public DriveTestHarness {
  private:
   enum class Phase {
     WAIT_STATUS,
+    SETUP,
     // Test 1: Command timeout
     TIMEOUT_ACCEL, TIMEOUT_WAIT, TIMEOUT_CHECK, TIMEOUT_RECORD,
     // Test 2: Rapid mode switch
@@ -86,8 +90,14 @@ class StressTest : public DriveTestHarness {
     switch (phase_) {
       case Phase::WAIT_STATUS:
         if (!has_status_) return;
+        startSetup();
+        enterPhase(Phase::SETUP);
+        break;
+
+      case Phase::SETUP:
+        if (!setupComplete()) return;
         captureOrigin();
-        RCLCPP_INFO(this->get_logger(), "Status received, starting stress tests...");
+        RCLCPP_INFO(this->get_logger(), "Setup complete, starting stress tests...");
         logPose("ORIGIN");
 
         // Test 1: Command timeout

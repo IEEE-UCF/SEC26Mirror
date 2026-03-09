@@ -24,6 +24,7 @@
 #include <filters.h>
 #include <math_utils.h>
 #include <mcu_msgs/msg/drive_base.h>
+#include <mcu_msgs/srv/set_drive_config.h>
 #include <micro_ros_utilities/type_utilities.h>
 #include <microros_manager_robot.h>
 #include <motion_profile.h>
@@ -110,6 +111,7 @@ struct DriveSubsystemSetup : public Classes::BaseSetup {
   const char* statusTopic = "drive_base/status";
   const char* commandTopic = "drive_base/command";
   const char* resetPoseTopic = "drive_base/reset_pose";
+  const char* configServiceName = "/mcu_robot/drive/config";
 
   // Publish rate divider (publish every N update cycles)
   uint8_t publishDivider = 1;  // 1 = every cycle (50Hz), 2 = 25Hz, etc.
@@ -287,8 +289,12 @@ class DriveSubsystem : public IMicroRosParticipant,
     targetAngularVel_ = 0.0f;
     velLinAccel_ = 0.0f;
     velAngAccel_ = 0.0f;
+    velRampedLinear_ = 0.0f;
+    velRampedAngular_ = 0.0f;
     goalLinAccel_ = 0.0f;
     goalAngAccel_ = 0.0f;
+    goalRampedLinear_ = 0.0f;
+    goalRampedAngular_ = 0.0f;
   }
 
   const char* getInfo() override {
@@ -359,6 +365,19 @@ class DriveSubsystem : public IMicroRosParticipant,
       return false;
     }
 
+    // Service: drive config tuning
+    if (rclc_service_init_default(
+            &config_srv_, node_,
+            ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, SetDriveConfig),
+            setup_.configServiceName) != RCL_RET_OK) {
+      return false;
+    }
+    if (rclc_executor_add_service_with_context(
+            executor, &config_srv_, &config_req_, &config_res_,
+            &DriveSubsystem::configCallback, this) != RCL_RET_OK) {
+      return false;
+    }
+
     return true;
   }
 
@@ -376,6 +395,7 @@ class DriveSubsystem : public IMicroRosParticipant,
     status_pub_ = rcl_get_zero_initialized_publisher();
     cmd_sub_ = rcl_get_zero_initialized_subscription();
     pose_sub_ = rcl_get_zero_initialized_subscription();
+    config_srv_ = rcl_get_zero_initialized_service();
     node_ = nullptr;
   }
 
@@ -396,6 +416,9 @@ class DriveSubsystem : public IMicroRosParticipant,
     if (modeChange) {
       velLinAccel_ = 0.0f;
       velAngAccel_ = 0.0f;
+      // Seed ramp at current measured velocity so we don't jump
+      velRampedLinear_ = currentLinearVel_;
+      velRampedAngular_ = currentAngularVel_;
       syncVelTicks();
       leftPID_.reset();
       rightPID_.reset();
@@ -411,6 +434,8 @@ class DriveSubsystem : public IMicroRosParticipant,
     targetPose_ = Pose2D(x_m, y_m, theta_rad);
     goalLinAccel_ = 0.0f;
     goalAngAccel_ = 0.0f;
+    goalRampedLinear_ = currentLinearVel_;
+    goalRampedAngular_ = currentAngularVel_;
     syncVelTicks();
     leftPID_.reset();
     rightPID_.reset();
@@ -727,17 +752,21 @@ class DriveSubsystem : public IMicroRosParticipant,
   void velocityControl(float dt) {
     if (dt < 0.001f) return;
 
-    // Jerk-limited velocity ramp (replaces degenerate S-curve pos=0/goal=0 pattern)
+    // Jerk-limited velocity ramp using persisted ramp output (not measured
+    // velocity).  This lets the ramp accumulate through the motor deadband
+    // even when the robot hasn't started moving yet.
     auto& linLimits = setup_.linearProfile.limits;
     auto& angLimits = setup_.angularProfile.limits;
-    float rampedV = rampVelocity(
-        currentLinearVel_, targetLinearVel_, velLinAccel_,
+    velRampedLinear_ = rampVelocity(
+        velRampedLinear_, targetLinearVel_, velLinAccel_,
         linLimits.a_max, linLimits.d_max, linLimits.j_max,
         linLimits.v_max, dt);
-    float rampedOmega = rampVelocity(
-        currentAngularVel_, targetAngularVel_, velAngAccel_,
+    velRampedAngular_ = rampVelocity(
+        velRampedAngular_, targetAngularVel_, velAngAccel_,
         angLimits.a_max, angLimits.d_max, angLimits.j_max,
         angLimits.v_max, dt);
+    float rampedV = velRampedLinear_;
+    float rampedOmega = velRampedAngular_;
 
     // Gyro heading hold: when commanding straight-line driving (omega ≈ 0),
     // lock the current heading and apply a small correction to prevent drift.
@@ -856,17 +885,19 @@ class DriveSubsystem : public IMicroRosParticipant,
           omegaCmd, -setup_.maxAngularVel, setup_.maxAngularVel);
     }
 
-    // Jerk-limited velocity ramp (no position-based braking)
+    // Jerk-limited velocity ramp using persisted ramp output
     auto& linLimits = setup_.linearProfile.limits;
     auto& angLimits = setup_.angularProfile.limits;
-    float rampedV = rampVelocity(
-        currentLinearVel_, vCmd, goalLinAccel_,
+    goalRampedLinear_ = rampVelocity(
+        goalRampedLinear_, vCmd, goalLinAccel_,
         linLimits.a_max, linLimits.d_max, linLimits.j_max,
         linLimits.v_max, dt);
-    float rampedOmega = rampVelocity(
-        currentAngularVel_, omegaCmd, goalAngAccel_,
+    float rampedV = goalRampedLinear_;
+    goalRampedAngular_ = rampVelocity(
+        goalRampedAngular_, omegaCmd, goalAngAccel_,
         angLimits.a_max, angLimits.d_max, angLimits.j_max,
         angLimits.v_max, dt);
+    float rampedOmega = goalRampedAngular_;
 
     // IK → wheel velocities
     float targetLeftVel =
@@ -1068,6 +1099,73 @@ class DriveSubsystem : public IMicroRosParticipant,
     self->resetPose(x, y, theta);
   }
 
+  static void configCallback(const void* req, void* res, void* ctx) {
+    auto* self = static_cast<DriveSubsystem*>(ctx);
+    auto* r = static_cast<const mcu_msgs__srv__SetDriveConfig_Request*>(req);
+    auto* rsp = static_cast<mcu_msgs__srv__SetDriveConfig_Response*>(res);
+
+    // Apply only non-zero fields (zero = "don't change")
+    auto applyPID = [](PIDController& pid, float kp, float ki, float kd,
+                        float i_min, float i_max) {
+      PIDController::Config cfg = pid.config();
+      if (kp != 0.0f) cfg.gains.kp = kp;
+      if (ki != 0.0f) cfg.gains.ki = ki;
+      if (kd != 0.0f) cfg.gains.kd = kd;
+      if (i_min != 0.0f) cfg.limits.i_min = i_min;
+      if (i_max != 0.0f) cfg.limits.i_max = i_max;
+      pid.configure(cfg);
+    };
+
+    // Wheel velocity PID (both wheels get same gains)
+    if (r->wheel_kp != 0.0f || r->wheel_ki != 0.0f || r->wheel_kd != 0.0f ||
+        r->wheel_i_min != 0.0f || r->wheel_i_max != 0.0f) {
+      applyPID(self->leftPID_, r->wheel_kp, r->wheel_ki, r->wheel_kd,
+               r->wheel_i_min, r->wheel_i_max);
+      applyPID(self->rightPID_, r->wheel_kp, r->wheel_ki, r->wheel_kd,
+               r->wheel_i_min, r->wheel_i_max);
+    }
+
+    // Pose drive gains
+    if (r->pose_k_linear != 0.0f)
+      const_cast<DriveSubsystemSetup&>(self->setup_).poseKLinear = r->pose_k_linear;
+    if (r->pose_k_angular != 0.0f)
+      const_cast<DriveSubsystemSetup&>(self->setup_).poseKAngular = r->pose_k_angular;
+
+    // Velocity limits
+    if (r->max_linear_vel != 0.0f)
+      const_cast<DriveSubsystemSetup&>(self->setup_).maxLinearVel = r->max_linear_vel;
+    if (r->max_angular_vel != 0.0f)
+      const_cast<DriveSubsystemSetup&>(self->setup_).maxAngularVel = r->max_angular_vel;
+
+    // Acceleration limits (rampVelocity reads from setup_.xxxProfile.limits)
+    if (r->max_linear_accel != 0.0f) {
+      auto& ll = const_cast<DriveSubsystemSetup&>(self->setup_).linearProfile.limits;
+      ll.a_max = r->max_linear_accel;
+      ll.d_max = r->max_linear_accel;
+    }
+    if (r->max_angular_accel != 0.0f) {
+      auto& al = const_cast<DriveSubsystemSetup&>(self->setup_).angularProfile.limits;
+      al.a_max = r->max_angular_accel;
+      al.d_max = r->max_angular_accel;
+    }
+
+    rsp->success = true;
+    // Build response message with current values
+    // (rosidl string must use the assignment helper)
+    static char buf[128];
+    snprintf(buf, sizeof(buf),
+             "PID kp=%.3f ki=%.3f kd=%.3f | pose kL=%.2f kA=%.2f | "
+             "vmax=%.2f wmax=%.1f",
+             self->leftPID_.config().gains.kp,
+             self->leftPID_.config().gains.ki,
+             self->leftPID_.config().gains.kd,
+             self->setup_.poseKLinear,
+             self->setup_.poseKAngular,
+             self->setup_.maxLinearVel,
+             self->setup_.maxAngularVel);
+    rosidl_runtime_c__String__assign(&rsp->message, buf);
+  }
+
   // ── Publishing ─────────────────────────────────────────────────────────
 
   void publishStatus() {
@@ -1161,11 +1259,19 @@ class DriveSubsystem : public IMicroRosParticipant,
   Pose2D targetPose_;
   bool reverse_ = false;
 
-  // Velocity ramp acceleration state (persists across ticks within each mode)
-  float velLinAccel_ = 0.0f;   // VELOCITY mode
+  // Velocity ramp state (persists across ticks within each mode).
+  // The ramp tracks its own output so it accumulates properly even when
+  // the robot is stalled (measured velocity = 0).  Without this, the ramp
+  // re-anchors to measured velocity each cycle and can never exceed one
+  // dt-step above actual — trapping the feedforward below the motor deadband.
+  float velLinAccel_ = 0.0f;   // VELOCITY mode accel state
   float velAngAccel_ = 0.0f;
-  float goalLinAccel_ = 0.0f;  // GOAL mode
+  float velRampedLinear_ = 0.0f;   // VELOCITY mode ramp output (persisted)
+  float velRampedAngular_ = 0.0f;
+  float goalLinAccel_ = 0.0f;  // GOAL mode accel state
   float goalAngAccel_ = 0.0f;
+  float goalRampedLinear_ = 0.0f;  // GOAL mode ramp output (persisted)
+  float goalRampedAngular_ = 0.0f;
 
   // Gyro heading hold state
   float gyroHoldHeading_ = 0.0f;  // locked heading when driving straight
@@ -1198,9 +1304,12 @@ class DriveSubsystem : public IMicroRosParticipant,
   rcl_publisher_t status_pub_{};
   rcl_subscription_t cmd_sub_{};
   rcl_subscription_t pose_sub_{};
+  rcl_service_t config_srv_{};
   mcu_msgs__msg__DriveBase status_msg_{};
   mcu_msgs__msg__DriveBase cmd_msg_{};
   geometry_msgs__msg__Pose pose_msg_{};
+  mcu_msgs__srv__SetDriveConfig_Request config_req_{};
+  mcu_msgs__srv__SetDriveConfig_Response config_res_{};
   micro_ros_utilities_memory_conf_t status_mem_conf_{};
   micro_ros_utilities_memory_conf_t cmd_mem_conf_{};
 

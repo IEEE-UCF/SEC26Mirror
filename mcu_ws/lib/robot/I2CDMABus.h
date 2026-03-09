@@ -37,6 +37,10 @@
 
 #include "I2CBusLock.h"
 
+#if defined(USE_FREERTOS)
+#include "FreeRTOSCompat.h"
+#endif
+
 /**
  * @class I2CDMABus
  * @brief Shared two-phase (TX+RX) DMA engine for one I2C bus on Teensy 4.1.
@@ -152,6 +156,19 @@ class I2CDMABus {
    */
   bool isComplete() const { return transfer_done_; }
 
+#if defined(USE_FREERTOS)
+  /**
+   * @brief Block until the transfer completes or timeout expires.
+   *
+   * Uses FreeRTOS task notification (set by DMA ISR) for zero-latency
+   * wake-up instead of polling with vTaskDelay.
+   *
+   * @param timeout_ms  Maximum wait time in milliseconds.
+   * @return true if the transfer completed, false on timeout.
+   */
+  bool waitComplete(uint32_t timeout_ms);
+#endif
+
   /**
    * @brief Complete the current cycle: deliver RX data, release bus, reset.
    *
@@ -198,6 +215,13 @@ class I2CDMABus {
   // ── State ─────────────────────────────────────────────────────────
   volatile bool transfer_done_ = true;  ///< Set by ISR when transfer completes.
   bool bus_locked_ = false;             ///< True while holding the bus mutex.
+
+#if defined(USE_FREERTOS)
+  TaskHandle_t waiting_task_ = nullptr;  ///< Task to notify on DMA completion.
+#endif
+
+  /// Notify waiting task from ISR context (called by onTxComplete/onRxComplete).
+  void notifyTaskFromISR();
 
   // ── ISR routing ───────────────────────────────────────────────────
   static constexpr uint8_t MAX_INSTANCES = 3;  ///< One per Wire bus.

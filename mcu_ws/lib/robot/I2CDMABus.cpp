@@ -122,6 +122,15 @@ bool I2CDMABus::fire()
   I2CBus::mutexFor(wire_).lock();
   bus_locked_ = true;
 
+  // Re-assert clock speed: driver inits (e.g. PCA9685) may have called
+  // Wire.begin() which resets to 100 kHz defaults.
+  wire_.setClock(clock_hz_);
+
+#if defined(USE_FREERTOS)
+  // Record caller so DMA ISR can notify on completion.
+  waiting_task_ = xTaskGetCurrentTaskHandle();
+#endif
+
   // Flush TX buffer from data cache if it lives in cached memory (OCRAM).
   if ((uint32_t)tx_buf_ >= 0x20200000u)
     arm_dcache_flush((void *)tx_buf_, tx_pos_ * sizeof(uint16_t));
@@ -152,6 +161,20 @@ bool I2CDMABus::fire()
   return true;
 }
 
+// ── Notify waiting task from ISR ────────────────────────────────────────────
+
+void I2CDMABus::notifyTaskFromISR()
+{
+#if defined(USE_FREERTOS)
+  if (waiting_task_) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(waiting_task_, &xHigherPriorityTaskWoken);
+    waiting_task_ = nullptr;
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
+#endif
+}
+
 // ── TX complete ISR ────────────────────────────────────────────────────────
 
 void I2CDMABus::onTxComplete()
@@ -161,7 +184,9 @@ void I2CDMABus::onTxComplete()
 
   if (rx_expect_ == 0) {
     // TX-only cycle — we're done.
+    port_->MDER = 0;
     transfer_done_ = true;
+    notifyTaskFromISR();
     return;
   }
 
@@ -198,7 +223,24 @@ void I2CDMABus::onRxComplete()
   port_->MDER = 0;
 
   transfer_done_ = true;
+  notifyTaskFromISR();
 }
+
+// ── Wait for completion (FreeRTOS) ──────────────────────────────────────────
+
+#if defined(USE_FREERTOS)
+bool I2CDMABus::waitComplete(uint32_t timeout_ms)
+{
+  if (transfer_done_) return true;
+
+  // Block until ISR notifies us or timeout expires.
+  TickType_t ticks = pdMS_TO_TICKS(timeout_ms);
+  if (ticks == 0) ticks = 1;  // at least 1 tick
+  ulTaskNotifyTake(pdTRUE, ticks);
+
+  return transfer_done_;
+}
+#endif
 
 // ── Dispatch: copy RX data to destinations, release lock, reset ────────────
 

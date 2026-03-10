@@ -71,9 +71,15 @@ void GyroSubsystem::update() {
     }
   }
 
-  // Drain all available sensor events from the SHTP queue.
+  // Drain sensor events from the SHTP queue, capped to prevent unbounded
+  // I2C reads.  Each getSensorEvent() does a full I2C read (~1-2ms at 400kHz).
+  // At 800 events/sec and 250Hz task rate, expect ~3-4 events per tick.
+  // Cap at 10 to handle brief backlogs without starving other tasks.
+  static constexpr int MAX_EVENTS_PER_UPDATE = 10;
   sh2_SensorValue_t val;
-  while (bno_.getSensorEvent(&val)) {
+  int events_read = 0;
+  while (events_read < MAX_EVENTS_PER_UPDATE && bno_.getSensorEvent(&val)) {
+    ++events_read;
     xSemaphoreTake(data_mutex_, portMAX_DELAY);
     switch (val.sensorId) {
       case SH2_ARVR_STABILIZED_RV: {
@@ -110,6 +116,10 @@ void GyroSubsystem::update() {
   }
 
   if (cfg_.i2c_mutex) xSemaphoreGive(*cfg_.i2c_mutex);
+
+  if (events_read >= MAX_EVENTS_PER_UPDATE) {
+    DRONE_PRINTF("[Gyro] WARN: hit event cap (%d)\n", events_read);
+  }
 }
 
 }  // namespace Drone

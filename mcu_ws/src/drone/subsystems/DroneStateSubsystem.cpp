@@ -15,19 +15,25 @@ bool DroneStateSubsystem::onCreate(rcl_node_t* node,
   s_instance_ = this;
   if (!data_mutex_) data_mutex_ = xSemaphoreCreateMutex();
 
+  DRONE_PRINTLN("[State] onCreate: state_pub...");
   // State publisher (best-effort)
   if (rclc_publisher_init_best_effort(
           &state_pub_, node,
           ROSIDL_GET_MSG_TYPE_SUPPORT(mcu_msgs, msg, DroneState),
-          "/mcu_drone/state") != RCL_RET_OK)
+          "/mcu_drone/state") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: state_pub");
     return false;
+  }
 
+  DRONE_PRINTLN("[State] onCreate: cmd_vel_sub...");
   // cmd_vel subscriber
   if (rclc_subscription_init_default(
           &cmd_vel_sub_, node,
           ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-          "/mcu_drone/cmd_vel") != RCL_RET_OK)
+          "/mcu_drone/cmd_vel") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: cmd_vel_sub init");
     return false;
+  }
   if (rclc_executor_add_subscription(executor, &cmd_vel_sub_, &cmd_vel_msg_,
                                      [](const void* msg) {
                                        if (!s_instance_) return;
@@ -47,59 +53,90 @@ bool DroneStateSubsystem::onCreate(rcl_node_t* node,
                                            Config::CMD_VEL_YAW_SCALE;
                                        s_instance_->last_cmd_vel_ms_ = millis();
                                      },
-                                     ON_NEW_DATA) != RCL_RET_OK)
+                                     ON_NEW_DATA) != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: cmd_vel_sub executor");
     return false;
+  }
 
+  DRONE_PRINTLN("[State] onCreate: arm_srv...");
   // Arm service
   if (rclc_service_init_default(
           &arm_srv_, node,
           ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneArm),
-          "/mcu_drone/arm") != RCL_RET_OK)
+          "/mcu_drone/arm") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: arm_srv init");
     return false;
+  }
   if (rclc_executor_add_service(executor, &arm_srv_, &arm_req_, &arm_res_,
-                                armCallback) != RCL_RET_OK)
+                                armCallback) != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: arm_srv executor");
     return false;
+  }
 
+  DRONE_PRINTLN("[State] onCreate: takeoff_srv...");
   // Takeoff service
-  if (rclc_service_init_default(
-          &takeoff_srv_, node,
-          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneTakeoff),
-          "/mcu_drone/takeoff") != RCL_RET_OK)
-    return false;
+  {
+    rcl_ret_t rc = rclc_service_init_default(
+            &takeoff_srv_, node,
+            ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneTakeoff),
+            "/mcu_drone/takeoff");
+    if (rc != RCL_RET_OK) {
+      DRONE_PRINTF("[State] FAIL: takeoff_srv init rc=%d heap=%u\n",
+                   (int)rc, ESP.getFreeHeap());
+      return false;
+    }
+  }
   if (rclc_executor_add_service(executor, &takeoff_srv_, &takeoff_req_,
-                                &takeoff_res_, takeoffCallback) != RCL_RET_OK)
+                                &takeoff_res_, takeoffCallback) != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: takeoff_srv executor");
     return false;
+  }
 
+  DRONE_PRINTLN("[State] onCreate: land_srv...");
   // Land service
   if (rclc_service_init_default(
           &land_srv_, node,
           ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneLand),
-          "/mcu_drone/land") != RCL_RET_OK)
+          "/mcu_drone/land") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: land_srv init");
     return false;
+  }
   if (rclc_executor_add_service(executor, &land_srv_, &land_req_, &land_res_,
-                                landCallback) != RCL_RET_OK)
+                                landCallback) != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: land_srv executor");
     return false;
+  }
 
+  DRONE_PRINTLN("[State] onCreate: set_anchors_srv...");
   // SetAnchors service
   if (rclc_service_init_default(
           &set_anchors_srv_, node,
           ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneSetAnchors),
-          "/mcu_drone/set_anchors") != RCL_RET_OK)
+          "/mcu_drone/set_anchors") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: set_anchors_srv init");
     return false;
+  }
   if (rclc_executor_add_service(executor, &set_anchors_srv_, &anchors_req_,
                                 &anchors_res_, setAnchorsCallback) !=
-      RCL_RET_OK)
+      RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: set_anchors_srv executor");
     return false;
+  }
 
+  DRONE_PRINTLN("[State] onCreate: set_motors_srv...");
   // SetMotors service
   if (rclc_service_init_default(
           &set_motors_srv_, node,
           ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneSetMotors),
-          "/mcu_drone/set_motors") != RCL_RET_OK)
+          "/mcu_drone/set_motors") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: set_motors_srv init");
     return false;
+  }
   if (rclc_executor_add_service(executor, &set_motors_srv_, &motors_req_,
-                                &motors_res_, setMotorsCallback) != RCL_RET_OK)
+                                &motors_res_, setMotorsCallback) != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: set_motors_srv executor");
     return false;
+  }
 
   // Initialize response string fields so rosidl_runtime_c__String__assign
   // can safely realloc on each service call without leaking.

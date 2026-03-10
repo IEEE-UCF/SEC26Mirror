@@ -31,29 +31,42 @@
 #include "../DroneConfig.h"
 #include "robot/machines/HeartbeatSubsystem.h"
 
+// Debug stages:
+//   0 = WiFi + micro-ROS + heartbeat only (isolate micro-ROS)
+//   1 = + Gyro/IMU (isolate I2C)
+//   2 = Full system (all subsystems)
+#ifndef DRONE_DEBUG_STAGE
+#define DRONE_DEBUG_STAGE 2
+#endif
+
 // Subsystems
+#if DRONE_DEBUG_STAGE >= 1
 #include "../subsystems/GyroSubsystem.h"
+#endif
+#if DRONE_DEBUG_STAGE >= 2
 #include "../subsystems/DroneFlightSubsystem.h"
 #include "../subsystems/DroneEKFSubsystem.h"
 #include "../subsystems/DroneStateSubsystem.h"
 #include "../subsystems/DroneSafetySubsystem.h"
 #include "../subsystems/DroneIRSubsystem.h"
 #include "../subsystems/IRSubsystem.h"
+#endif
 
-#if DRONE_ENABLE_HEIGHT
+#if DRONE_ENABLE_HEIGHT && DRONE_DEBUG_STAGE >= 2
 #include "../subsystems/HeightSubsystem.h"
 #endif
 
-#if DRONE_ENABLE_UWB
+#if DRONE_ENABLE_UWB && DRONE_DEBUG_STAGE >= 2
 #include <UWBDriver.h>
 #include "../subsystems/DroneUWBSubsystem.h"
 #endif
 
 using namespace Subsystem;
-using namespace Drone;
 
 // ── I2C mutex (shared between gyro and height tasks) ──
+#if DRONE_DEBUG_STAGE >= 1
 static SemaphoreHandle_t g_i2c_mutex = nullptr;
+#endif
 
 // ── WiFi subsystem ──
 static IPAddress g_local_ip(LOCAL_IP);
@@ -72,45 +85,46 @@ static MicrorosManager g_mr(g_mr_setup);
 static HeartbeatSubsystemSetup g_hb_setup("heartbeat", "/mcu_drone/heartbeat");
 static HeartbeatSubsystem g_hb(g_hb_setup);
 
-// ── IMU (BNO085) ──
+// ── IMU (BNO085) ── [Stage 1+]
+#if DRONE_DEBUG_STAGE >= 1
 static Drone::GyroConfig g_gyro_cfg{
     .wire = &Wire,
-    .i2c_addr = Config::IMU_I2C_ADDR,
-    .reset_pin = Pins::IMU_RST,
-    .int_pin = Pins::IMU_INT,
-    .rotation_report_us = Config::IMU_ROTATION_REPORT_US,
-    .gyro_report_us = Config::IMU_GYRO_REPORT_US,
-    .accel_report_us = Config::IMU_ACCEL_REPORT_US,
+    .i2c_addr = Drone::Config::IMU_I2C_ADDR,
+    .reset_pin = Drone::Pins::IMU_RST,
+    .int_pin = Drone::Pins::IMU_INT,
+    .rotation_report_us = Drone::Config::IMU_ROTATION_REPORT_US,
+    .gyro_report_us = Drone::Config::IMU_GYRO_REPORT_US,
+    .accel_report_us = Drone::Config::IMU_ACCEL_REPORT_US,
     .i2c_mutex = &g_i2c_mutex,
 };
 static Drone::GyroSubsystem g_gyro(g_gyro_cfg);
+#endif
 
-// ── Height sensor (VL53L0X) ──
-#if DRONE_ENABLE_HEIGHT
+// ── Height sensor (VL53L0X) ── [Stage 2+]
+#if DRONE_ENABLE_HEIGHT && DRONE_DEBUG_STAGE >= 2
 static Drone::HeightConfig g_height_cfg{
     .wire = &Wire,
     .xshut_pin = 255,
-    .timing_budget_ms = Config::HEIGHT_TIMING_BUDGET_MS,
-    .max_valid_m = Config::HEIGHT_MAX_VALID_M,
-    .min_valid_m = Config::HEIGHT_MIN_VALID_M,
+    .timing_budget_ms = Drone::Config::HEIGHT_TIMING_BUDGET_MS,
+    .max_valid_m = Drone::Config::HEIGHT_MAX_VALID_M,
+    .min_valid_m = Drone::Config::HEIGHT_MIN_VALID_M,
     .i2c_mutex = &g_i2c_mutex,
 };
 static Drone::HeightSubsystem g_height(g_height_cfg);
 #endif
 
-// ── IR transmitter ──
-static Drone::IRConfig g_ir_cfg{.ir_pin = Pins::IR_LED};
+// ── Stage 2+: IR, EKF, Flight, UWB, State, Safety ──
+#if DRONE_DEBUG_STAGE >= 2
+static Drone::IRConfig g_ir_cfg{.ir_pin = Drone::Pins::IR_LED};
 static Drone::IRSubsystem g_ir(g_ir_cfg);
 
-// ── EKF ──
 static Drone::DroneEKFSubsystem g_ekf;
 
-// ── Flight controller ──
 static Drone::FlightMotorPins g_motor_pins{
-    .fl = Pins::MOTOR_FL,
-    .fr = Pins::MOTOR_FR,
-    .br = Pins::MOTOR_BR,
-    .bl = Pins::MOTOR_BL,
+    .fl = Drone::Pins::MOTOR_FL,
+    .fr = Drone::Pins::MOTOR_FR,
+    .br = Drone::Pins::MOTOR_BR,
+    .bl = Drone::Pins::MOTOR_BL,
 };
 static Drone::DroneFlightSubsystem g_flight(
     g_motor_pins, g_gyro, g_ekf
@@ -120,15 +134,14 @@ static Drone::DroneFlightSubsystem g_flight(
 #endif
 );
 
-// ── UWB ──
 #if DRONE_ENABLE_UWB
 static Drivers::UWBDriverSetup g_uwb_setup("uwb_driver", Drivers::UWBMode::TAG,
-                                            Pins::UWB_DEVICE_ID, Pins::UWB_CS);
+                                            Drone::Pins::UWB_DEVICE_ID,
+                                            Drone::Pins::UWB_CS);
 static Drivers::UWBDriver g_uwb(g_uwb_setup);
 static Drone::DroneUWBSubsystem g_drone_uwb(g_uwb, g_ekf);
 #endif
 
-// ── State machine ──
 static Drone::DroneStateSubsystem g_state(
     "drone_state", g_flight, g_gyro, g_ekf
 #if DRONE_ENABLE_HEIGHT
@@ -137,7 +150,6 @@ static Drone::DroneStateSubsystem g_state(
 #endif
 );
 
-// ── Safety monitor ──
 static Drone::DroneSafetySubsystem g_safety(
     "drone_safety", g_state, g_flight, g_gyro, g_mr
 #if DRONE_ENABLE_HEIGHT
@@ -146,8 +158,8 @@ static Drone::DroneSafetySubsystem g_safety(
 #endif
 );
 
-// ── IR ROS2 wrapper ──
 static Drone::DroneIRSubsystem g_drone_ir(g_ir, g_state);
+#endif  // DRONE_DEBUG_STAGE >= 2
 
 // ════════════════════════════════════════════════════════════
 //  Arduino setup() / loop()
@@ -158,14 +170,17 @@ void setup() {
   Serial.begin(921600);
   delay(2000);
 #endif
-  DRONE_PRINTLN("[Drone] Starting...");
+  DRONE_PRINTF("[Drone] Starting... (DEBUG_STAGE=%d)\n", DRONE_DEBUG_STAGE);
 
+#if DRONE_DEBUG_STAGE >= 1
   // I2C mutex
   g_i2c_mutex = xSemaphoreCreateMutex();
 
   // I2C bus
-  Wire.begin(Pins::I2C_SDA, Pins::I2C_SCL);
+  Wire.begin(Drone::Pins::I2C_SDA, Drone::Pins::I2C_SCL);
   Wire.setClock(400000);
+  DRONE_PRINTLN("[Drone] I2C bus initialized (400kHz)");
+#endif
 
   // ── WiFi ──
   g_wifi.init();
@@ -196,18 +211,21 @@ void setup() {
   // ── Initialize subsystems ──
   DRONE_PRINTLN("[Drone] Initializing subsystems...");
 
+#if DRONE_DEBUG_STAGE >= 1
   xSemaphoreTake(g_i2c_mutex, portMAX_DELAY);
   bool gyro_ok = g_gyro.init();
   xSemaphoreGive(g_i2c_mutex);
   DRONE_PRINTF("[Drone] IMU: %s\n", gyro_ok ? "OK" : "FAIL");
+#endif
 
-#if DRONE_ENABLE_HEIGHT
+#if DRONE_ENABLE_HEIGHT && DRONE_DEBUG_STAGE >= 2
   xSemaphoreTake(g_i2c_mutex, portMAX_DELAY);
   bool height_ok = g_height.init();
   xSemaphoreGive(g_i2c_mutex);
   DRONE_PRINTF("[Drone] Height: %s\n", height_ok ? "OK" : "FAIL");
 #endif
 
+#if DRONE_DEBUG_STAGE >= 2
   g_ir.init();
   DRONE_PRINTLN("[Drone] IR: OK");
 
@@ -228,81 +246,89 @@ void setup() {
   }
 #endif
 
-  g_hb.init();
   g_state.init();
   g_safety.init();
+#endif  // DRONE_DEBUG_STAGE >= 2
+
+  g_hb.init();
 
   // ── Register micro-ROS participants ──
   g_mr.registerParticipant(&g_hb);
+#if DRONE_DEBUG_STAGE >= 2
   g_mr.registerParticipant(&g_state);
   g_mr.registerParticipant(&g_drone_ir);
 #if DRONE_ENABLE_UWB
   g_mr.registerParticipant(&g_drone_uwb);
 #endif
-
   // Check sensor readiness
   g_state.setAllSensorsReady(g_safety.checkSensorsReady());
+#endif  // DRONE_DEBUG_STAGE >= 2
 
   // ── Start RTOSSubsystem tasks ──
-  // Flight-critical: beginThreadedPinned with precise timing (vTaskDelayUntil)
-  //                          stack  pri  rate(ms) core
-  g_gyro.beginThreadedPinned(Config::GYRO_TASK_STACK, 5, 4, 1);  // 250Hz, core 1
-  g_flight.beginThreadedPinned(2048,  4,   4,       1);   // 250Hz, core 1
+#if DRONE_DEBUG_STAGE >= 1
+  g_gyro.beginThreadedPinned(Drone::Config::GYRO_TASK_STACK, 5, 4, 1);
+#endif
+
+#if DRONE_DEBUG_STAGE >= 2
+  g_flight.beginThreadedPinned(2048, 4, 4, 1);
 #if DRONE_ENABLE_HEIGHT
-  g_height.beginThreadedPinned(Config::HEIGHT_TASK_STACK, 3, 20, 1);  // 50Hz, core 1
+  g_height.beginThreadedPinned(Drone::Config::HEIGHT_TASK_STACK, 3, 20, 1);
 #endif
 #if DRONE_ENABLE_UWB
-  g_drone_uwb.beginThreadedPinned(2048, 3, 50,      0);   // 20Hz,  core 0
+  g_drone_uwb.beginThreadedPinned(2048, 3, 50, 0);
 #endif
+  g_state.beginThreaded(2048, 2, 100);
+  g_safety.beginThreaded(2048, 3, 100);
+#endif  // DRONE_DEBUG_STAGE >= 2
 
-  // Non-flight subsystems: standard beginThreaded (vTaskDelay)
-  g_mr.beginThreaded(          8192,   4,    10);   // micro-ROS agent (100Hz)
-  g_state.beginThreaded(       2048,   2,   100);   // state machine (10Hz)
-  g_safety.beginThreaded(      2048,   3,   100);   // safety monitor (10Hz)
-  g_hb.beginThreaded(          2048,   1,  1000);   // heartbeat (1Hz)
+  g_mr.beginThreaded(8192, 4, 10);
+  g_hb.beginThreaded(2048, 1, 1000);
 
-  // WiFi + OTA task (ESP32WifiSubsystem is TimedSubsystem, not RTOSSubsystem)
+  // WiFi + OTA task
   xTaskCreate([](void*) {
     while (true) {
       g_wifi.update();
       ArduinoOTA.handle();
 #ifdef DRONE_SERIAL_DEBUG
-      // Periodic status dashboard
       static uint32_t s_last_status_ms = 0;
       uint32_t now = millis();
       if (now - s_last_status_ms >= 2000) {
         s_last_status_ms = now;
-        IMUData imu = g_gyro.getData();
-        DRONE_PRINTF("\n[%u] ═══ Drone Status ═══\n", now);
+        DRONE_PRINTF("\n[%u] ═══ Drone Status (Stage %d) ═══\n",
+                      now, DRONE_DEBUG_STAGE);
         DRONE_PRINTF("  WiFi: %s  uROS: %s\n",
                       g_wifi.isConnected() ? "OK" : "DOWN",
                       g_mr.isConnected() ? "CONN" : "WAIT");
+#if DRONE_DEBUG_STAGE >= 1
+        Drone::IMUData imu = g_gyro.getData();
         DRONE_PRINTF("  IMU:    init=%c  roll=%.1f pitch=%.1f yaw=%.1f\n",
                       g_gyro.isInitialized() ? 'Y' : 'N',
                       imu.roll, imu.pitch, imu.yaw);
-#if DRONE_ENABLE_HEIGHT
+#endif
+#if DRONE_ENABLE_HEIGHT && DRONE_DEBUG_STAGE >= 2
         DRONE_PRINTF("  Height: init=%c  alt=%.3fm  valid=%c\n",
                       g_height.isInitialized() ? 'Y' : 'N',
                       g_height.getAltitudeM(),
                       g_height.isValid() ? 'Y' : 'N');
-#else
-        DRONE_PRINTLN("  Height: disabled");
 #endif
+#if DRONE_DEBUG_STAGE >= 2
         DRONE_PRINTF("  Flight: armed=%c\n",
                       g_flight.isArmed() ? 'Y' : 'N');
         DRONE_PRINTF("  Motors: FL=%.2f FR=%.2f RR=%.2f RL=%.2f\n",
                       g_flight.getMotor(0), g_flight.getMotor(1),
                       g_flight.getMotor(2), g_flight.getMotor(3));
+#endif
         DRONE_PRINTF("  Heap: %u / min: %u\n",
                       ESP.getFreeHeap(), ESP.getMinFreeHeap());
       }
 #endif
-      vTaskDelay(pdMS_TO_TICKS(100));  // 10Hz
+      vTaskDelay(pdMS_TO_TICKS(100));
     }
   }, "wifi_ota", 4096, nullptr, 1, nullptr);
 
   DRONE_PRINTF("[Drone] Free heap: %u bytes\n", ESP.getFreeHeap());
-  DRONE_PRINTLN("[Drone] All tasks started. Ready!");
+  DRONE_PRINTF("[Drone] All tasks started (Stage %d). Ready!\n",
+               DRONE_DEBUG_STAGE);
 }
 
 // loop() empty — all work runs in FreeRTOS tasks (matches robot pattern).

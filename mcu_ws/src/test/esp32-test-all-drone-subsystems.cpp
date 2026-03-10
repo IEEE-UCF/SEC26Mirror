@@ -185,6 +185,12 @@ static Drone::DroneSafetySubsystem g_safety(
 // ── IR ROS2 wrapper ──
 static Drone::DroneIRSubsystem g_drone_ir(g_ir, g_state);
 
+// ── Forward declarations ──
+static const char* stateToStr(Drone::DroneState s);
+#ifdef DRONE_SERIAL_DEBUG
+static void debugDashboardTask(void*);
+#endif
+
 // ════════════════════════════════════════════════════════════════
 //  Arduino setup() / loop()
 // ════════════════════════════════════════════════════════════════
@@ -336,9 +342,6 @@ void setup() {
   g_mr.registerParticipant(&g_drone_uwb);
 #endif
 
-  g_mr.begin();
-  g_hb.begin();
-
   // Check sensor readiness
   g_state.setAllSensorsReady(g_safety.checkSensorsReady());
   DRONE_PRINTF("[INIT] Sensor readiness: %s\n",
@@ -348,8 +351,9 @@ void setup() {
   DRONE_PRINTLN("[INIT] --- Starting RTOSSubsystem tasks ---");
 
 #if DEBUG_STAGE >= 2
-  g_gyro.beginThreadedPinned(2048, 5, 4, 1);
-  DRONE_PRINTF("[INIT] Task 'gyro':    core=1, pri=5, rate=250Hz (precise)\n");
+  g_gyro.beginThreadedPinned(Config::GYRO_TASK_STACK, 5, 4, 1);
+  DRONE_PRINTF("[INIT] Task 'gyro':    core=1, pri=5, stack=%u, rate=250Hz (precise)\n",
+                Config::GYRO_TASK_STACK);
 #endif
 
 #if DEBUG_STAGE >= 4
@@ -358,8 +362,9 @@ void setup() {
 #endif
 
 #if DEBUG_STAGE >= 3 && DRONE_ENABLE_HEIGHT
-  g_height.beginThreadedPinned(1536, 3, 20, 1);
-  DRONE_PRINTF("[INIT] Task 'height':  core=1, pri=3, rate=50Hz (precise)\n");
+  g_height.beginThreadedPinned(Config::HEIGHT_TASK_STACK, 3, 20, 1);
+  DRONE_PRINTF("[INIT] Task 'height':  core=1, pri=3, stack=%u, rate=50Hz (precise)\n",
+                Config::HEIGHT_TASK_STACK);
 #endif
 
 #if DEBUG_STAGE >= 6 && DRONE_ENABLE_UWB
@@ -373,15 +378,32 @@ void setup() {
   DRONE_PRINTLN("[INIT] Tasks 'drone_state' (10Hz) + 'drone_safety' (10Hz) started");
 #endif
 
+  // micro-ROS + heartbeat: threaded (matches robot pattern)
+  g_mr.beginThreaded(8192, 4, 10);
+  DRONE_PRINTLN("[INIT] Task 'microros_manager': pri=4, rate=100Hz");
+  g_hb.beginThreaded(2048, 1, 1000);
+  DRONE_PRINTLN("[INIT] Task 'heartbeat': pri=1, rate=1Hz");
+
+  // WiFi + OTA task (ESP32WifiSubsystem is TimedSubsystem, not RTOSSubsystem)
+  xTaskCreate([](void*) {
+    while (true) {
+      g_wifi.update();
+      ArduinoOTA.handle();
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+  }, "wifi_ota", 4096, nullptr, 1, nullptr);
+  DRONE_PRINTLN("[INIT] Task 'wifi_ota': pri=1, rate=10Hz");
+
+#ifdef DRONE_SERIAL_DEBUG
+  xTaskCreate(debugDashboardTask, "debug_dash", 4096, nullptr, 1, nullptr);
+  DRONE_PRINTLN("[INIT] Task 'debug_dash': pri=1, rate=0.5Hz");
+#endif
+
   DRONE_PRINTF("[INIT] Free heap: %u bytes\n", ESP.getFreeHeap());
   DRONE_PRINTLN("[INIT] All tasks started. Entering main loop.\n");
 }
 
-// ── Debug output interval ──
-static uint32_t s_last_debug_ms = 0;
-static constexpr uint32_t DEBUG_INTERVAL_MS = 2000;  // Print every 2s
-static uint32_t s_last_mr_update_ms = 0;
-
+// Drone state name helper
 static const char* stateToStr(Drone::DroneState s) {
   switch (s) {
     case Drone::DroneState::INIT:             return "INIT";
@@ -395,25 +417,11 @@ static const char* stateToStr(Drone::DroneState s) {
   }
 }
 
-void loop() {
-  uint32_t now = millis();
-
-  g_wifi.update();
-  ArduinoOTA.handle();
-
-  // Rate-limit micro-ROS update
-  if (now - s_last_mr_update_ms >= 100) {
-    g_mr.update();
-    s_last_mr_update_ms = now;
-  }
-
-  g_hb.update();
-
-  // ── Periodic debug output ──
+// Debug dashboard task — prints status every 2s (only with DRONE_SERIAL_DEBUG)
 #ifdef DRONE_SERIAL_DEBUG
-  if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
-    float elapsed_s = (now - s_last_debug_ms) / 1000.0f;
-    s_last_debug_ms = now;
+static void debugDashboardTask(void*) {
+  while (true) {
+    uint32_t now = millis();
 
     DRONE_PRINTF("\n[%lu] ═══ Drone Status (Stage %d) ═══\n", now,
                   DEBUG_STAGE);
@@ -513,8 +521,13 @@ void loop() {
     DRONE_PRINTF("  Heap: %u / min: %u bytes\n",
                   ESP.getFreeHeap(), ESP.getMinFreeHeap());
     DRONE_PRINTF("  Uptime: %lus\n", now / 1000);
+
+    vTaskDelay(pdMS_TO_TICKS(2000));  // Print every 2s
   }
+}
 #endif  // DRONE_SERIAL_DEBUG
 
-  delay(10);
+// loop() empty — all work runs in FreeRTOS tasks (matches robot pattern).
+void loop() {
+  vTaskDelay(pdMS_TO_TICKS(1000));
 }

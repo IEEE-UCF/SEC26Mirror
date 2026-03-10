@@ -22,9 +22,6 @@ bool GyroSubsystem::init() {
     return false;
   }
 
-  // Robot-proven approach: 3000ms delay after begin_I2C for reliable init
-  delay(3000);
-
   // Consume the initial wasReset flag from the boot sequence
   (void)bno_.wasReset();
   delay(100);

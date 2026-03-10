@@ -8,12 +8,14 @@
  *
  * RTOSSubsystem tasks:
  *   GyroSubsystem          (core 1, pri 5, 250Hz, precise)
+ *   MicrorosManager         (any,    pri 4, 100Hz, standard)
  *   DroneFlightSubsystem   (core 1, pri 4, 250Hz, precise)
  *   HeightSubsystem        (core 1, pri 3, 50Hz,  precise)
  *   DroneUWBSubsystem      (core 0, pri 3, 20Hz,  precise)
  *   DroneSafetySubsystem   (any,    pri 3, 10Hz,  standard)
  *   DroneStateSubsystem    (any,    pri 2, 10Hz,  standard)
- *   HeartbeatSubsystem     (loop,   -,     1Hz)
+ *   HeartbeatSubsystem     (any,    pri 1, 1Hz,   standard)
+ *   WiFi+OTA               (any,    pri 1, 10Hz,  raw task)
  */
 
 #include <Arduino.h>
@@ -188,9 +190,8 @@ void setup() {
   ArduinoOTA.begin();
   DRONE_PRINTLN("[Drone] OTA ready");
 
-  // ── micro-ROS (init + begin in setup, update in loop — same as beacon) ──
+  // ── micro-ROS ──
   g_mr.init();
-  g_mr.begin();
 
   // ── Initialize subsystems ──
   DRONE_PRINTLN("[Drone] Initializing subsystems...");
@@ -245,68 +246,66 @@ void setup() {
   // ── Start RTOSSubsystem tasks ──
   // Flight-critical: beginThreadedPinned with precise timing (vTaskDelayUntil)
   //                          stack  pri  rate(ms) core
-  g_gyro.beginThreadedPinned(  2048,  5,   4,       1);   // 250Hz, core 1
+  g_gyro.beginThreadedPinned(Config::GYRO_TASK_STACK, 5, 4, 1);  // 250Hz, core 1
   g_flight.beginThreadedPinned(2048,  4,   4,       1);   // 250Hz, core 1
 #if DRONE_ENABLE_HEIGHT
-  g_height.beginThreadedPinned(1536,  3,   20,      1);   // 50Hz,  core 1
+  g_height.beginThreadedPinned(Config::HEIGHT_TASK_STACK, 3, 20, 1);  // 50Hz, core 1
 #endif
 #if DRONE_ENABLE_UWB
   g_drone_uwb.beginThreadedPinned(2048, 3, 50,      0);   // 20Hz,  core 0
 #endif
 
   // Non-flight subsystems: standard beginThreaded (vTaskDelay)
+  g_mr.beginThreaded(          8192,   4,    10);   // micro-ROS agent (100Hz)
   g_state.beginThreaded(       2048,   2,   100);   // state machine (10Hz)
   g_safety.beginThreaded(      2048,   3,   100);   // safety monitor (10Hz)
-  g_hb.begin();
+  g_hb.beginThreaded(          2048,   1,  1000);   // heartbeat (1Hz)
+
+  // WiFi + OTA task (ESP32WifiSubsystem is TimedSubsystem, not RTOSSubsystem)
+  xTaskCreate([](void*) {
+    while (true) {
+      g_wifi.update();
+      ArduinoOTA.handle();
+#ifdef DRONE_SERIAL_DEBUG
+      // Periodic status dashboard
+      static uint32_t s_last_status_ms = 0;
+      uint32_t now = millis();
+      if (now - s_last_status_ms >= 2000) {
+        s_last_status_ms = now;
+        IMUData imu = g_gyro.getData();
+        DRONE_PRINTF("\n[%u] ═══ Drone Status ═══\n", now);
+        DRONE_PRINTF("  WiFi: %s  uROS: %s\n",
+                      g_wifi.isConnected() ? "OK" : "DOWN",
+                      g_mr.isConnected() ? "CONN" : "WAIT");
+        DRONE_PRINTF("  IMU:    init=%c  roll=%.1f pitch=%.1f yaw=%.1f\n",
+                      g_gyro.isInitialized() ? 'Y' : 'N',
+                      imu.roll, imu.pitch, imu.yaw);
+#if DRONE_ENABLE_HEIGHT
+        DRONE_PRINTF("  Height: init=%c  alt=%.3fm  valid=%c\n",
+                      g_height.isInitialized() ? 'Y' : 'N',
+                      g_height.getAltitudeM(),
+                      g_height.isValid() ? 'Y' : 'N');
+#else
+        DRONE_PRINTLN("  Height: disabled");
+#endif
+        DRONE_PRINTF("  Flight: armed=%c\n",
+                      g_flight.isArmed() ? 'Y' : 'N');
+        DRONE_PRINTF("  Motors: FL=%.2f FR=%.2f RR=%.2f RL=%.2f\n",
+                      g_flight.getMotor(0), g_flight.getMotor(1),
+                      g_flight.getMotor(2), g_flight.getMotor(3));
+        DRONE_PRINTF("  Heap: %u / min: %u\n",
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap());
+      }
+#endif
+      vTaskDelay(pdMS_TO_TICKS(100));  // 10Hz
+    }
+  }, "wifi_ota", 4096, nullptr, 1, nullptr);
 
   DRONE_PRINTF("[Drone] Free heap: %u bytes\n", ESP.getFreeHeap());
   DRONE_PRINTLN("[Drone] All tasks started. Ready!");
 }
 
-// Periodic serial status dashboard (gated by DRONE_SERIAL_DEBUG)
-#ifdef DRONE_SERIAL_DEBUG
-static uint32_t s_last_status_ms = 0;
-static void printStatus() {
-  uint32_t now = millis();
-  if (now - s_last_status_ms < 2000) return;
-  s_last_status_ms = now;
-
-  IMUData imu = g_gyro.getData();
-
-  DRONE_PRINTF("\n[%u] ═══ Drone Status ═══\n", now);
-  DRONE_PRINTF("  WiFi: %s  uROS: %s\n",
-                g_wifi.isConnected() ? "OK" : "DOWN",
-                g_mr.isConnected() ? "CONN" : "WAIT");
-  DRONE_PRINTF("  IMU:    init=%c  roll=%.1f pitch=%.1f yaw=%.1f\n",
-                g_gyro.isInitialized() ? 'Y' : 'N',
-                imu.roll, imu.pitch, imu.yaw);
-#if DRONE_ENABLE_HEIGHT
-  DRONE_PRINTF("  Height: init=%c  alt=%.3fm  valid=%c\n",
-                g_height.isInitialized() ? 'Y' : 'N',
-                g_height.getAltitudeM(),
-                g_height.isValid() ? 'Y' : 'N');
-#else
-  DRONE_PRINTLN("  Height: disabled");
-#endif
-  DRONE_PRINTF("  Flight: armed=%c\n",
-                g_flight.isArmed() ? 'Y' : 'N');
-  DRONE_PRINTF("  Motors: FL=%.2f FR=%.2f RR=%.2f RL=%.2f\n",
-                g_flight.getMotor(0), g_flight.getMotor(1),
-                g_flight.getMotor(2), g_flight.getMotor(3));
-  DRONE_PRINTF("  Heap: %u / min: %u\n",
-                ESP.getFreeHeap(), ESP.getMinFreeHeap());
-}
-#endif
-
-// loop() is minimal — all subsystems run in FreeRTOS tasks.
-// Only WiFi + OTA remain here (ESP32 Arduino WiFi stack requirement).
+// loop() empty — all work runs in FreeRTOS tasks (matches robot pattern).
 void loop() {
-  g_wifi.update();
-  ArduinoOTA.handle();
-  g_mr.update();
-  g_hb.update();
-#ifdef DRONE_SERIAL_DEBUG
-  printStatus();
-#endif
-  delay(1);
+  vTaskDelay(pdMS_TO_TICKS(1000));
 }

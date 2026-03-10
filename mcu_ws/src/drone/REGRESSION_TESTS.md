@@ -69,7 +69,7 @@ All subsystems now use RTOSSubsystem (`beginThreaded` / `beginThreadedPinned`).
 |---|---|---|---|---|---|
 | GyroSubsystem | 250 | 1 | 5 | Precise (vTaskDelayUntil) | 2048 |
 | DroneFlightSubsystem | 250 | 1 | 4 | Precise (vTaskDelayUntil) | 2048 |
-| HeightSubsystem | 50 | 1 | 3 | Precise (vTaskDelayUntil) | 1536 |
+| HeightSubsystem | 50 | 1 | 3 | Precise (vTaskDelayUntil) | 2048 |
 | DroneUWBSubsystem | 20 | 0 | 3 | Precise (vTaskDelayUntil) | 2048 |
 | DroneSafetySubsystem | 10 | any | 3 | Standard (vTaskDelay) | 2048 |
 | DroneStateSubsystem | 10 | any | 2 | Standard (vTaskDelay) | 2048 |

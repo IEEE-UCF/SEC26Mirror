@@ -1,6 +1,6 @@
 # SEC26 Drone Regression Tests
 
-Manual hardware regression tests for the `drone` and `esp32-test-all-drone-subsystems` firmware targets.
+Manual hardware regression tests for the `drone` firmware target.
 
 ## Overview
 
@@ -9,22 +9,10 @@ The drone runs on a Seeed XIAO ESP32-S3 with FreeRTOS multi-tasking and WiFi mic
 - **MCU:** ESP32-S3 (Seeed XIAO)
 - **Transport:** WiFi UDP micro-ROS to Pi agent (port 8888)
 - **Static IP:** 192.168.4.25
-- **OTA hostname:** `sec26-drone` (production), `sec26-drone-test` (test)
-- **Participants:** 3-4 (Heartbeat, DroneState, DroneIR, DroneUWB)
-- **Entry point:** `src/drone/main.cpp` (production), `src/test/esp32-test-all-drone-subsystems.cpp` (test)
+- **OTA hostname:** `sec26-drone`
+- **Entry point:** `src/drone/main.cpp`
 
-### Test Environment Differences
-
-| Aspect | `drone` | `esp32-test-all-drone-subsystems` |
-|--------|---------|-----------------------------------|
-| Entry point | `src/drone/main.cpp` | `src/test/esp32-test-all-drone-subsystems.cpp` |
-| DEBUG_STAGE | Configurable 0-2 (default 2) | Configurable 1-7 (default 7) |
-| UWB | Build flag (default 0) | Always enabled (flag=1) |
-| Height | Build flag (default 1) | Always enabled (flag=1) |
-| Serial debug | Configurable (add `-DDRONE_SERIAL_DEBUG`) | ON (`-DDRONE_SERIAL_DEBUG` in build flags) |
-| OTA hostname | `sec26-drone` | `sec26-drone-test` |
-
-### Production Debug Stages (`drone` env)
+### Debug Stages
 
 Set via `-DDRONE_DEBUG_STAGE=N` in platformio.ini:
 
@@ -47,20 +35,17 @@ Set via `-DDRONE_DEBUG_STAGE=N` in platformio.ini:
 # Inside Docker container
 cd /home/ubuntu/mcu_workspaces/sec26mcu
 
-# Build production drone
+# Build drone
 pio run -e drone
 
-# Build test-all-subsystems
-pio run -e esp32-test-all-drone-subsystems
-
 # Flash via USB
-pio run -e esp32-test-all-drone-subsystems --target upload
+pio run -e drone --target upload
 
 # Flash via OTA
-pio run -e esp32-test-all-drone-subsystems --target upload --upload-port 192.168.4.25
+pio run -e drone --target upload --upload-port 192.168.4.25
 
 # Monitor serial (USB, 921600 baud)
-pio device monitor -e esp32-test-all-drone-subsystems
+pio device monitor -e drone
 ```
 
 ## Topic Publish Rates
@@ -95,8 +80,8 @@ Additional checks after converting all subsystems to `RTOSSubsystem::beginThread
 - [ ] Flight rate stays at ~250Hz after refactoring
 - [ ] Height rate stays at ~50Hz
 - [ ] No I2C bus contention errors (gyro + height share mutex correctly)
-- [ ] Serial debug OFF: build `drone` env, verify no serial output (clean production)
-- [ ] Serial debug ON: build test env with `-DDRONE_SERIAL_DEBUG`, verify debug output over USB CDC
+- [ ] Serial debug OFF: build `drone` env without `-DDRONE_SERIAL_DEBUG`, verify no serial output (clean production)
+- [ ] Serial debug ON: build `drone` env with `-DDRONE_SERIAL_DEBUG`, verify debug dashboard prints over USB CDC
 - [ ] EKF predict runs at flight rate (250Hz)
 - [ ] UWB EKF update runs at 20Hz
 - [ ] Heap stable after 60+ seconds (check `ESP.getMinFreeHeap()`)
@@ -106,13 +91,13 @@ Additional checks after converting all subsystems to `RTOSSubsystem::beginThread
 ### 1. Flash and Boot
 
 ```bash
-pio run -e esp32-test-all-drone-subsystems --target upload
-pio device monitor -e esp32-test-all-drone-subsystems
+pio run -e drone --target upload
+pio device monitor -e drone
 ```
 
-**Verify on serial monitor:**
-- [ ] `SEC26 Drone — All Subsystems Test` banner appears
-- [ ] `DEBUG_STAGE = 7` confirmed
+**Verify on serial monitor (requires `-DDRONE_SERIAL_DEBUG` in build flags):**
+- [ ] `[Drone] Starting...` banner appears
+- [ ] `DEBUG_STAGE=2` confirmed (or whichever `DRONE_DEBUG_STAGE` is set)
 - [ ] WiFi connected with correct IP (192.168.4.25)
 - [ ] OTA ready message
 - [ ] No crash or reboot loop
@@ -131,6 +116,15 @@ pio device monitor -e esp32-test-all-drone-subsystems
 - [ ] Gyro rates near zero when stationary (< 1 deg/s)
 - [ ] Accel near zero when stationary (gravity-free linear accel)
 - [ ] Heading direction label matches physical orientation
+
+**Tare (yaw reset):**
+```bash
+# Point drone in desired "forward" direction, then:
+ros2 service call /mcu_drone/tare mcu_msgs/srv/DroneTare "{}"
+```
+- [ ] Yaw resets to ~0 after tare
+- [ ] Subsequent rotations are relative to tared heading
+- [ ] Multiple tares accumulate correctly
 
 **Orientation check — determine BNO085 facing direction:**
 - [ ] Power on drone flat, note yaw reading (this is the "forward" reference, ~0 deg)
@@ -312,7 +306,7 @@ pkill -9 -f "micro_ros_agent udp4"
 ### 11. OTA Update
 
 ```bash
-pio run -e esp32-test-all-drone-subsystems --target upload --upload-port 192.168.4.25
+pio run -e drone --target upload --upload-port 192.168.4.25
 ```
 
 - [ ] OTA flash completes without error
@@ -332,7 +326,7 @@ pio run -e esp32-test-all-drone-subsystems --target upload --upload-port 192.168
 
 ### 13. Staged Debug Bring-up
 
-If issues are found, set `DRONE_DEBUG_STAGE` in platformio.ini to isolate:
+If issues are found, set `DRONE_DEBUG_STAGE` in platformio.ini `[env:drone]` build_flags to isolate:
 
 ```bash
 # In platformio.ini [env:drone] build_flags, set:
@@ -340,10 +334,12 @@ If issues are found, set `DRONE_DEBUG_STAGE` in platformio.ini to isolate:
 #   -DDRONE_DEBUG_STAGE=1   + Gyro/IMU (I2C)
 #   -DDRONE_DEBUG_STAGE=2   Full system (default)
 #
-# Also add -DDRONE_SERIAL_DEBUG and -DSERIAL_DEBUG for verbose output.
+# The drone env already has -DDRONE_SERIAL_DEBUG and -DSERIAL_DEBUG
+# for verbose output. The debug dashboard task prints every 2s when
+# DRONE_SERIAL_DEBUG is defined.
 
 pio run -e drone --target upload
-pio device monitor -p /dev/ttyACM2
+pio device monitor -e drone
 ```
 
 At each stage, verify:
@@ -365,6 +361,7 @@ ros2 run secbot_drone_teleop drone_teleop_node
 - [ ] RC data received (requires robot Teensy publishing `/mcu_robot/rc`)
 - [ ] SWA toggle → arm/disarm service called
 - [ ] SWB toggle (while armed) → takeoff/land service called
+- [ ] SWC toggle → tare service called, yaw resets to 0
 - [ ] Sticks produce cmd_vel when flying (right stick = roll/pitch, left stick = alt/yaw)
 - [ ] Deadzone: sticks near center produce zero cmd_vel
 - [ ] cmd_vel stops publishing when RC signal lost (>500ms stale)
@@ -399,7 +396,7 @@ ros2 run secbot_drone_teleop drone_teleop_node
 ```
 Date: _______________
 Git commit: _______________
-Firmware target: [ ] drone  [ ] esp32-test-all-drone-subsystems
+Firmware target: drone
 Tester: _______________
 
 Boot:
@@ -430,8 +427,8 @@ Rates:
   uwb/ranging:  _____ Hz (expect 20)
 
 Serial Debug:
-  [ ] Production build (drone env): no serial output
-  [ ] Test build: debug dashboard prints every 2s
+  [ ] Build without -DDRONE_SERIAL_DEBUG: no serial output
+  [ ] Build with -DDRONE_SERIAL_DEBUG: debug dashboard prints every 2s
 
 IMU Orientation:
   [ ] Flat: roll~0, pitch~0

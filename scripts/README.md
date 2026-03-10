@@ -284,7 +284,7 @@ gpioset -c gpiochip0 17=1
 
 ### Teensy won't flash
 
-- Ensure the Teensy is connected via USB and visible (`ls /dev/ttyACM*`)
+- Ensure the Teensy is connected via USB and visible (`ls /dev/ttyTeensyROS /dev/ttyTeensyDebug /dev/ttyDrone`)
 - Press the physical program button on the Teensy if it's unresponsive
 - Check that PlatformIO's Teensy platform is installed inside the container
 - Review `flash_mcu.sh` output for specific error messages

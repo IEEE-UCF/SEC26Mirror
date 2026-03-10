@@ -1,0 +1,6 @@
+# Drone Rule (This one usually works as-is)
+SUBSYSTEM=="tty", ATTRS{serial}=="DC:B4:D9:39:B2:38", SYMLINK+="ttyDrone"
+
+# Teensy Rules - Using ENV for interface matching
+SUBSYSTEM=="tty", ATTRS{serial}=="19277270", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="ttyTeensyROS", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{serial}=="19277270", ENV{ID_USB_INTERFACE_NUM}=="02", SYMLINK+="ttyTeensyDebug", MODE="0666"

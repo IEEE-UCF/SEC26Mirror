@@ -1,15 +1,19 @@
 #pragma once
 /**
  * @file DroneLogic.h
- * @brief Main wiring for drone firmware: globals, FreeRTOS tasks, setup/loop.
+ * @brief Main wiring for drone firmware: globals, setup/loop.
  *
- * Follows the RobotLogic.h / MinibotLogic.h pattern.
- * FreeRTOS tasks:
- *   flightControlTask (core 1, pri 5, 250Hz) — IMU read → PID → motors, EKF predict
- *   heightSensorTask  (core 1, pri 3, 50Hz)  — VL53L0X read (guarded)
- *   uwbTask           (core 0, pri 3, 20Hz)  — UWB ranging + EKF update (guarded)
- *   safetyTask        (core 1, pri 4, 10Hz)  — Failure detection
- *   Arduino loop()    (any,    pri 1)         — WiFi, OTA, micro-ROS, state machine
+ * All subsystems use RTOSSubsystem::beginThreaded() or
+ * beginThreadedPinned() — no raw xTaskCreatePinnedToCore() calls.
+ *
+ * RTOSSubsystem tasks:
+ *   GyroSubsystem          (core 1, pri 5, 250Hz, precise)
+ *   DroneFlightSubsystem   (core 1, pri 4, 250Hz, precise)
+ *   HeightSubsystem        (core 1, pri 3, 50Hz,  precise)
+ *   DroneUWBSubsystem      (core 0, pri 3, 20Hz,  precise)
+ *   DroneSafetySubsystem   (any,    pri 3, 10Hz,  standard)
+ *   DroneStateSubsystem    (any,    pri 2, 10Hz,  standard)
+ *   HeartbeatSubsystem     (loop,   -,     1Hz)
  */
 
 #include <Arduino.h>
@@ -20,6 +24,7 @@
 #include <Wire.h>
 #include <microros_manager_robot.h>
 
+#include "../DroneDebug.h"
 #include "../DronePins.h"
 #include "../DroneConfig.h"
 #include "robot/machines/HeartbeatSubsystem.h"
@@ -45,7 +50,7 @@
 using namespace Subsystem;
 using namespace Drone;
 
-// ── I2C mutex (shared between flight task and height task) ──
+// ── I2C mutex (shared between gyro and height tasks) ──
 static SemaphoreHandle_t g_i2c_mutex = nullptr;
 
 // ── WiFi subsystem ──
@@ -74,6 +79,7 @@ static Drone::GyroConfig g_gyro_cfg{
     .rotation_report_us = Config::IMU_ROTATION_REPORT_US,
     .gyro_report_us = Config::IMU_GYRO_REPORT_US,
     .accel_report_us = Config::IMU_ACCEL_REPORT_US,
+    .i2c_mutex = &g_i2c_mutex,
 };
 static Drone::GyroSubsystem g_gyro(g_gyro_cfg);
 
@@ -85,6 +91,7 @@ static Drone::HeightConfig g_height_cfg{
     .timing_budget_ms = Config::HEIGHT_TIMING_BUDGET_MS,
     .max_valid_m = Config::HEIGHT_MAX_VALID_M,
     .min_valid_m = Config::HEIGHT_MIN_VALID_M,
+    .i2c_mutex = &g_i2c_mutex,
 };
 static Drone::HeightSubsystem g_height(g_height_cfg);
 #endif
@@ -93,6 +100,9 @@ static Drone::HeightSubsystem g_height(g_height_cfg);
 static Drone::IRConfig g_ir_cfg{.ir_pin = Pins::IR_LED};
 static Drone::IRSubsystem g_ir(g_ir_cfg);
 
+// ── EKF ──
+static Drone::DroneEKFSubsystem g_ekf;
+
 // ── Flight controller ──
 static Drone::FlightMotorPins g_motor_pins{
     .fl = Pins::MOTOR_FL,
@@ -100,17 +110,20 @@ static Drone::FlightMotorPins g_motor_pins{
     .br = Pins::MOTOR_BR,
     .bl = Pins::MOTOR_BL,
 };
-static Drone::DroneFlightSubsystem g_flight(g_motor_pins);
-
-// ── EKF ──
-static Drone::DroneEKFSubsystem g_ekf;
+static Drone::DroneFlightSubsystem g_flight(
+    g_motor_pins, g_gyro, g_ekf
+#if DRONE_ENABLE_HEIGHT
+    ,
+    g_height
+#endif
+);
 
 // ── UWB ──
 #if DRONE_ENABLE_UWB
 static Drivers::UWBDriverSetup g_uwb_setup("uwb_driver", Drivers::UWBMode::TAG,
                                             Pins::UWB_DEVICE_ID, Pins::UWB_CS);
 static Drivers::UWBDriver g_uwb(g_uwb_setup);
-static Drone::DroneUWBSubsystem g_drone_uwb(g_uwb);
+static Drone::DroneUWBSubsystem g_drone_uwb(g_uwb, g_ekf);
 #endif
 
 // ── State machine ──
@@ -135,111 +148,15 @@ static Drone::DroneSafetySubsystem g_safety(
 static Drone::DroneIRSubsystem g_drone_ir(g_ir, g_state);
 
 // ════════════════════════════════════════════════════════════
-//  FreeRTOS Tasks
-// ════════════════════════════════════════════════════════════
-
-// Flight control task: IMU read → PID → motors, EKF predict (250Hz, core 1)
-static void flightControlTask(void* /*param*/) {
-  TickType_t prev_wake = xTaskGetTickCount();
-  const TickType_t period =
-      pdMS_TO_TICKS(1000 / Config::FLIGHT_RATE_HZ);
-  uint32_t last_us = micros();
-
-  for (;;) {
-    // Skip all work if IMU not initialized — no point running PID
-    if (!g_gyro.isInitialized()) {
-      vTaskDelay(pdMS_TO_TICKS(100));
-      continue;
-    }
-
-    uint32_t now_us = micros();
-    float dt = (now_us - last_us) * 1e-6f;
-    last_us = now_us;
-
-    // Read IMU (under I2C mutex)
-    xSemaphoreTake(g_i2c_mutex, portMAX_DELAY);
-    g_gyro.update();
-    xSemaphoreGive(g_i2c_mutex);
-
-    IMUData imu = g_gyro.getData();
-
-    // EKF predict (world-frame accel via full body→world rotation)
-    float ax_w, ay_w;
-    g_gyro.getAccelWorld(ax_w, ay_w);
-    g_ekf.predict(ax_w, ay_w, dt);
-
-    // Flight controller update
-#if DRONE_ENABLE_HEIGHT
-    float alt = g_height.getAltitudeM();
-#else
-    float alt = 0.0f;
-#endif
-    g_flight.update(imu, alt, dt);
-
-    vTaskDelayUntil(&prev_wake, period);
-  }
-}
-
-// Height sensor task: VL53L0X read (50Hz, core 1, guarded)
-#if DRONE_ENABLE_HEIGHT
-static void heightSensorTask(void* /*param*/) {
-  TickType_t prev_wake = xTaskGetTickCount();
-  const TickType_t period =
-      pdMS_TO_TICKS(1000 / Config::HEIGHT_RATE_HZ);
-
-  for (;;) {
-    xSemaphoreTake(g_i2c_mutex, portMAX_DELAY);
-    g_height.update();
-    xSemaphoreGive(g_i2c_mutex);
-
-    vTaskDelayUntil(&prev_wake, period);
-  }
-}
-#endif
-
-// UWB task: ranging + EKF update (20Hz, core 0, guarded)
-#if DRONE_ENABLE_UWB
-static void uwbTask(void* /*param*/) {
-  TickType_t prev_wake = xTaskGetTickCount();
-  const TickType_t period =
-      pdMS_TO_TICKS(1000 / Config::UWB_RATE_HZ);
-
-  for (;;) {
-    g_uwb.update();
-    g_uwb.startRanging();
-
-    // Feed valid ranges to EKF (per-range scalar updates)
-    const auto& data = g_uwb.getData();
-    float distances[Drivers::UWBDriverData::MAX_ANCHORS];
-    uint8_t ids[Drivers::UWBDriverData::MAX_ANCHORS];
-    uint8_t n = 0;
-    for (uint8_t i = 0; i < Drivers::UWBDriverData::MAX_ANCHORS; i++) {
-      if (data.ranges[i].valid) {
-        distances[n] = data.ranges[i].distance_cm / 100.0f;
-        ids[n] = data.ranges[i].peer_id;
-        n++;
-      }
-    }
-    if (n > 0) {
-      g_ekf.updateUWB(distances, ids, n);
-    }
-
-    // Publish UWB ranging data
-    g_drone_uwb.publish();
-
-    vTaskDelayUntil(&prev_wake, period);
-  }
-}
-#endif
-
-// ════════════════════════════════════════════════════════════
 //  Arduino setup() / loop()
 // ════════════════════════════════════════════════════════════
 
 void setup() {
+#ifdef DRONE_SERIAL_DEBUG
   Serial.begin(921600);
   delay(2000);
-  Serial.println("[Drone] Starting...");
+#endif
+  DRONE_PRINTLN("[Drone] Starting...");
 
   // I2C mutex
   g_i2c_mutex = xSemaphoreCreateMutex();
@@ -251,57 +168,58 @@ void setup() {
   // ── WiFi ──
   g_wifi.init();
   g_wifi.begin();
-  Serial.println("[Drone] Waiting for WiFi...");
+  DRONE_PRINTLN("[Drone] Waiting for WiFi...");
   {
     uint32_t wifi_start = millis();
     while (!g_wifi.isConnected()) {
       g_wifi.update();
       delay(50);  // yield to watchdog
       if (millis() - wifi_start > 15000) {
-        Serial.println("[Drone] WiFi timeout — continuing anyway");
+        DRONE_PRINTLN("[Drone] WiFi timeout — continuing anyway");
         break;
       }
     }
   }
-  Serial.printf("[Drone] WiFi connected: %s\n",
+  DRONE_PRINTF("[Drone] WiFi connected: %s\n",
                 WiFi.localIP().toString().c_str());
 
   // ── ArduinoOTA ──
   ArduinoOTA.setHostname("sec26-drone");
   ArduinoOTA.begin();
-  Serial.println("[Drone] OTA ready");
+  DRONE_PRINTLN("[Drone] OTA ready");
 
-  // ── micro-ROS ──
+  // ── micro-ROS (init + begin in setup, update in loop — same as beacon) ──
   g_mr.init();
+  g_mr.begin();
 
   // ── Initialize subsystems ──
-  Serial.println("[Drone] Initializing subsystems...");
+  DRONE_PRINTLN("[Drone] Initializing subsystems...");
 
   xSemaphoreTake(g_i2c_mutex, portMAX_DELAY);
   bool gyro_ok = g_gyro.init();
   xSemaphoreGive(g_i2c_mutex);
-  Serial.printf("[Drone] IMU: %s\n", gyro_ok ? "OK" : "FAIL");
+  DRONE_PRINTF("[Drone] IMU: %s\n", gyro_ok ? "OK" : "FAIL");
 
 #if DRONE_ENABLE_HEIGHT
   xSemaphoreTake(g_i2c_mutex, portMAX_DELAY);
   bool height_ok = g_height.init();
   xSemaphoreGive(g_i2c_mutex);
-  Serial.printf("[Drone] Height: %s\n", height_ok ? "OK" : "FAIL");
+  DRONE_PRINTF("[Drone] Height: %s\n", height_ok ? "OK" : "FAIL");
 #endif
 
   g_ir.init();
-  Serial.println("[Drone] IR: OK");
+  DRONE_PRINTLN("[Drone] IR: OK");
 
   g_flight.init();
-  Serial.println("[Drone] Flight controller: OK");
+  DRONE_PRINTLN("[Drone] Flight controller: OK");
 
   g_ekf.init();
-  Serial.println("[Drone] EKF: OK");
+  DRONE_PRINTLN("[Drone] EKF: OK");
 
 #if DRONE_ENABLE_UWB
   SPI.begin();
   bool uwb_ok = g_uwb.init();
-  Serial.printf("[Drone] UWB: %s\n", uwb_ok ? "OK" : "FAIL");
+  DRONE_PRINTF("[Drone] UWB: %s\n", uwb_ok ? "OK" : "FAIL");
   if (uwb_ok) {
     uint8_t anchor_ids[] = {10, 11, 12};
     g_uwb.setTargetAnchors(anchor_ids, 3);
@@ -324,37 +242,71 @@ void setup() {
   // Check sensor readiness
   g_state.setAllSensorsReady(g_safety.checkSensorsReady());
 
-  // ── Create FreeRTOS tasks ──
-  // Flight-critical tasks use xTaskCreatePinnedToCore for core affinity
-  // and vTaskDelayUntil for precise timing.
-  xTaskCreatePinnedToCore(flightControlTask, "flight", Config::FLIGHT_TASK_STACK,
-                          nullptr, Config::FLIGHT_TASK_PRIORITY, nullptr, 1);
-
+  // ── Start RTOSSubsystem tasks ──
+  // Flight-critical: beginThreadedPinned with precise timing (vTaskDelayUntil)
+  //                          stack  pri  rate(ms) core
+  g_gyro.beginThreadedPinned(  2048,  5,   4,       1);   // 250Hz, core 1
+  g_flight.beginThreadedPinned(2048,  4,   4,       1);   // 250Hz, core 1
 #if DRONE_ENABLE_HEIGHT
-  xTaskCreatePinnedToCore(heightSensorTask, "height", Config::HEIGHT_TASK_STACK,
-                          nullptr, Config::HEIGHT_TASK_PRIORITY, nullptr, 1);
+  g_height.beginThreadedPinned(1536,  3,   20,      1);   // 50Hz,  core 1
 #endif
-
 #if DRONE_ENABLE_UWB
-  xTaskCreatePinnedToCore(uwbTask, "uwb", Config::UWB_TASK_STACK, nullptr,
-                          Config::UWB_TASK_PRIORITY, nullptr, 0);
+  g_drone_uwb.beginThreadedPinned(2048, 3, 50,      0);   // 20Hz,  core 0
 #endif
 
-  // Non-flight subsystems use beginThreaded() (same pattern as robot).
-  //                            stack  pri  rate(ms)
-  g_mr.beginThreaded(          4096,   4,   100);   // micro-ROS agent (10Hz)
+  // Non-flight subsystems: standard beginThreaded (vTaskDelay)
   g_state.beginThreaded(       2048,   2,   100);   // state machine (10Hz)
-  g_safety.beginThreaded(      1024,   3,   100);   // safety monitor (10Hz)
-  g_hb.beginThreaded(          2048,   1,   1000);  // heartbeat (1Hz)
+  g_safety.beginThreaded(      2048,   3,   100);   // safety monitor (10Hz)
+  g_hb.begin();
 
-  Serial.printf("[Drone] Free heap: %u bytes\n", ESP.getFreeHeap());
-  Serial.println("[Drone] All tasks started. Ready!");
+  DRONE_PRINTF("[Drone] Free heap: %u bytes\n", ESP.getFreeHeap());
+  DRONE_PRINTLN("[Drone] All tasks started. Ready!");
 }
+
+// Periodic serial status dashboard (gated by DRONE_SERIAL_DEBUG)
+#ifdef DRONE_SERIAL_DEBUG
+static uint32_t s_last_status_ms = 0;
+static void printStatus() {
+  uint32_t now = millis();
+  if (now - s_last_status_ms < 2000) return;
+  s_last_status_ms = now;
+
+  IMUData imu = g_gyro.getData();
+
+  DRONE_PRINTF("\n[%u] ═══ Drone Status ═══\n", now);
+  DRONE_PRINTF("  WiFi: %s  uROS: %s\n",
+                g_wifi.isConnected() ? "OK" : "DOWN",
+                g_mr.isConnected() ? "CONN" : "WAIT");
+  DRONE_PRINTF("  IMU:    init=%c  roll=%.1f pitch=%.1f yaw=%.1f\n",
+                g_gyro.isInitialized() ? 'Y' : 'N',
+                imu.roll, imu.pitch, imu.yaw);
+#if DRONE_ENABLE_HEIGHT
+  DRONE_PRINTF("  Height: init=%c  alt=%.3fm  valid=%c\n",
+                g_height.isInitialized() ? 'Y' : 'N',
+                g_height.getAltitudeM(),
+                g_height.isValid() ? 'Y' : 'N');
+#else
+  DRONE_PRINTLN("  Height: disabled");
+#endif
+  DRONE_PRINTF("  Flight: armed=%c\n",
+                g_flight.isArmed() ? 'Y' : 'N');
+  DRONE_PRINTF("  Motors: FL=%.2f FR=%.2f RR=%.2f RL=%.2f\n",
+                g_flight.getMotor(0), g_flight.getMotor(1),
+                g_flight.getMotor(2), g_flight.getMotor(3));
+  DRONE_PRINTF("  Heap: %u / min: %u\n",
+                ESP.getFreeHeap(), ESP.getMinFreeHeap());
+}
+#endif
 
 // loop() is minimal — all subsystems run in FreeRTOS tasks.
 // Only WiFi + OTA remain here (ESP32 Arduino WiFi stack requirement).
 void loop() {
   g_wifi.update();
   ArduinoOTA.handle();
-  vTaskDelay(pdMS_TO_TICKS(10));
+  g_mr.update();
+  g_hb.update();
+#ifdef DRONE_SERIAL_DEBUG
+  printStatus();
+#endif
+  delay(1);
 }

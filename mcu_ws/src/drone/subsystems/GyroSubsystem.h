@@ -1,11 +1,19 @@
 #pragma once
-// GyroSubsystem: BNO085 IMU wrapper for the drone
-// Uses onboard sensor fusion (no Madgwick needed!), outputs Euler angles + gyro
-// rates + linear acceleration
+/**
+ * @file GyroSubsystem.h
+ * @brief BNO085 IMU wrapper for the drone, as an RTOSSubsystem.
+ *
+ * Uses onboard sensor fusion (no Madgwick needed!), outputs Euler angles +
+ * gyro rates + linear acceleration.  Runs as a FreeRTOS task via
+ * beginThreadedPinned() for precise timing at 250Hz on core 1.
+ */
 
 #include <Adafruit_BNO08x.h>
 #include <Arduino.h>
+#include <RTOSSubsystem.h>
 #include <Wire.h>
+
+#include "../DroneDebug.h"
 
 namespace Drone {
 
@@ -30,20 +38,29 @@ struct GyroConfig {
   uint32_t rotation_report_us = 5000;  // 5ms = 200Hz quaternion
   uint32_t gyro_report_us = 2500;      // 2.5ms = 400Hz gyro
   uint32_t accel_report_us = 5000;     // 5ms = 200Hz linear accel
+  SemaphoreHandle_t* i2c_mutex = nullptr;  // shared I2C bus mutex
 };
 
-class GyroSubsystem {
+class GyroSubsystem : public Subsystem::RTOSSubsystem {
  public:
-  explicit GyroSubsystem(const GyroConfig& cfg = GyroConfig{}) : cfg_(cfg) {}
+  explicit GyroSubsystem(const GyroConfig& cfg = GyroConfig{})
+      : RTOSSubsystem(setup_), cfg_(cfg) {}
 
-  bool init();
-  void update();
+  // RTOSSubsystem lifecycle
+  bool init() override;
+  void begin() override {}
+  void update() override;
+  void pause() override {}
+  void reset() override {}
+  const char* getInfo() override { return "gyro"; }
 
-  // Get latest IMU data (thread-safe copy via mutex)
+  bool enableReports();
+
+  // Get latest IMU data (thread-safe copy via data mutex)
   IMUData getData() const {
-    if (mutex_) xSemaphoreTake(mutex_, portMAX_DELAY);
+    if (data_mutex_) xSemaphoreTake(data_mutex_, portMAX_DELAY);
     IMUData copy = data_;
-    if (mutex_) xSemaphoreGive(mutex_);
+    if (data_mutex_) xSemaphoreGive(data_mutex_);
     return copy;
   }
 
@@ -73,11 +90,13 @@ class GyroSubsystem {
   bool isInitialized() const { return initialized_; }
 
  private:
+  Classes::BaseSetup setup_{"gyro"};
   GyroConfig cfg_;
   Adafruit_BNO08x bno_;
   IMUData data_;
   bool initialized_ = false;
-  SemaphoreHandle_t mutex_ = nullptr;
+  uint32_t reset_count_ = 0;
+  mutable SemaphoreHandle_t data_mutex_ = nullptr;
 };
 
 }  // namespace Drone

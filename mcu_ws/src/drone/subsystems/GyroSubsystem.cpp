@@ -3,47 +3,81 @@
 namespace Drone {
 
 bool GyroSubsystem::init() {
-  mutex_ = xSemaphoreCreateMutex();
+  data_mutex_ = xSemaphoreCreateMutex();
 
-  // Hardware reset if pin configured
+  // Hardware reset: active-LOW on BNO085 (same sequence as robot BNO085Driver)
   if (cfg_.reset_pin >= 0) {
     pinMode(cfg_.reset_pin, OUTPUT);
+    digitalWrite(cfg_.reset_pin, HIGH);
+    delay(10);
     digitalWrite(cfg_.reset_pin, LOW);
     delay(10);
     digitalWrite(cfg_.reset_pin, HIGH);
-    delay(100);
+    delay(300);  // BNO085 needs ~300ms to boot after reset
   }
 
   if (!bno_.begin_I2C(cfg_.i2c_addr, cfg_.wire)) {
+    DRONE_PRINTLN("[Gyro] begin_I2C FAIL");
     initialized_ = false;
     return false;
   }
 
-  // Enable stabilized rotation vector for attitude (Euler angles)
+  // Robot-proven approach: 3000ms delay after begin_I2C for reliable init
+  delay(3000);
+
+  // Consume the initial wasReset flag from the boot sequence
+  (void)bno_.wasReset();
+  delay(100);
+
+  if (!enableReports()) {
+    DRONE_PRINTLN("[Gyro] enableReports FAIL");
+    initialized_ = false;
+    return false;
+  }
+
+  // Wait for the first sensor events to become available
+  delay(100);
+
+  initialized_ = true;
+  return true;
+}
+
+bool GyroSubsystem::enableReports() {
   if (!bno_.enableReport(SH2_ARVR_STABILIZED_RV, cfg_.rotation_report_us)) {
     return false;
   }
-
-  // Enable calibrated gyroscope for rate PID inner loop
   if (!bno_.enableReport(SH2_GYROSCOPE_CALIBRATED, cfg_.gyro_report_us)) {
     return false;
   }
-
-  // Enable linear acceleration (gravity-free) for EKF
   if (!bno_.enableReport(SH2_LINEAR_ACCELERATION, cfg_.accel_report_us)) {
     return false;
   }
-
-  initialized_ = true;
   return true;
 }
 
 void GyroSubsystem::update() {
   if (!initialized_) return;
 
+  // Acquire I2C mutex if available (shared bus with height sensor)
+  if (cfg_.i2c_mutex) xSemaphoreTake(*cfg_.i2c_mutex, portMAX_DELAY);
+
+  // BNO085 can spontaneously reset — re-enable reports when it does.
+  if (bno_.wasReset()) {
+    ++reset_count_;
+    DRONE_PRINTF("[Gyro] Reset detected (#%lu) — waiting 300ms\n",
+                 reset_count_);
+    delay(300);
+    if (!enableReports()) {
+      DRONE_PRINTLN("[Gyro] WARNING: enableReports failed after reset");
+    } else {
+      DRONE_PRINTLN("[Gyro] Re-enabled reports after reset");
+    }
+  }
+
+  // Drain all available sensor events from the SHTP queue.
   sh2_SensorValue_t val;
   while (bno_.getSensorEvent(&val)) {
-    if (mutex_) xSemaphoreTake(mutex_, portMAX_DELAY);
+    xSemaphoreTake(data_mutex_, portMAX_DELAY);
     switch (val.sensorId) {
       case SH2_ARVR_STABILIZED_RV: {
         float qr = val.un.arvrStabilizedRV.real;
@@ -54,8 +88,8 @@ void GyroSubsystem::update() {
         data_.roll = atan2f(2.0f * (qr * qi + qj * qk),
                             1.0f - 2.0f * (qi * qi + qj * qj)) *
                      57.29577951f;
-        data_.pitch = asinf(constrain(2.0f * (qr * qj - qk * qi), -0.999999f,
-                                      0.999999f)) *
+        data_.pitch = asinf(fmaxf(-1.0f, fminf(1.0f,
+                     2.0f * (qr * qj - qk * qi)))) *
                       57.29577951f;
         data_.yaw = atan2f(2.0f * (qr * qk + qi * qj),
                            1.0f - 2.0f * (qj * qj + qk * qk)) *
@@ -75,8 +109,10 @@ void GyroSubsystem::update() {
         break;
       }
     }
-    if (mutex_) xSemaphoreGive(mutex_);
+    xSemaphoreGive(data_mutex_);
   }
+
+  if (cfg_.i2c_mutex) xSemaphoreGive(*cfg_.i2c_mutex);
 }
 
 }  // namespace Drone

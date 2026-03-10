@@ -1,16 +1,20 @@
 #pragma once
 /**
  * @file DroneFlightSubsystem.h
- * @brief Cascaded PID flight controller using lib PIDController.
+ * @brief Cascaded PID flight controller as an RTOSSubsystem.
  *
  * Architecture:
  *   Outer loop: desired angle → PID → desired angular rate
  *   Inner loop: desired rate → PID → motor correction
  *   Altitude:   desired alt → PID → throttle correction (+ hover baseline)
  *   Mixer:      X-quad FL/FR/BR/BL with roll/pitch/yaw corrections
+ *
+ * Runs at 250Hz via beginThreadedPinned(). Reads cached IMU data from
+ * GyroSubsystem and altitude from HeightSubsystem (thread-safe accessors).
  */
 
 #include <Arduino.h>
+#include <RTOSSubsystem.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <pid_controller.h>
@@ -18,6 +22,12 @@
 
 #include "../DroneConfig.h"
 #include "GyroSubsystem.h"
+
+#if DRONE_ENABLE_HEIGHT
+#include "HeightSubsystem.h"
+#endif
+
+#include "DroneEKFSubsystem.h"
 
 namespace Drone {
 
@@ -38,12 +48,35 @@ struct FlightMotorPins {
   uint8_t bl;
 };
 
-class DroneFlightSubsystem {
+class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
  public:
-  explicit DroneFlightSubsystem(const FlightMotorPins& pins) : pins_(pins) {}
+  DroneFlightSubsystem(const FlightMotorPins& pins,
+                       GyroSubsystem& gyro,
+                       DroneEKFSubsystem& ekf
+#if DRONE_ENABLE_HEIGHT
+                       ,
+                       HeightSubsystem& height
+#endif
+                       )
+      : RTOSSubsystem(setup_),
+        pins_(pins),
+        gyro_(gyro),
+        ekf_(ekf)
+#if DRONE_ENABLE_HEIGHT
+        ,
+        height_(height)
+#endif
+  {
+  }
 
-  void init();
-  void update(const IMUData& imu, float altitude_m, float dt);
+  // RTOSSubsystem lifecycle
+  bool init() override;
+  void begin() override {}
+  void update() override;
+  void pause() override {}
+  void reset() override {}
+  const char* getInfo() override { return "flight"; }
+
   void arm();
   void disarm();
   bool isArmed() const { return armed_; }
@@ -69,17 +102,28 @@ class DroneFlightSubsystem {
   float getMotor(uint8_t idx) const { return (idx < 4) ? motors_[idx] : 0.0f; }
 
  private:
+  void compute(const IMUData& imu, float altitude_m, float dt);
   void controlAngle(const IMUData& imu, const FlightSetpoint& sp, float dt);
   void controlAltitude(const FlightSetpoint& sp, float altitude_m, float dt);
   void controlMixer();
   void writeMotors();
   void resetPIDs();
 
+  Classes::BaseSetup setup_{"flight"};
   FlightMotorPins pins_;
+  GyroSubsystem& gyro_;
+  DroneEKFSubsystem& ekf_;
+#if DRONE_ENABLE_HEIGHT
+  HeightSubsystem& height_;
+#endif
+
   FlightSetpoint sp_;
   SemaphoreHandle_t sp_mutex_ = nullptr;
   bool armed_ = false;
   bool override_active_ = false;
+
+  // dt tracking
+  uint32_t last_us_ = 0;
 
   // Cascaded PID controllers
   PIDController roll_angle_pid_;

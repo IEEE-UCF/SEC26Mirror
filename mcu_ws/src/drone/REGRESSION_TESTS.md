@@ -21,7 +21,7 @@ The drone runs on a Seeed XIAO ESP32-S3 with FreeRTOS multi-tasking and WiFi mic
 | DEBUG_STAGE | N/A (full system) | Configurable 1-7 (default 7) |
 | UWB | Build flag (default 0) | Always enabled (flag=1) |
 | Height | Build flag (default 0) | Always enabled (flag=1) |
-| Serial debug | Basic heap/status | Rich per-subsystem status every 2s |
+| Serial debug | OFF (`DRONE_SERIAL_DEBUG` not defined) | ON (`-DDRONE_SERIAL_DEBUG` in build flags) |
 | OTA hostname | `sec26-drone` | `sec26-drone-test` |
 
 ## Prerequisites
@@ -58,18 +58,38 @@ pio device monitor -e esp32-test-all-drone-subsystems
 | Topic | Expected Hz | Acceptable Range | Source |
 |-------|------------|-----------------|--------|
 | `/mcu_drone/heartbeat` | 1 | 0.9 - 1.1 | HeartbeatSubsystem (main loop) |
-| `/mcu_drone/state` | 10 | 8 - 12 | DroneStateSubsystem (main loop) |
-| `/mcu_drone/uwb/ranging` | 20 | 15 - 25 | UWB FreeRTOS task |
+| `/mcu_drone/state` | 10 | 8 - 12 | DroneStateSubsystem (RTOSSubsystem, 10Hz) |
+| `/mcu_drone/uwb/ranging` | 20 | 15 - 25 | DroneUWBSubsystem (RTOSSubsystem, 20Hz) |
 
-## FreeRTOS Task Rates
+## RTOSSubsystem Task Rates
 
-| Task | Expected Hz | Core | Priority | Stack |
-|------|------------|------|----------|-------|
-| `flight` (IMU+PID+EKF) | 250 | 1 | 5 | 2048 |
-| `safety` | 10 | 1 | 4 | 1024 |
-| `height` | 50 | 1 | 3 | 1536 |
-| `uwb` | 20 | 0 | 3 | 2048 |
-| Arduino `loop()` | ~100 | any | 1 | - |
+All subsystems now use RTOSSubsystem (`beginThreaded` / `beginThreadedPinned`).
+
+| Task (RTOSSubsystem) | Hz | Core | Priority | Timing | Stack |
+|---|---|---|---|---|---|
+| GyroSubsystem | 250 | 1 | 5 | Precise (vTaskDelayUntil) | 2048 |
+| DroneFlightSubsystem | 250 | 1 | 4 | Precise (vTaskDelayUntil) | 2048 |
+| HeightSubsystem | 50 | 1 | 3 | Precise (vTaskDelayUntil) | 1536 |
+| DroneUWBSubsystem | 20 | 0 | 3 | Precise (vTaskDelayUntil) | 2048 |
+| DroneSafetySubsystem | 10 | any | 3 | Standard (vTaskDelay) | 2048 |
+| DroneStateSubsystem | 10 | any | 2 | Standard (vTaskDelay) | 2048 |
+| HeartbeatSubsystem | 1 | loop | - | Loop update | - |
+| Arduino `loop()` | ~100 | any | 1 | - | - |
+
+## RTOSSubsystem Refactor Regression
+
+Additional checks after converting all subsystems to `RTOSSubsystem::beginThreadedPinned()`:
+
+- [ ] IMU init: 3000ms delay completes, BNO085 initializes reliably
+- [ ] All RTOSSubsystem threads create successfully (check `[RTOS] Task created OK` messages)
+- [ ] Flight rate stays at ~250Hz after refactoring
+- [ ] Height rate stays at ~50Hz
+- [ ] No I2C bus contention errors (gyro + height share mutex correctly)
+- [ ] Serial debug OFF: build `drone` env, verify no serial output (clean production)
+- [ ] Serial debug ON: build test env with `-DDRONE_SERIAL_DEBUG`, verify debug output over USB CDC
+- [ ] EKF predict runs at flight rate (250Hz)
+- [ ] UWB EKF update runs at 20Hz
+- [ ] Heap stable after 60+ seconds (check `ESP.getMinFreeHeap()`)
 
 ## Test Procedure
 
@@ -295,9 +315,10 @@ pio run -e esp32-test-all-drone-subsystems --target upload --upload-port 192.168
 - [ ] WiFi stays connected
 - [ ] Heartbeat continues publishing
 - [ ] No watchdog resets
-- [ ] Heap not decreasing (check "Heap" line in debug output)
-- [ ] IMU rate stays stable (~250 Hz)
-- [ ] Flight task rate stays stable (~250 Hz)
+- [ ] Heap not decreasing (check "Heap" and "min" lines in debug output)
+- [ ] No I2C bus contention (no error messages from gyro or height)
+- [ ] EKF predict runs at flight rate
+- [ ] All RTOSSubsystem tasks remain running
 
 ### 13. Staged Debug Bring-up
 
@@ -356,11 +377,16 @@ Boot:
 
 Subsystem Init:
   [ ] IMU: OK / FAIL  (yaw at power-on: _____ deg)
+  [ ] IMU 3000ms delay completed
   [ ] Height: OK / FAIL / DISABLED
   [ ] Flight: OK / FAIL
   [ ] EKF: OK / FAIL
   [ ] IR: OK / FAIL
   [ ] UWB: OK / FAIL / DISABLED
+
+RTOSSubsystem Tasks:
+  [ ] All "[RTOS] Task created OK" messages present
+  [ ] No "[RTOS] FAIL" messages
 
 micro-ROS:
   [ ] Agent connects
@@ -370,9 +396,10 @@ Rates:
   heartbeat:    _____ Hz (expect 1)
   state:        _____ Hz (expect 10)
   uwb/ranging:  _____ Hz (expect 20)
-  flight task:  _____ Hz (expect 250)
-  height task:  _____ Hz (expect 50)
-  IMU updates:  _____ Hz (expect 200+)
+
+Serial Debug:
+  [ ] Production build (drone env): no serial output
+  [ ] Test build: debug dashboard prints every 2s
 
 IMU Orientation:
   [ ] Flat: roll~0, pitch~0

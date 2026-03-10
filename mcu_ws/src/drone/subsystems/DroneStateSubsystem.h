@@ -23,7 +23,10 @@
 #include "DroneEKFSubsystem.h"
 #include "DroneFlightSubsystem.h"
 #include "GyroSubsystem.h"
+
+#if DRONE_ENABLE_HEIGHT
 #include "HeightSubsystem.h"
+#endif
 
 namespace Drone {
 

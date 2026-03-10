@@ -3,6 +3,8 @@
 namespace Drone {
 
 bool HeightSubsystem::init() {
+  data_mutex_ = xSemaphoreCreateMutex();
+
   if (cfg_.xshut_pin != 255) {
     pinMode(cfg_.xshut_pin, OUTPUT);
     digitalWrite(cfg_.xshut_pin, HIGH);
@@ -26,11 +28,19 @@ bool HeightSubsystem::init() {
 void HeightSubsystem::update() {
   if (!initialized_) return;
 
+  // Acquire I2C mutex if available (shared bus with gyro)
+  if (cfg_.i2c_mutex) xSemaphoreTake(*cfg_.i2c_mutex, portMAX_DELAY);
+
   uint16_t distance_mm = sensor_.readRangeContinuousMillimeters();
-  if (sensor_.timeoutOccurred()) return;
+  bool timed_out = sensor_.timeoutOccurred();
+
+  if (cfg_.i2c_mutex) xSemaphoreGive(*cfg_.i2c_mutex);
+
+  if (timed_out) return;
 
   float raw_m = distance_mm / 1000.0f;
 
+  xSemaphoreTake(data_mutex_, portMAX_DELAY);
   if (raw_m >= cfg_.min_valid_m && raw_m <= cfg_.max_valid_m) {
     altitude_m_ = raw_m;
     valid_ = true;
@@ -38,6 +48,7 @@ void HeightSubsystem::update() {
   } else {
     valid_ = false;
   }
+  xSemaphoreGive(data_mutex_);
 }
 
 }  // namespace Drone

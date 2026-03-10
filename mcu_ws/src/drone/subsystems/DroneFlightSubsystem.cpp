@@ -6,7 +6,7 @@ using secbot::utils::clamp;
 
 namespace Drone {
 
-void DroneFlightSubsystem::init() {
+bool DroneFlightSubsystem::init() {
   sp_mutex_ = xSemaphoreCreateMutex();
 
   // Configure motor PWM (ESP32 LEDC old API)
@@ -32,6 +32,7 @@ void DroneFlightSubsystem::init() {
   alt_vel_filter_.setAlpha(0.6f);
 
   disarm();
+  return true;
 }
 
 void DroneFlightSubsystem::arm() {
@@ -65,8 +66,39 @@ void DroneFlightSubsystem::resetPIDs() {
   throttle_ = 0.0f;
 }
 
-void DroneFlightSubsystem::update(const IMUData& imu, float altitude_m,
-                                  float dt) {
+void DroneFlightSubsystem::update() {
+  // Skip all work if IMU not initialized — no point running PID
+  if (!gyro_.isInitialized()) {
+    vTaskDelay(pdMS_TO_TICKS(100));
+    return;
+  }
+
+  // Compute dt
+  uint32_t now_us = micros();
+  float dt = (last_us_ > 0) ? (now_us - last_us_) * 1e-6f : 0.0f;
+  last_us_ = now_us;
+
+  // Read cached IMU data (thread-safe)
+  IMUData imu = gyro_.getData();
+
+  // EKF predict (world-frame accel via full body→world rotation)
+  float ax_w, ay_w;
+  gyro_.getAccelWorld(ax_w, ay_w);
+  ekf_.predict(ax_w, ay_w, dt);
+
+  // Read altitude
+#if DRONE_ENABLE_HEIGHT
+  float alt = height_.getAltitudeM();
+#else
+  float alt = 0.0f;
+#endif
+
+  // Run PID + motor mixer
+  compute(imu, alt, dt);
+}
+
+void DroneFlightSubsystem::compute(const IMUData& imu, float altitude_m,
+                                   float dt) {
   if (!armed_ || dt <= 0.0f || dt > 0.1f) {
     motors_[0] = motors_[1] = motors_[2] = motors_[3] = 0.0f;
     writeMotors();
@@ -175,7 +207,6 @@ void DroneFlightSubsystem::controlMixer() {
   //         [DRONE]
   //        /      \
   //   BL (CW)    BR (CCW)
-  // wow thanks internet for cool diagram
   motors_[0] =
       throttle_ + roll_correction_ - pitch_correction_ + yaw_correction_;  // FL
   motors_[1] =

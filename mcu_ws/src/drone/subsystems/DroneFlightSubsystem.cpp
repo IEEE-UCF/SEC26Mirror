@@ -202,11 +202,11 @@ void DroneFlightSubsystem::controlAltitude(const FlightSetpoint& sp,
 
 void DroneFlightSubsystem::controlMixer() {
   // X-quad motor mixing
-  //   FL (CCW)    FR (CW)
-  //        \      /
-  //         [DRONE]
-  //        /      \
-  //   BL (CW)    BR (CCW)
+  //   FL (CCW, M3, D2)    FR (CW, M1, D0)
+  //             \          /
+  //              [DRONE]
+  //             /          \
+  //   BL (CW, M4, D3)    BR (CCW, M2, D1)
   motors_[0] =
       throttle_ + roll_correction_ - pitch_correction_ + yaw_correction_;  // FL
   motors_[1] =

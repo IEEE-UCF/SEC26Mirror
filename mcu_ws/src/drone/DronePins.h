@@ -8,10 +8,11 @@ namespace Drone {
 namespace Pins {
 
 // Motor PWM outputs (ESP32-S3 LEDC)
-constexpr uint8_t MOTOR_FL = D0;  // Front-Left (CCW)
-constexpr uint8_t MOTOR_FR = D1;  // Front-Right (CW)
-constexpr uint8_t MOTOR_BR = D2;  // Back-Right (CCW)
-constexpr uint8_t MOTOR_BL = D3;  // Back-Left (CW)
+// Motor 1-4 → D0-D3 in order
+constexpr uint8_t MOTOR_FR = D0;  // Motor 1: Front-Right (CW)
+constexpr uint8_t MOTOR_BR = D1;  // Motor 2: Back-Right (CCW)
+constexpr uint8_t MOTOR_FL = D2;  // Motor 3: Front-Left (CCW)
+constexpr uint8_t MOTOR_BL = D3;  // Motor 4: Back-Left (CW)
 
 // I2C bus (BNO085 + VL53L0X share this bus)
 constexpr uint8_t I2C_SDA = D4;

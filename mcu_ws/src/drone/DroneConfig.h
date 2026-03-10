@@ -134,7 +134,7 @@ constexpr uint32_t IMU_ACCEL_REPORT_US = 5000;       // 200 Hz
 // ── Height sensor config ───────────────────────────────────
 constexpr uint16_t HEIGHT_TIMING_BUDGET_MS = 20;
 constexpr float HEIGHT_MAX_VALID_M = 4.0f;
-constexpr float HEIGHT_MIN_VALID_M = 0.01f;
+constexpr float HEIGHT_MIN_VALID_M = 0.03f;  // VL53L0X deadzone ~30mm
 
 }  // namespace Config
 }  // namespace Drone

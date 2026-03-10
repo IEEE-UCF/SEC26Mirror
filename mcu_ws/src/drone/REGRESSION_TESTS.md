@@ -18,11 +18,21 @@ The drone runs on a Seeed XIAO ESP32-S3 with FreeRTOS multi-tasking and WiFi mic
 | Aspect | `drone` | `esp32-test-all-drone-subsystems` |
 |--------|---------|-----------------------------------|
 | Entry point | `src/drone/main.cpp` | `src/test/esp32-test-all-drone-subsystems.cpp` |
-| DEBUG_STAGE | N/A (full system) | Configurable 1-7 (default 7) |
+| DEBUG_STAGE | Configurable 0-2 (default 2) | Configurable 1-7 (default 7) |
 | UWB | Build flag (default 0) | Always enabled (flag=1) |
-| Height | Build flag (default 0) | Always enabled (flag=1) |
-| Serial debug | OFF (`DRONE_SERIAL_DEBUG` not defined) | ON (`-DDRONE_SERIAL_DEBUG` in build flags) |
+| Height | Build flag (default 1) | Always enabled (flag=1) |
+| Serial debug | Configurable (add `-DDRONE_SERIAL_DEBUG`) | ON (`-DDRONE_SERIAL_DEBUG` in build flags) |
 | OTA hostname | `sec26-drone` | `sec26-drone-test` |
+
+### Production Debug Stages (`drone` env)
+
+Set via `-DDRONE_DEBUG_STAGE=N` in platformio.ini:
+
+| Stage | Subsystems Active | Purpose |
+|-------|-------------------|---------|
+| 0 | WiFi + micro-ROS + Heartbeat | Isolate micro-ROS connectivity |
+| 1 | + Gyro/IMU (BNO085) | Isolate I2C bus issues |
+| 2 | Full system (all subsystems) | Normal operation |
 
 ## Prerequisites
 
@@ -322,23 +332,42 @@ pio run -e esp32-test-all-drone-subsystems --target upload --upload-port 192.168
 
 ### 13. Staged Debug Bring-up
 
-If issues are found, rebuild with lower DEBUG_STAGE to isolate:
+If issues are found, set `DRONE_DEBUG_STAGE` in platformio.ini to isolate:
 
 ```bash
-# Stage 1: WiFi + micro-ROS + Heartbeat only
-pio run -e esp32-test-all-drone-subsystems -DDEBUG_STAGE=1 --target upload
+# In platformio.ini [env:drone] build_flags, set:
+#   -DDRONE_DEBUG_STAGE=0   WiFi + micro-ROS + Heartbeat only
+#   -DDRONE_DEBUG_STAGE=1   + Gyro/IMU (I2C)
+#   -DDRONE_DEBUG_STAGE=2   Full system (default)
+#
+# Also add -DDRONE_SERIAL_DEBUG and -DSERIAL_DEBUG for verbose output.
 
-# Stage 2: + IMU
-pio run -e esp32-test-all-drone-subsystems -DDEBUG_STAGE=2 --target upload
-
-# ... etc up to stage 7
+pio run -e drone --target upload
+pio device monitor -p /dev/ttyACM2
 ```
 
 At each stage, verify:
 - [ ] No crash on boot
 - [ ] Heap is stable
+- [ ] micro-ROS connects and stays connected
 - [ ] Previous-stage subsystems still work
 - [ ] New subsystem initializes correctly
+
+### 14. RC Teleop Test
+
+```bash
+# In Docker container:
+source /opt/ros/jazzy/setup.bash && source install/setup.bash
+ros2 run secbot_drone_teleop drone_teleop_node
+```
+
+- [ ] Node starts, prints "Drone teleop ready"
+- [ ] RC data received (requires robot Teensy publishing `/mcu_robot/rc`)
+- [ ] SWA toggle → arm/disarm service called
+- [ ] SWB toggle (while armed) → takeoff/land service called
+- [ ] Sticks produce cmd_vel when flying (right stick = roll/pitch, left stick = alt/yaw)
+- [ ] Deadzone: sticks near center produce zero cmd_vel
+- [ ] cmd_vel stops publishing when RC signal lost (>500ms stale)
 
 ## Common Failures and Causes
 
@@ -351,8 +380,11 @@ At each stage, verify:
 | IMU FAIL | BNO085 not found on I2C (0x4A), bad wiring, no reset pulse | Check wiring, verify I2C with scanner |
 | IMU yaw drifts | BNO085 not calibrated, magnetic interference | Calibrate (figure-8 motion), move away from motors |
 | IMU rate low | I2C mutex contention, bus speed too slow | Check 400kHz, verify no other I2C devices |
+| IMU hangs bus | Unbounded getSensorEvent() loop draining SHTP backlog | Fixed: capped at 10 events per update (GyroSubsystem.cpp) |
 | Height FAIL | VL53L0X not found on I2C (0x29), bad wiring | Check wiring, verify I2C with scanner |
-| Height reads 0 | Surface too close/far, reflective surface | Aim at non-reflective surface 1-200cm away |
+| Height reads 0 | Surface too close/far, reflective surface | Aim at non-reflective surface 3-400cm away (30mm deadzone) |
+| Service init FAIL | `esp32_microros_wifi` missing `board_microros_user_meta` | Fixed: added `custom_microros.meta` to esp32_microros_wifi base. After changing, delete `libs_external/esp32/micro_ros_platformio/libmicroros/` and rebuild |
+| uROS stuck in WAIT | micro-ROS entity limits too low (default MAX_SERVICES) | Ensure `custom_microros.meta` is applied to ESP32 WiFi builds; delete prebuilt lib and rebuild |
 | Motors don't spin | ESC not powered, wrong GPIO pin, PWM config | Check ESC power, verify pin assignments |
 | Motor wrong direction | ESC wiring swapped, motor phase | Swap any 2 motor wires |
 | UWB FAIL | DW3000 not found on SPI, wrong CS pin | Check SPI wiring, verify CS=GPIO21 |
@@ -407,10 +439,10 @@ IMU Orientation:
   [ ] BNO X-axis forward direction: _______________
 
 Motor Test (props removed!):
-  [ ] FL spins (pin D0, CCW)
-  [ ] FR spins (pin D1, CW)
-  [ ] BR spins (pin D2, CCW)
-  [ ] BL spins (pin D3, CW)
+  [ ] FR spins (M1, pin D0, CW)
+  [ ] BR spins (M2, pin D1, CCW)
+  [ ] FL spins (M3, pin D2, CCW)
+  [ ] BL spins (M4, pin D3, CW)
 
 State Machine:
   [ ] INIT → UNARMED

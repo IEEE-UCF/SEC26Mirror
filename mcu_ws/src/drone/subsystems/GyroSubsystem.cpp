@@ -83,10 +83,19 @@ void GyroSubsystem::update() {
     xSemaphoreTake(data_mutex_, portMAX_DELAY);
     switch (val.sensorId) {
       case SH2_ARVR_STABILIZED_RV: {
-        float qr = val.un.arvrStabilizedRV.real;
-        float qi = val.un.arvrStabilizedRV.i;
-        float qj = val.un.arvrStabilizedRV.j;
-        float qk = val.un.arvrStabilizedRV.k;
+        // BNO085 mounting: +X=backward, +Y=right, +Z=up (dot forward)
+        // Drone body frame (FRD): +X=forward, +Y=right, +Z=down
+        // Transform: 180° rotation about Y axis
+        // q_drone = q_bno * q_correction, q_correction = (0, 0, -1, 0)
+        float qr_s = val.un.arvrStabilizedRV.real;
+        float qi_s = val.un.arvrStabilizedRV.i;
+        float qj_s = val.un.arvrStabilizedRV.j;
+        float qk_s = val.un.arvrStabilizedRV.k;
+
+        float qr =  qj_s;
+        float qi =  qk_s;
+        float qj = -qr_s;
+        float qk = -qi_s;
 
         data_.roll = atan2f(2.0f * (qr * qi + qj * qk),
                             1.0f - 2.0f * (qi * qi + qj * qj)) *
@@ -100,15 +109,17 @@ void GyroSubsystem::update() {
         break;
       }
       case SH2_GYROSCOPE_CALIBRATED: {
-        data_.gyro_x = val.un.gyroscope.x * 57.29577951f;
-        data_.gyro_y = val.un.gyroscope.y * 57.29577951f;
-        data_.gyro_z = val.un.gyroscope.z * 57.29577951f;
+        // Remap BNO085 gyro to drone FRD frame (negate X and Z)
+        data_.gyro_x = -val.un.gyroscope.x * 57.29577951f;
+        data_.gyro_y =  val.un.gyroscope.y * 57.29577951f;
+        data_.gyro_z = -val.un.gyroscope.z * 57.29577951f;
         break;
       }
       case SH2_LINEAR_ACCELERATION: {
-        data_.accel_x = val.un.linearAcceleration.x;
-        data_.accel_y = val.un.linearAcceleration.y;
-        data_.accel_z = val.un.linearAcceleration.z;
+        // Remap BNO085 accel to drone FRD frame (negate X and Z)
+        data_.accel_x = -val.un.linearAcceleration.x;
+        data_.accel_y =  val.un.linearAcceleration.y;
+        data_.accel_z = -val.un.linearAcceleration.z;
         break;
       }
     }

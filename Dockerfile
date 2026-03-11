@@ -138,6 +138,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-vision-msgs \
     ros-$ROS_DISTRO-cv-bridge \
     ros-$ROS_DISTRO-image-tools \
+    ros-$ROS_DISTRO-rqt-image-view \
+    ros-$ROS_DISTRO-web-video-server \
     python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 

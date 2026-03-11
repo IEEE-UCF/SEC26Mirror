@@ -1,0 +1,11 @@
+[Unit]
+Description=rpicam-vid MJPEG TCP stream for Docker container
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/rpicam-vid -t 0 --width 640 --height 480 --framerate 30 --codec mjpeg --inline -l -o tcp://0.0.0.0:8554
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

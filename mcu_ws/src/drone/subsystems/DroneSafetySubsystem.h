@@ -68,8 +68,12 @@ class DroneSafetySubsystem : public Subsystem::RTOSSubsystem {
     }
 
 #if DRONE_ENABLE_HEIGHT
-    // Height sensor timeout
-    if (now - height_.lastValidMs() > Config::HEIGHT_TIMEOUT_MS &&
+    // Height sensor timeout — only enforce after launch is complete.
+    // During LAUNCHING the drone is ramping up near the ground and
+    // the VL53L0X may not have valid readings yet (out of range,
+    // blocked, or stale from before arm).
+    if (state_.getState() != DroneState::LAUNCHING &&
+        now - height_.lastValidMs() > Config::HEIGHT_TIMEOUT_MS &&
         height_.lastValidMs() > 0) {
       state_.triggerEmergencyLand();
       return;

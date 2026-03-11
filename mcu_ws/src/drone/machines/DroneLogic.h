@@ -20,6 +20,8 @@
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 #include <ESP32WifiSubsystem.h>
 #include <SPI.h>
 #include <WiFi.h>
@@ -161,14 +163,41 @@ static Drone::DroneSafetySubsystem g_safety(
 static Drone::DroneIRSubsystem g_drone_ir(g_ir, g_state);
 #endif  // DRONE_DEBUG_STAGE >= 2
 
+// Forward declarations
+#if DRONE_DEBUG_STAGE >= 2
+static const char* stateToStr(Drone::DroneState s);
+#endif
+#ifdef DRONE_SERIAL_DEBUG
+static void debugDashboardTask(void*);
+#endif
+
 // ════════════════════════════════════════════════════════════
 //  Arduino setup() / loop()
 // ════════════════════════════════════════════════════════════
 
 void setup() {
-#ifdef DRONE_SERIAL_DEBUG
+  // Disable brownout detector — WiFi + motor current causes transient voltage
+  // dips that trigger the default threshold, but the hardware handles it fine
+  // (bare motor test runs 4 motors at 100% without issues).
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
+  // Always print reset reason (even without DRONE_SERIAL_DEBUG) so we can
+  // diagnose unexpected restarts via USB serial monitor.
   Serial.begin(921600);
-  delay(2000);
+  delay(500);
+  if (Serial) {
+    esp_reset_reason_t reason = esp_reset_reason();
+    const char* reasons[] = {"UNKNOWN","POWERON","EXT","SW","PANIC",
+                             "INT_WDT","TASK_WDT","WDT","DEEPSLEEP",
+                             "BROWNOUT","SDIO"};
+    int r = (int)reason;
+    Serial.printf("[Drone] Reset reason: %s (%d)\n",
+                  (r >= 0 && r <= 10) ? reasons[r] : "?", r);
+  }
+
+#ifdef DRONE_SERIAL_DEBUG
+  // Already called Serial.begin above, just wait for terminal
+  delay(1500);
 #endif
   DRONE_PRINTF("[Drone] Starting... (DEBUG_STAGE=%d)\n", DRONE_DEBUG_STAGE);
 
@@ -270,7 +299,7 @@ void setup() {
 #endif
 
 #if DRONE_DEBUG_STAGE >= 2
-  g_flight.beginThreadedPinned(2048, 4, 4, 1);
+  g_flight.beginThreadedPinned(4096, 4, 4, 1);
 #if DRONE_ENABLE_HEIGHT
   g_height.beginThreadedPinned(Drone::Config::HEIGHT_TASK_STACK, 3, 20, 1);
 #endif
@@ -281,7 +310,7 @@ void setup() {
   g_safety.beginThreaded(2048, 3, 100);
 #endif  // DRONE_DEBUG_STAGE >= 2
 
-  g_mr.beginThreaded(8192, 4, 10);
+  g_mr.beginThreaded(8192, 2, 10);  // Lower than flight (4) and safety (3)
   g_hb.beginThreaded(2048, 1, 1000);
 
   // WiFi + OTA task
@@ -289,42 +318,13 @@ void setup() {
     while (true) {
       g_wifi.update();
       ArduinoOTA.handle();
-#ifdef DRONE_SERIAL_DEBUG
-      static uint32_t s_last_status_ms = 0;
-      uint32_t now = millis();
-      if (now - s_last_status_ms >= 2000) {
-        s_last_status_ms = now;
-        DRONE_PRINTF("\n[%u] ═══ Drone Status (Stage %d) ═══\n",
-                      now, DRONE_DEBUG_STAGE);
-        DRONE_PRINTF("  WiFi: %s  uROS: %s\n",
-                      g_wifi.isConnected() ? "OK" : "DOWN",
-                      g_mr.isConnected() ? "CONN" : "WAIT");
-#if DRONE_DEBUG_STAGE >= 1
-        Drone::IMUData imu = g_gyro.getData();
-        DRONE_PRINTF("  IMU:    init=%c  roll=%.1f pitch=%.1f yaw=%.1f\n",
-                      g_gyro.isInitialized() ? 'Y' : 'N',
-                      imu.roll, imu.pitch, imu.yaw);
-#endif
-#if DRONE_ENABLE_HEIGHT && DRONE_DEBUG_STAGE >= 2
-        DRONE_PRINTF("  Height: init=%c  alt=%.3fm  valid=%c\n",
-                      g_height.isInitialized() ? 'Y' : 'N',
-                      g_height.getAltitudeM(),
-                      g_height.isValid() ? 'Y' : 'N');
-#endif
-#if DRONE_DEBUG_STAGE >= 2
-        DRONE_PRINTF("  Flight: armed=%c\n",
-                      g_flight.isArmed() ? 'Y' : 'N');
-        DRONE_PRINTF("  Motors: FL=%.2f FR=%.2f RR=%.2f RL=%.2f\n",
-                      g_flight.getMotor(0), g_flight.getMotor(1),
-                      g_flight.getMotor(2), g_flight.getMotor(3));
-#endif
-        DRONE_PRINTF("  Heap: %u / min: %u\n",
-                      ESP.getFreeHeap(), ESP.getMinFreeHeap());
-      }
-#endif
       vTaskDelay(pdMS_TO_TICKS(100));
     }
   }, "wifi_ota", 4096, nullptr, 1, nullptr);
+
+#ifdef DRONE_SERIAL_DEBUG
+  xTaskCreate(debugDashboardTask, "debug_dash", 4096, nullptr, 1, nullptr);
+#endif
 
   DRONE_PRINTF("[Drone] Free heap: %u bytes\n", ESP.getFreeHeap());
   DRONE_PRINTF("[Drone] All tasks started (Stage %d). Ready!\n",
@@ -335,3 +335,123 @@ void setup() {
 void loop() {
   vTaskDelay(pdMS_TO_TICKS(1000));
 }
+
+#if DRONE_DEBUG_STAGE >= 2
+static const char* stateToStr(Drone::DroneState s) {
+  switch (s) {
+    case Drone::DroneState::INIT:             return "INIT";
+    case Drone::DroneState::UNARMED:          return "UNARMED";
+    case Drone::DroneState::ARMED:            return "ARMED";
+    case Drone::DroneState::LAUNCHING:        return "LAUNCHING";
+    case Drone::DroneState::VELOCITY_CONTROL: return "VELOCITY_CONTROL";
+    case Drone::DroneState::LANDING:          return "LANDING";
+    case Drone::DroneState::EMERGENCY_LAND:   return "EMERGENCY_LAND";
+    default:                                  return "UNKNOWN";
+  }
+}
+#endif
+
+#ifdef DRONE_SERIAL_DEBUG
+static void debugDashboardTask(void*) {
+  while (true) {
+    uint32_t now = millis();
+
+    DRONE_PRINTF("\n[%lu] ═══ Drone Status (Stage %d) ═══\n", now,
+                  DRONE_DEBUG_STAGE);
+    DRONE_PRINTF("  State:     %s\n", stateToStr(g_state.getState()));
+    DRONE_PRINTF("  uROS:      %s\n",
+                  g_mr.isConnected() ? "CONNECTED" : "WAITING");
+    DRONE_PRINTF("  WiFi:      %s (%s)\n",
+                  g_wifi.isConnected() ? "OK" : "DISCONNECTED",
+                  WiFi.localIP().toString().c_str());
+
+#if DRONE_DEBUG_STAGE >= 1
+    {
+      Drone::IMUData imu = g_gyro.getData();
+      DRONE_PRINTLN("  ── IMU (BNO085) ──");
+      DRONE_PRINTF("  Initialized: %s\n",
+                    g_gyro.isInitialized() ? "YES" : "NO");
+      DRONE_PRINTF("  Euler:     roll=%.1f  pitch=%.1f  yaw=%.1f deg\n",
+                    imu.roll, imu.pitch, imu.yaw);
+      DRONE_PRINTF("  Gyro:      gx=%.1f  gy=%.1f  gz=%.1f deg/s\n",
+                    imu.gyro_x, imu.gyro_y, imu.gyro_z);
+      DRONE_PRINTF("  Accel:     ax=%.2f  ay=%.2f  az=%.2f m/s2\n",
+                    imu.accel_x, imu.accel_y, imu.accel_z);
+
+      float yaw_norm = imu.yaw;
+      const char* dir = "?";
+      if (yaw_norm >= -22.5f && yaw_norm < 22.5f) dir = "FORWARD (0)";
+      else if (yaw_norm >= 22.5f && yaw_norm < 67.5f) dir = "RIGHT-FWD (45)";
+      else if (yaw_norm >= 67.5f && yaw_norm < 112.5f) dir = "RIGHT (90)";
+      else if (yaw_norm >= 112.5f || yaw_norm < -157.5f) dir = "BACKWARD (180)";
+      else if (yaw_norm >= -112.5f && yaw_norm < -67.5f) dir = "LEFT (-90)";
+      else if (yaw_norm >= -67.5f && yaw_norm < -22.5f) dir = "LEFT-FWD (-45)";
+      else dir = "REAR-SIDE";
+      DRONE_PRINTF("  Heading:   %s  (yaw=%.1f)\n", dir, yaw_norm);
+    }
+#endif
+
+#if DRONE_DEBUG_STAGE >= 2 && DRONE_ENABLE_HEIGHT
+    {
+      DRONE_PRINTLN("  ── Height (VL53L0X) ──");
+      DRONE_PRINTF("  Initialized: %s\n",
+                    g_height.isInitialized() ? "YES" : "NO");
+      DRONE_PRINTF("  Altitude:  %.3f m  (valid=%s, last_valid=%lums ago)\n",
+                    g_height.getAltitudeM(),
+                    g_height.isValid() ? "YES" : "NO",
+                    now - g_height.lastValidMs());
+    }
+#endif
+
+#if DRONE_DEBUG_STAGE >= 2
+    {
+      DRONE_PRINTLN("  ── Flight Controller ──");
+      DRONE_PRINTF("  Armed:     %s\n", g_flight.isArmed() ? "YES" : "NO");
+      DRONE_PRINTF("  Override:  %s\n",
+                    g_flight.isOverrideActive() ? "YES" : "NO");
+      DRONE_PRINTF("  Motors:    FL=%.3f  FR=%.3f  BR=%.3f  BL=%.3f\n",
+                    g_flight.getMotor(0), g_flight.getMotor(1),
+                    g_flight.getMotor(2), g_flight.getMotor(3));
+
+      Drone::EKFState ekf = g_ekf.getState();
+      DRONE_PRINTLN("  ── EKF ──");
+      DRONE_PRINTF("  Position:  x=%.3f  y=%.3f m\n", ekf.x, ekf.y);
+      DRONE_PRINTF("  Velocity:  vx=%.3f  vy=%.3f m/s\n", ekf.vx, ekf.vy);
+      DRONE_PRINTF("  Anchors:   %u configured\n", g_ekf.getAnchorCount());
+    }
+
+    {
+      DRONE_PRINTLN("  ── IR ──");
+      DRONE_PRINTF("  IR initialized: %s\n",
+                    g_ir.isInitialized() ? "YES" : "NO");
+    }
+
+#if DRONE_ENABLE_UWB
+    {
+      DRONE_PRINTLN("  ── UWB ──");
+      const auto& data = g_uwb.getData();
+      DRONE_PRINTF("  Valid ranges: %u\n", data.num_valid_ranges);
+      for (uint8_t i = 0; i < Drivers::UWBDriverData::MAX_ANCHORS; i++) {
+        if (data.ranges[i].valid) {
+          DRONE_PRINTF("    Anchor %u: %.1f cm\n",
+                        data.ranges[i].peer_id,
+                        data.ranges[i].distance_cm);
+        }
+      }
+    }
+#endif
+
+    DRONE_PRINTLN("  ── Safety ──");
+    DRONE_PRINTF("  Sensors ready: %s\n",
+                  g_safety.checkSensorsReady() ? "YES" : "NO");
+#endif  // DRONE_DEBUG_STAGE >= 2
+
+    DRONE_PRINTLN("  ── System ──");
+    DRONE_PRINTF("  Heap: %u / min: %u bytes\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    DRONE_PRINTF("  Uptime: %lus\n", now / 1000);
+
+    vTaskDelay(pdMS_TO_TICKS(2000));  // Print every 2s
+  }
+}
+#endif  // DRONE_SERIAL_DEBUG

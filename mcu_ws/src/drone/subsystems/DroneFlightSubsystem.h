@@ -79,6 +79,7 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
 
   void arm();
   void disarm();
+  void killMotors();  // Immediate stop, bypasses slew limiter
   bool isArmed() const { return armed_; }
 
   // Thread-safe setpoint access (written by state machine, read by flight task)
@@ -100,6 +101,16 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
   void clearOverride() { override_active_ = false; }
 
   float getMotor(uint8_t idx) const { return (idx < 4) ? motors_[idx] : 0.0f; }
+
+  // Runtime parameter tuning (returns true if param_name was recognized)
+  bool setParam(const char* param_name, float value);
+
+  // Runtime-mutable config (initialized from DroneConfig.h defaults)
+  float hover_throttle = Config::HOVER_THROTTLE;
+  float motor_max_slew = Config::MOTOR_MAX_SLEW;
+  float max_roll_deg = Config::MAX_ROLL_DEG;
+  float max_pitch_deg = Config::MAX_PITCH_DEG;
+  float max_yaw_rate_dps = Config::MAX_YAW_RATE_DPS;
 
  private:
   void compute(const IMUData& imu, float altitude_m, float dt);
@@ -124,6 +135,7 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
 
   // dt tracking
   uint32_t last_us_ = 0;
+  float last_dt_ = 0.0f;
 
   // Cascaded PID controllers
   PIDController roll_angle_pid_;
@@ -139,7 +151,7 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
   float alt_prev_ = 0.0f;
   float alt_vel_ = 0.0f;       // filtered vertical velocity (m/s)
   bool alt_initialized_ = false;
-  uint32_t alt_update_count_ = 0;  // detect when sensor value changes
+  float alt_since_change_ = 0.0f;  // accumulated dt since last sensor change
 
   // PID outputs
   float roll_correction_ = 0.0f;
@@ -149,6 +161,7 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
 
   // Motor outputs (0.0 to 1.0) [FL, FR, BR, BL]
   float motors_[4] = {};
+  float motors_prev_[4] = {};  // previous tick for slew rate limiting
 };
 
 }  // namespace Drone

@@ -138,12 +138,51 @@ bool DroneStateSubsystem::onCreate(rcl_node_t* node,
     return false;
   }
 
-  // Initialize response string fields so rosidl_runtime_c__String__assign
+  DRONE_PRINTLN("[State] onCreate: tare_srv...");
+  // Tare service (reset yaw reference)
+  if (rclc_service_init_default(
+          &tare_srv_, node,
+          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneTare),
+          "/mcu_drone/tare") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: tare_srv init");
+    return false;
+  }
+  if (rclc_executor_add_service(executor, &tare_srv_, &tare_req_, &tare_res_,
+                                tareCallback) != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: tare_srv executor");
+    return false;
+  }
+
+  DRONE_PRINTLN("[State] onCreate: set_param_srv...");
+  // SetParam service (runtime PID/flight parameter tuning)
+  if (rclc_service_init_default(
+          &set_param_srv_, node,
+          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneSetParam),
+          "/mcu_drone/set_param") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: set_param_srv init");
+    return false;
+  }
+  if (rclc_executor_add_service(executor, &set_param_srv_, &set_param_req_,
+                                &set_param_res_, setParamCallback) !=
+      RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: set_param_srv executor");
+    return false;
+  }
+
+  // Initialize string fields so rosidl_runtime_c__String__assign
   // can safely realloc on each service call without leaking.
   rosidl_runtime_c__String__init(&arm_res_.message);
   rosidl_runtime_c__String__init(&takeoff_res_.message);
   rosidl_runtime_c__String__init(&land_res_.message);
   rosidl_runtime_c__String__init(&motors_res_.message);
+  rosidl_runtime_c__String__init(&tare_res_.message);
+  // Pre-allocate param_name buffer so the XRCE-DDS deserializer has
+  // somewhere to write the incoming string (init alone gives capacity=0).
+  set_param_req_.param_name.data = (char*)malloc(64);
+  set_param_req_.param_name.data[0] = '\0';
+  set_param_req_.param_name.size = 0;
+  set_param_req_.param_name.capacity = 64;
+  rosidl_runtime_c__String__init(&set_param_res_.message);
 
   return true;
 }
@@ -156,12 +195,17 @@ void DroneStateSubsystem::onDestroy() {
   land_srv_ = rcl_get_zero_initialized_service();
   set_anchors_srv_ = rcl_get_zero_initialized_service();
   set_motors_srv_ = rcl_get_zero_initialized_service();
+  tare_srv_ = rcl_get_zero_initialized_service();
+  set_param_srv_ = rcl_get_zero_initialized_service();
 
-  // Free response string buffers allocated by rosidl_runtime_c__String__assign
+  // Free string buffers allocated by rosidl_runtime_c__String__assign
   rosidl_runtime_c__String__fini(&arm_res_.message);
   rosidl_runtime_c__String__fini(&takeoff_res_.message);
   rosidl_runtime_c__String__fini(&land_res_.message);
   rosidl_runtime_c__String__fini(&motors_res_.message);
+  rosidl_runtime_c__String__fini(&tare_res_.message);
+  rosidl_runtime_c__String__fini(&set_param_req_.param_name);
+  rosidl_runtime_c__String__fini(&set_param_res_.message);
 }
 
 void DroneStateSubsystem::update() {
@@ -178,12 +222,23 @@ void DroneStateSubsystem::update() {
   switch (state_) {
     case DroneState::INIT:
       if (all_sensors_ready_) {
+        flight_.disarm();  // Ensure clean state on first transition
+        target_altitude_ = 0.0f;
+        hold_altitude_ = 0.0f;
+        emergency_start_ms_ = 0;
+        last_cmd_vel_ms_ = 0;
+        cmd_roll_ = cmd_pitch_ = cmd_yaw_rate_ = cmd_alt_rate_ = 0.0f;
         state_ = DroneState::UNARMED;
       }
       break;
 
     case DroneState::UNARMED:
-      // Waiting for arm service
+      // Defensive: ensure flight controller is disarmed in case of state desync
+      // (e.g. micro-ROS reconnect resets state but not flight controller)
+      if (flight_.isArmed()) {
+        flight_.disarm();
+        DRONE_PRINTLN("[State] Defensive disarm — flight was still armed");
+      }
       break;
 
     case DroneState::ARMED:
@@ -191,10 +246,17 @@ void DroneStateSubsystem::update() {
       break;
 
     case DroneState::LAUNCHING: {
-      // Ascending to target altitude
+      // Ramp altitude target gradually to avoid throttle step change.
+      // hold_altitude_ starts at 0 (set in takeoffCallback) and ramps
+      // up to target_altitude_ at LAUNCH_CLIMB_RATE m/s.
+      hold_altitude_ += Config::LAUNCH_CLIMB_RATE * dt;
+      if (hold_altitude_ > target_altitude_) {
+        hold_altitude_ = target_altitude_;
+      }
+
       FlightSetpoint sp;
       sp.altitude_hold = true;
-      sp.altitude_des = target_altitude_;
+      sp.altitude_des = hold_altitude_;
       sp.roll_des = 0.0f;
       sp.pitch_des = 0.0f;
       sp.yaw_rate_des = 0.0f;
@@ -203,6 +265,11 @@ void DroneStateSubsystem::update() {
       if (alt >= target_altitude_ * 0.95f) {
         hold_altitude_ = target_altitude_;
         state_ = DroneState::VELOCITY_CONTROL;
+      }
+
+      // Timeout: if stuck in LAUNCHING too long, emergency land
+      if (now - launch_start_ms_ > Config::LAUNCH_TIMEOUT_MS) {
+        state_ = DroneState::EMERGENCY_LAND;
       }
       break;
     }
@@ -227,6 +294,12 @@ void DroneStateSubsystem::update() {
       flight_.setSetpoint(sp);
 
       if (alt < Config::LANDED_ALT_M) {
+        flight_.disarm();
+        state_ = DroneState::UNARMED;
+      }
+
+      // Timeout: if stuck in LANDING (sensor failed), force disarm
+      if (now - landing_start_ms_ > Config::LANDING_TIMEOUT_MS) {
         flight_.disarm();
         state_ = DroneState::UNARMED;
       }
@@ -378,19 +451,21 @@ void DroneStateSubsystem::armCallback(const void* req_raw, void* res_raw) {
     res->success = true;
     rosidl_runtime_c__String__assign(&res->message, "Armed");
   } else {
-    // Disarm - only from ARMED (not flying)
-    if (self->state_ == DroneState::ARMED) {
-      self->flight_.disarm();
-      self->state_ = DroneState::UNARMED;
-      res->success = true;
-      rosidl_runtime_c__String__assign(&res->message, "Disarmed");
-    } else if (self->isFlying()) {
-      res->success = false;
-      rosidl_runtime_c__String__assign(
-          &res->message, "Cannot disarm while flying, use land");
-    } else {
+    // Disarm — allowed from any state as emergency safety
+    if (self->state_ == DroneState::UNARMED) {
       res->success = false;
       rosidl_runtime_c__String__assign(&res->message, "Already disarmed");
+    } else {
+      bool was_flying = self->isFlying();
+      self->flight_.disarm();
+      self->emergency_start_ms_ = 0;
+      self->state_ = DroneState::UNARMED;
+      res->success = true;
+      if (was_flying) {
+        rosidl_runtime_c__String__assign(&res->message, "Emergency disarmed");
+      } else {
+        rosidl_runtime_c__String__assign(&res->message, "Disarmed");
+      }
     }
   }
 }
@@ -414,6 +489,7 @@ void DroneStateSubsystem::takeoffCallback(const void* req_raw,
   float alt = clamp(req->target_altitude, 0.3f, Config::ALTITUDE_CEILING_M);
   self->target_altitude_ = alt;
   self->hold_altitude_ = 0.0f;
+  self->launch_start_ms_ = millis();
   self->flight_.clearOverride();
   self->state_ = DroneState::LAUNCHING;
   res->success = true;
@@ -435,6 +511,7 @@ void DroneStateSubsystem::landCallback(const void* /*req_raw*/,
     return;
   }
 
+  self->landing_start_ms_ = millis();
 #if DRONE_ENABLE_HEIGHT
   self->hold_altitude_ = self->height_.getAltitudeM();
 #else
@@ -487,6 +564,59 @@ void DroneStateSubsystem::setMotorsCallback(const void* req_raw,
   self->flight_.setMotorsOverride(req->motor_speeds);
   res->success = true;
   rosidl_runtime_c__String__assign(&res->message, "Motors set");
+}
+
+void DroneStateSubsystem::tareCallback(const void* /*req_raw*/,
+                                        void* res_raw) {
+  auto* res = (mcu_msgs__srv__DroneTare_Response*)res_raw;
+  auto* self = s_instance_;
+  if (!self) {
+    res->success = false;
+    return;
+  }
+
+  if (!self->gyro_.isInitialized()) {
+    res->success = false;
+    rosidl_runtime_c__String__assign(&res->message, "IMU not ready");
+    return;
+  }
+
+  self->gyro_.tare();
+  res->success = true;
+  rosidl_runtime_c__String__assign(&res->message, "Tared");
+}
+
+void DroneStateSubsystem::setParamCallback(const void* req_raw,
+                                            void* res_raw) {
+  auto* req = (const mcu_msgs__srv__DroneSetParam_Request*)req_raw;
+  auto* res = (mcu_msgs__srv__DroneSetParam_Response*)res_raw;
+  auto* self = s_instance_;
+  if (!self) {
+    res->success = false;
+    return;
+  }
+
+  const char* name = req->param_name.data;
+  float value = req->value;
+
+  if (!name || name[0] == '\0') {
+    res->success = false;
+    rosidl_runtime_c__String__assign(&res->message, "Empty param name");
+    return;
+  }
+
+  if (self->flight_.setParam(name, value)) {
+    res->success = true;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Set %s = %.4f", name, value);
+    rosidl_runtime_c__String__assign(&res->message, buf);
+    DRONE_PRINTF("[State] Param: %s = %.4f\n", name, value);
+  } else {
+    res->success = false;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Unknown param: %s", name);
+    rosidl_runtime_c__String__assign(&res->message, buf);
+  }
 }
 
 }  // namespace Drone

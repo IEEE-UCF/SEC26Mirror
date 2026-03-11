@@ -7,6 +7,7 @@
  *
  *   SWA  → arm / disarm  (toggle on rising edge)
  *   SWB  → takeoff / land (toggle on rising edge, only while armed)
+ *   SWC  → tare IMU yaw  (rising edge)
  *   Right stick X → roll   (cmd_vel linear.y)
  *   Right stick Y → pitch  (cmd_vel linear.x)
  *   Left stick Y  → altitude rate (cmd_vel linear.z)
@@ -25,6 +26,7 @@
 #include <mcu_msgs/srv/drone_arm.hpp>
 #include <mcu_msgs/srv/drone_takeoff.hpp>
 #include <mcu_msgs/srv/drone_land.hpp>
+#include <mcu_msgs/srv/drone_tare.hpp>
 
 class DroneTeleopNode : public rclcpp::Node {
  public:
@@ -37,9 +39,10 @@ class DroneTeleopNode : public rclcpp::Node {
     deadzone_ = get_parameter("deadzone").as_int();
     takeoff_alt_ = get_parameter("takeoff_altitude").as_double();
 
-    // RC subscriber
+    // RC subscriber — micro-ROS publishes with BEST_EFFORT reliability
+    auto qos = rclcpp::QoS(10).best_effort();
     rc_sub_ = create_subscription<mcu_msgs::msg::RC>(
-        "/mcu_robot/rc", 10,
+        "/mcu_robot/rc", qos,
         std::bind(&DroneTeleopNode::rcCallback, this, std::placeholders::_1));
 
     // Drone cmd_vel publisher
@@ -51,6 +54,7 @@ class DroneTeleopNode : public rclcpp::Node {
     takeoff_client_ =
         create_client<mcu_msgs::srv::DroneTakeoff>("/mcu_drone/takeoff");
     land_client_ = create_client<mcu_msgs::srv::DroneLand>("/mcu_drone/land");
+    tare_client_ = create_client<mcu_msgs::srv::DroneTare>("/mcu_drone/tare");
 
     // Publish cmd_vel at fixed rate
     double rate = get_parameter("cmd_vel_rate_hz").as_double();
@@ -59,7 +63,7 @@ class DroneTeleopNode : public rclcpp::Node {
         std::bind(&DroneTeleopNode::publishCmdVel, this));
 
     RCLCPP_INFO(get_logger(),
-                "Drone teleop ready. SWA=arm, SWB=takeoff/land, sticks=fly");
+                "Drone teleop ready. SWA=arm, SWB=takeoff/land, SWC=tare, sticks=fly");
   }
 
  private:
@@ -88,6 +92,13 @@ class DroneTeleopNode : public rclcpp::Node {
       }
     }
     prev_swb_ = swb_now;
+
+    // SWC rising edge → tare IMU yaw
+    bool swc_now = msg->swc;
+    if (swc_now && !prev_swc_) {
+      callTare();
+    }
+    prev_swc_ = swc_now;
 
     last_rc_time_ = now();
   }
@@ -119,7 +130,7 @@ class DroneTeleopNode : public rclcpp::Node {
   }
 
   void callArm(bool arm) {
-    if (!arm_client_->wait_for_service(std::chrono::milliseconds(100))) {
+    if (!arm_client_->service_is_ready()) {
       RCLCPP_WARN(get_logger(), "Arm service not available");
       return;
     }
@@ -142,7 +153,7 @@ class DroneTeleopNode : public rclcpp::Node {
   }
 
   void callTakeoff(double altitude) {
-    if (!takeoff_client_->wait_for_service(std::chrono::milliseconds(100))) {
+    if (!takeoff_client_->service_is_ready()) {
       RCLCPP_WARN(get_logger(), "Takeoff service not available");
       return;
     }
@@ -164,7 +175,7 @@ class DroneTeleopNode : public rclcpp::Node {
   }
 
   void callLand() {
-    if (!land_client_->wait_for_service(std::chrono::milliseconds(100))) {
+    if (!land_client_->service_is_ready()) {
       RCLCPP_WARN(get_logger(), "Land service not available");
       return;
     }
@@ -183,6 +194,25 @@ class DroneTeleopNode : public rclcpp::Node {
         });
   }
 
+  void callTare() {
+    if (!tare_client_->service_is_ready()) {
+      RCLCPP_WARN(get_logger(), "Tare service not available");
+      return;
+    }
+    auto req = std::make_shared<mcu_msgs::srv::DroneTare::Request>();
+    auto future = tare_client_->async_send_request(
+        req, [this](rclcpp::Client<mcu_msgs::srv::DroneTare>::SharedFuture
+                         result) {
+          auto resp = result.get();
+          if (resp->success) {
+            RCLCPP_INFO(get_logger(), "TARE: %s", resp->message.c_str());
+          } else {
+            RCLCPP_WARN(get_logger(), "TARE failed: %s",
+                        resp->message.c_str());
+          }
+        });
+  }
+
   // Subscriptions / publishers
   rclcpp::Subscription<mcu_msgs::msg::RC>::SharedPtr rc_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
@@ -192,6 +222,7 @@ class DroneTeleopNode : public rclcpp::Node {
   rclcpp::Client<mcu_msgs::srv::DroneArm>::SharedPtr arm_client_;
   rclcpp::Client<mcu_msgs::srv::DroneTakeoff>::SharedPtr takeoff_client_;
   rclcpp::Client<mcu_msgs::srv::DroneLand>::SharedPtr land_client_;
+  rclcpp::Client<mcu_msgs::srv::DroneTare>::SharedPtr tare_client_;
 
   // RC stick state (normalized [-1, 1])
   float rx_ = 0.0f, ry_ = 0.0f, lx_ = 0.0f, ly_ = 0.0f;
@@ -199,6 +230,7 @@ class DroneTeleopNode : public rclcpp::Node {
   // Switch state tracking (rising-edge detection)
   bool prev_swa_ = false;
   bool prev_swb_ = false;
+  bool prev_swc_ = false;
 
   // Drone state
   bool armed_ = false;

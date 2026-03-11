@@ -89,6 +89,16 @@ class GyroSubsystem : public Subsystem::RTOSSubsystem {
 
   bool isInitialized() const { return initialized_; }
 
+  // Tare: capture current roll/pitch/yaw as zero reference
+  void tare() {
+    IMUData d = getData();
+    roll_offset_ += d.roll;
+    pitch_offset_ += d.pitch;
+    yaw_offset_ += d.yaw;
+    DRONE_PRINTF("[Gyro] Tare: roll=%.1f pitch=%.1f yaw=%.1f deg\n",
+                 roll_offset_, pitch_offset_, yaw_offset_);
+  }
+
  private:
   Classes::BaseSetup setup_{"gyro"};
   GyroConfig cfg_;
@@ -96,6 +106,11 @@ class GyroSubsystem : public Subsystem::RTOSSubsystem {
   IMUData data_;
   bool initialized_ = false;
   uint32_t reset_count_ = 0;
+  uint32_t reset_wait_until_ = 0;  // non-blocking boot delay after BNO085 reset
+  float roll_offset_ = 0.0f;
+  float pitch_offset_ = 0.0f;
+  float yaw_offset_ = 0.0f;
+  bool auto_tare_pending_ = true;
   mutable SemaphoreHandle_t data_mutex_ = nullptr;
 };
 

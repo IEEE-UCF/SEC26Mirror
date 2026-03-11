@@ -18,6 +18,8 @@
 #include <mcu_msgs/srv/drone_set_anchors.h>
 #include <mcu_msgs/srv/drone_set_motors.h>
 #include <mcu_msgs/srv/drone_takeoff.h>
+#include <mcu_msgs/srv/drone_tare.h>
+#include <mcu_msgs/srv/drone_set_param.h>
 
 #include "../DroneConfig.h"
 #include "DroneEKFSubsystem.h"
@@ -100,6 +102,8 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
   static void landCallback(const void* req, void* res);
   static void setAnchorsCallback(const void* req, void* res);
   static void setMotorsCallback(const void* req, void* res);
+  static void tareCallback(const void* req, void* res);
+  static void setParamCallback(const void* req, void* res);
 
   Classes::BaseSetup setup_;
   DroneFlightSubsystem& flight_;
@@ -116,6 +120,8 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
   float target_altitude_ = 0.0f;
   float hold_altitude_ = 0.0f;
   uint32_t emergency_start_ms_ = 0;
+  uint32_t launch_start_ms_ = 0;
+  uint32_t landing_start_ms_ = 0;
 
   // cmd_vel
   float cmd_roll_ = 0.0f;
@@ -134,6 +140,8 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
   rcl_service_t land_srv_{};
   rcl_service_t set_anchors_srv_{};
   rcl_service_t set_motors_srv_{};
+  rcl_service_t tare_srv_{};
+  rcl_service_t set_param_srv_{};
 
   // Service request/response buffers
   mcu_msgs__srv__DroneArm_Request arm_req_{};
@@ -146,6 +154,10 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
   mcu_msgs__srv__DroneSetAnchors_Response anchors_res_{};
   mcu_msgs__srv__DroneSetMotors_Request motors_req_{};
   mcu_msgs__srv__DroneSetMotors_Response motors_res_{};
+  mcu_msgs__srv__DroneTare_Request tare_req_{};
+  mcu_msgs__srv__DroneTare_Response tare_res_{};
+  mcu_msgs__srv__DroneSetParam_Request set_param_req_{};
+  mcu_msgs__srv__DroneSetParam_Response set_param_res_{};
 
   uint32_t last_state_pub_ms_ = 0;
   uint32_t last_update_ms_ = 0;

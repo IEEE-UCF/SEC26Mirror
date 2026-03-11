@@ -76,6 +76,7 @@ inline PIDController::Config altitudeVelocityPID() {
 }
 
 constexpr float HOVER_THROTTLE = 0.45f;
+constexpr float MOTOR_MAX_SLEW = 0.5f;   // max change per second (full 0→1 in 2s)
 
 // ── Angle / rate limits ────────────────────────────────────
 constexpr float MAX_ROLL_DEG = 30.0f;
@@ -94,10 +95,13 @@ constexpr uint32_t UWB_TIMEOUT_MS = 2000;       // No valid UWB ranges
 constexpr uint32_t MICROROS_TIMEOUT_MS = 3000;  // Agent disconnect
 constexpr uint32_t CMD_VEL_TIMEOUT_MS = 500;    // No cmd_vel → hover
 constexpr float ALTITUDE_CEILING_M = 2.0f;      // Max altitude
+constexpr float LAUNCH_CLIMB_RATE = 0.3f;       // m/s altitude ramp during takeoff
 constexpr float LANDING_DESCENT_RATE = 0.15f;   // m/s during landing
 constexpr float EMERGENCY_THROTTLE = 0.25f;     // Open-loop descent
 constexpr uint32_t EMERGENCY_DISARM_MS = 5000;  // Blind landing timeout
 constexpr float LANDED_ALT_M = 0.05f;           // On-ground threshold
+constexpr uint32_t LAUNCH_TIMEOUT_MS = 10000;    // Max time in LAUNCHING → emergency
+constexpr uint32_t LANDING_TIMEOUT_MS = 10000;   // Max time in LANDING → forced disarm
 
 // ── FreeRTOS task config ───────────────────────────────────
 constexpr int FLIGHT_TASK_PRIORITY = 5;

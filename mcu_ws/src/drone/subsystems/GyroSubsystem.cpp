@@ -58,12 +58,22 @@ void GyroSubsystem::update() {
   // Acquire I2C mutex if available (shared bus with height sensor)
   if (cfg_.i2c_mutex) xSemaphoreTake(*cfg_.i2c_mutex, portMAX_DELAY);
 
-  // BNO085 can spontaneously reset — re-enable reports when it does.
+  // BNO085 can spontaneously reset — re-enable reports after boot delay.
+  // Use non-blocking wait to avoid starving flight control on same core.
   if (bno_.wasReset()) {
     ++reset_count_;
-    DRONE_PRINTF("[Gyro] Reset detected (#%lu) — waiting 300ms\n",
-                 reset_count_);
-    delay(300);
+    DRONE_PRINTF("[Gyro] Reset detected (#%lu)\n", reset_count_);
+    reset_wait_until_ = millis() + 300;
+  }
+  if (reset_wait_until_ > 0) {
+    if (millis() < reset_wait_until_) {
+      // Still waiting for BNO085 boot — release I2C and yield
+      if (cfg_.i2c_mutex) xSemaphoreGive(*cfg_.i2c_mutex);
+      vTaskDelay(pdMS_TO_TICKS(10));
+      return;
+    }
+    // Boot delay elapsed, re-enable reports
+    reset_wait_until_ = 0;
     if (!enableReports()) {
       DRONE_PRINTLN("[Gyro] WARNING: enableReports failed after reset");
     } else {
@@ -83,40 +93,55 @@ void GyroSubsystem::update() {
     xSemaphoreTake(data_mutex_, portMAX_DELAY);
     switch (val.sensorId) {
       case SH2_ARVR_STABILIZED_RV: {
-        // BNO085 mounting: +X=backward, +Y=right, +Z=up (dot forward)
-        // Drone body frame (FRD): +X=forward, +Y=right, +Z=down
-        // Transform: 180° rotation about Y axis
-        // q_drone = q_bno * q_correction, q_correction = (0, 0, -1, 0)
-        float qr_s = val.un.arvrStabilizedRV.real;
-        float qi_s = val.un.arvrStabilizedRV.i;
-        float qj_s = val.un.arvrStabilizedRV.j;
-        float qk_s = val.un.arvrStabilizedRV.k;
+        // BNO085 mounted vertically, dot forward.
+        // Empirical sign mapping for this mounting:
+        //   roll:  negate (right-wing-down = positive)
+        //   pitch: keep   (nose-up = positive)
+        //   yaw:   negate (CW from above = positive)
+        float qr = val.un.arvrStabilizedRV.real;
+        float qi = val.un.arvrStabilizedRV.i;
+        float qj = val.un.arvrStabilizedRV.j;
+        float qk = val.un.arvrStabilizedRV.k;
 
-        float qr =  qj_s;
-        float qi =  qk_s;
-        float qj = -qr_s;
-        float qk = -qi_s;
+        float bno_roll = atan2f(2.0f * (qr * qi + qj * qk),
+                                1.0f - 2.0f * (qi * qi + qj * qj)) *
+                         57.29577951f;
+        float bno_pitch = asinf(fmaxf(-1.0f, fminf(1.0f,
+                          2.0f * (qr * qj - qk * qi)))) *
+                          57.29577951f;
+        float bno_yaw = atan2f(2.0f * (qr * qk + qi * qj),
+                               1.0f - 2.0f * (qj * qj + qk * qk)) *
+                        57.29577951f;
 
-        data_.roll = atan2f(2.0f * (qr * qi + qj * qk),
-                            1.0f - 2.0f * (qi * qi + qj * qj)) *
-                     57.29577951f;
-        data_.pitch = asinf(fmaxf(-1.0f, fminf(1.0f,
-                     2.0f * (qr * qj - qk * qi)))) *
-                      57.29577951f;
-        data_.yaw = atan2f(2.0f * (qr * qk + qi * qj),
-                           1.0f - 2.0f * (qj * qj + qk * qk)) *
-                    57.29577951f;
+        data_.roll  = -bno_roll  - roll_offset_;
+        data_.pitch =  bno_pitch - pitch_offset_;
+        data_.yaw   = -bno_yaw  - yaw_offset_;
+
+        // Auto-tare on first valid quaternion reading
+        if (auto_tare_pending_) {
+          auto_tare_pending_ = false;
+          roll_offset_ = data_.roll;
+          pitch_offset_ = data_.pitch;
+          yaw_offset_ = data_.yaw;
+          data_.roll = 0.0f;
+          data_.pitch = 0.0f;
+          data_.yaw = 0.0f;
+          DRONE_PRINTF("[Gyro] Auto-tare: roll=%.1f pitch=%.1f yaw=%.1f deg\n",
+                       roll_offset_, pitch_offset_, yaw_offset_);
+        }
         break;
       }
       case SH2_GYROSCOPE_CALIBRATED: {
-        // Remap BNO085 gyro to drone FRD frame (negate X and Z)
+        // Gyro signs must match Euler angle signs for PID consistency.
+        // roll negated, pitch kept, yaw negated.
         data_.gyro_x = -val.un.gyroscope.x * 57.29577951f;
         data_.gyro_y =  val.un.gyroscope.y * 57.29577951f;
         data_.gyro_z = -val.un.gyroscope.z * 57.29577951f;
         break;
       }
       case SH2_LINEAR_ACCELERATION: {
-        // Remap BNO085 accel to drone FRD frame (negate X and Z)
+        // Remap BNO085 accel to drone body frame.
+        // Axis mapping (180° about Y): negate X and Z, keep Y.
         data_.accel_x = -val.un.linearAcceleration.x;
         data_.accel_y =  val.un.linearAcceleration.y;
         data_.accel_z = -val.un.linearAcceleration.z;

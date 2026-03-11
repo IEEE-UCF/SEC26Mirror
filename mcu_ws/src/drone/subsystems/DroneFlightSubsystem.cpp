@@ -1,5 +1,6 @@
 #include "DroneFlightSubsystem.h"
 
+#include <cstring>
 #include <math_utils.h>
 
 using secbot::utils::clamp;
@@ -38,15 +39,44 @@ bool DroneFlightSubsystem::init() {
 void DroneFlightSubsystem::arm() {
   resetPIDs();
   override_active_ = false;
+  // Clear stale setpoint so motors don't immediately spin
+  xSemaphoreTake(sp_mutex_, portMAX_DELAY);
+  sp_ = FlightSetpoint{};
+  xSemaphoreGive(sp_mutex_);
+  // Reset altitude state
+  alt_initialized_ = false;
+  alt_vel_ = 0.0f;
+  alt_since_change_ = 0.0f;
+  throttle_ = 0.0f;
+  roll_correction_ = 0.0f;
+  pitch_correction_ = 0.0f;
+  yaw_correction_ = 0.0f;
   armed_ = true;
+}
+
+void DroneFlightSubsystem::killMotors() {
+  // Immediate motor stop — bypasses slew rate limiter for emergency/disarm.
+  motors_[0] = motors_[1] = motors_[2] = motors_[3] = 0.0f;
+  motors_prev_[0] = motors_prev_[1] = motors_prev_[2] = motors_prev_[3] = 0.0f;
+  ledcWrite(0, 0);
+  ledcWrite(1, 0);
+  ledcWrite(2, 0);
+  ledcWrite(3, 0);
 }
 
 void DroneFlightSubsystem::disarm() {
   armed_ = false;
   override_active_ = false;
-  motors_[0] = motors_[1] = motors_[2] = motors_[3] = 0.0f;
-  writeMotors();
+  killMotors();
   resetPIDs();
+  // Clear setpoint to prevent stale state on next arm
+  xSemaphoreTake(sp_mutex_, portMAX_DELAY);
+  sp_ = FlightSetpoint{};
+  xSemaphoreGive(sp_mutex_);
+  throttle_ = 0.0f;
+  roll_correction_ = 0.0f;
+  pitch_correction_ = 0.0f;
+  yaw_correction_ = 0.0f;
 }
 
 void DroneFlightSubsystem::resetPIDs() {
@@ -61,7 +91,7 @@ void DroneFlightSubsystem::resetPIDs() {
   alt_prev_ = 0.0f;
   alt_vel_ = 0.0f;
   alt_initialized_ = false;
-  alt_update_count_ = 0;
+  alt_since_change_ = 0.0f;
   roll_correction_ = pitch_correction_ = yaw_correction_ = 0.0f;
   throttle_ = 0.0f;
 }
@@ -99,6 +129,7 @@ void DroneFlightSubsystem::update() {
 
 void DroneFlightSubsystem::compute(const IMUData& imu, float altitude_m,
                                    float dt) {
+  last_dt_ = dt;
   if (!armed_ || dt <= 0.0f || dt > 0.1f) {
     motors_[0] = motors_[1] = motors_[2] = motors_[3] = 0.0f;
     writeMotors();
@@ -124,9 +155,8 @@ void DroneFlightSubsystem::compute(const IMUData& imu, float altitude_m,
   }
 
   // Clamp desired angles
-  sp.roll_des = clamp(sp.roll_des, -Config::MAX_ROLL_DEG, Config::MAX_ROLL_DEG);
-  sp.pitch_des =
-      clamp(sp.pitch_des, -Config::MAX_PITCH_DEG, Config::MAX_PITCH_DEG);
+  sp.roll_des = clamp(sp.roll_des, -max_roll_deg, max_roll_deg);
+  sp.pitch_des = clamp(sp.pitch_des, -max_pitch_deg, max_pitch_deg);
 
   // 2. Cascaded angle -> rate PID (using clamped sp)
   controlAngle(imu, sp, dt);
@@ -176,17 +206,16 @@ void DroneFlightSubsystem::controlAltitude(const FlightSetpoint& sp,
     return;
   }
 
-  // Detect actual sensor update (value changed since last tick)
+  // Detect actual sensor update (value changed since last tick).
+  // Track real elapsed time since last sensor change for accurate velocity.
+  alt_since_change_ += dt;
   if (altitude_m != alt_prev_) {
-    float sensor_dt = dt * (alt_update_count_ + 1);  // time since last change
-    if (sensor_dt > 0.001f) {
-      float raw_vel = (altitude_m - alt_prev_) / sensor_dt;
+    if (alt_since_change_ > 0.001f) {
+      float raw_vel = (altitude_m - alt_prev_) / alt_since_change_;
       alt_vel_ = alt_vel_filter_.update(raw_vel);
     }
     alt_prev_ = altitude_m;
-    alt_update_count_ = 0;
-  } else {
-    alt_update_count_++;
+    alt_since_change_ = 0.0f;
   }
 
   // Cascaded altitude control:
@@ -196,7 +225,7 @@ void DroneFlightSubsystem::controlAltitude(const FlightSetpoint& sp,
   float desired_vel = altitude_pid_.update(sp.altitude_des, altitude_m, dt);
   float vel_correction = alt_vel_pid_.update(desired_vel, alt_vel_, dt);
 
-  throttle_ = Config::HOVER_THROTTLE + vel_correction;
+  throttle_ = hover_throttle + vel_correction;
   throttle_ = clamp(throttle_, 0.0f, 1.0f);
 }
 
@@ -208,13 +237,13 @@ void DroneFlightSubsystem::controlMixer() {
   //             /          \
   //   BL (CW, M4, D3)    BR (CCW, M2, D1)
   motors_[0] =
-      throttle_ + roll_correction_ - pitch_correction_ + yaw_correction_;  // FL
+      throttle_ + roll_correction_ + pitch_correction_ + yaw_correction_;  // FL
   motors_[1] =
-      throttle_ - roll_correction_ - pitch_correction_ - yaw_correction_;  // FR
+      throttle_ - roll_correction_ + pitch_correction_ - yaw_correction_;  // FR
   motors_[2] =
-      throttle_ - roll_correction_ + pitch_correction_ + yaw_correction_;  // BR
+      throttle_ - roll_correction_ - pitch_correction_ + yaw_correction_;  // BR
   motors_[3] =
-      throttle_ + roll_correction_ + pitch_correction_ - yaw_correction_;  // BL
+      throttle_ + roll_correction_ - pitch_correction_ - yaw_correction_;  // BL
 
   for (int i = 0; i < 4; i++) {
     motors_[i] = clamp(motors_[i], 0.0f, 1.0f);
@@ -222,14 +251,21 @@ void DroneFlightSubsystem::controlMixer() {
 }
 
 void DroneFlightSubsystem::writeMotors() {
-  auto duty = [](float val) -> uint32_t {
-    return (uint32_t)(clamp(val, 0.0f, 1.0f) * Config::MOTOR_PWM_MAX);
-  };
-
-  ledcWrite(0, duty(motors_[0]));  // FL
-  ledcWrite(1, duty(motors_[1]));  // FR
-  ledcWrite(2, duty(motors_[2]));  // BR
-  ledcWrite(3, duty(motors_[3]));  // BL
+  // Slew rate limiter: cap motor change to MOTOR_MAX_SLEW per second,
+  // scaled by actual dt (no assumption about loop rate).
+  // IMPORTANT: Do NOT modify motors_[] — it holds the target value
+  // (from PID mixer or override).  Only motors_prev_[] tracks actual output.
+  float max_delta = motor_max_slew * last_dt_;
+  if (max_delta <= 0.0f) max_delta = 1.0f;  // no limit if dt unknown
+  for (int i = 0; i < 4; i++) {
+    float target = clamp(motors_[i], 0.0f, 1.0f);
+    float delta = target - motors_prev_[i];
+    if (delta > max_delta) delta = max_delta;
+    if (delta < -max_delta) delta = -max_delta;
+    float output = clamp(motors_prev_[i] + delta, 0.0f, 1.0f);
+    motors_prev_[i] = output;
+    ledcWrite(i, (uint32_t)(output * Config::MOTOR_PWM_MAX));
+  }
 }
 
 void DroneFlightSubsystem::setMotorsOverride(const float speeds[4]) {
@@ -239,6 +275,69 @@ void DroneFlightSubsystem::setMotorsOverride(const float speeds[4]) {
   }
   override_active_ = true;
   writeMotors();
+}
+
+bool DroneFlightSubsystem::setParam(const char* name, float value) {
+  if (!name) return false;
+
+  // Roll angle PID
+  if (strncmp(name, "roll_angle_", 11) == 0) {
+    auto cfg = roll_angle_pid_.config();
+    if (strcmp(name + 11, "kp") == 0) { cfg.gains.kp = value; roll_angle_pid_.configure(cfg); return true; }
+    if (strcmp(name + 11, "ki") == 0) { cfg.gains.ki = value; roll_angle_pid_.configure(cfg); return true; }
+    if (strcmp(name + 11, "kd") == 0) { cfg.gains.kd = value; roll_angle_pid_.configure(cfg); return true; }
+  }
+  // Pitch angle PID
+  if (strncmp(name, "pitch_angle_", 12) == 0) {
+    auto cfg = pitch_angle_pid_.config();
+    if (strcmp(name + 12, "kp") == 0) { cfg.gains.kp = value; pitch_angle_pid_.configure(cfg); return true; }
+    if (strcmp(name + 12, "ki") == 0) { cfg.gains.ki = value; pitch_angle_pid_.configure(cfg); return true; }
+    if (strcmp(name + 12, "kd") == 0) { cfg.gains.kd = value; pitch_angle_pid_.configure(cfg); return true; }
+  }
+  // Roll rate PID
+  if (strncmp(name, "roll_rate_", 10) == 0) {
+    auto cfg = roll_rate_pid_.config();
+    if (strcmp(name + 10, "kp") == 0) { cfg.gains.kp = value; roll_rate_pid_.configure(cfg); return true; }
+    if (strcmp(name + 10, "ki") == 0) { cfg.gains.ki = value; roll_rate_pid_.configure(cfg); return true; }
+    if (strcmp(name + 10, "kd") == 0) { cfg.gains.kd = value; roll_rate_pid_.configure(cfg); return true; }
+  }
+  // Pitch rate PID
+  if (strncmp(name, "pitch_rate_", 11) == 0) {
+    auto cfg = pitch_rate_pid_.config();
+    if (strcmp(name + 11, "kp") == 0) { cfg.gains.kp = value; pitch_rate_pid_.configure(cfg); return true; }
+    if (strcmp(name + 11, "ki") == 0) { cfg.gains.ki = value; pitch_rate_pid_.configure(cfg); return true; }
+    if (strcmp(name + 11, "kd") == 0) { cfg.gains.kd = value; pitch_rate_pid_.configure(cfg); return true; }
+  }
+  // Yaw rate PID
+  if (strncmp(name, "yaw_rate_", 9) == 0) {
+    auto cfg = yaw_rate_pid_.config();
+    if (strcmp(name + 9, "kp") == 0) { cfg.gains.kp = value; yaw_rate_pid_.configure(cfg); return true; }
+    if (strcmp(name + 9, "ki") == 0) { cfg.gains.ki = value; yaw_rate_pid_.configure(cfg); return true; }
+    if (strcmp(name + 9, "kd") == 0) { cfg.gains.kd = value; yaw_rate_pid_.configure(cfg); return true; }
+  }
+  // Altitude PID
+  if (strncmp(name, "altitude_", 9) == 0) {
+    auto cfg = altitude_pid_.config();
+    if (strcmp(name + 9, "kp") == 0) { cfg.gains.kp = value; altitude_pid_.configure(cfg); return true; }
+    if (strcmp(name + 9, "ki") == 0) { cfg.gains.ki = value; altitude_pid_.configure(cfg); return true; }
+    if (strcmp(name + 9, "kd") == 0) { cfg.gains.kd = value; altitude_pid_.configure(cfg); return true; }
+  }
+  // Altitude velocity PID
+  if (strncmp(name, "alt_vel_", 8) == 0) {
+    auto cfg = alt_vel_pid_.config();
+    if (strcmp(name + 8, "kp") == 0) { cfg.gains.kp = value; alt_vel_pid_.configure(cfg); return true; }
+    if (strcmp(name + 8, "ki") == 0) { cfg.gains.ki = value; alt_vel_pid_.configure(cfg); return true; }
+    if (strcmp(name + 8, "kd") == 0) { cfg.gains.kd = value; alt_vel_pid_.configure(cfg); return true; }
+  }
+
+  // Scalar parameters
+  if (strcmp(name, "hover_throttle") == 0) { hover_throttle = value; return true; }
+  if (strcmp(name, "motor_max_slew") == 0) { motor_max_slew = value; return true; }
+  if (strcmp(name, "max_roll_deg") == 0) { max_roll_deg = value; return true; }
+  if (strcmp(name, "max_pitch_deg") == 0) { max_pitch_deg = value; return true; }
+  if (strcmp(name, "max_yaw_rate_dps") == 0) { max_yaw_rate_dps = value; return true; }
+
+  return false;
 }
 
 }  // namespace Drone

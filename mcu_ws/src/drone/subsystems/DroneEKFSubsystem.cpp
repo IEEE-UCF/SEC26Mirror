@@ -37,6 +37,8 @@ void DroneEKFSubsystem::init() {
 
 void DroneEKFSubsystem::predict(float ax_world, float ay_world, float dt) {
   if (dt <= 0.0f || dt > 0.5f) return;
+  // Don't integrate accel noise when there are no anchors to correct drift
+  if (num_anchors_ == 0) return;
 
   xSemaphoreTake(mutex_, portMAX_DELAY);
 

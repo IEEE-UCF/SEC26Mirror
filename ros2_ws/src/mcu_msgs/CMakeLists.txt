@@ -70,6 +70,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/DroneTransmitIR.srv"
   "srv/DroneSetAnchors.srv"
   "srv/DroneSetMotors.srv"
+  "srv/DroneTare.srv"
+  "srv/DroneSetParam.srv"
   DEPENDENCIES std_msgs geometry_msgs nav_msgs
 )
 

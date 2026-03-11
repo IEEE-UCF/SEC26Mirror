@@ -133,6 +133,13 @@ RUN pip3 install --break-system-packages onshape-to-robot
 
 # 10. cmake 3.28 cross-compilation regression is fixed by the pip upgrade above.
 #     The manual patch of CMakeCommonCompilerMacros.cmake is no longer needed.
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-$ROS_DISTRO-vision-msgs \
+    ros-$ROS_DISTRO-cv-bridge \
+    ros-$ROS_DISTRO-image-tools \
+    python3-opencv \
+    && rm -rf /var/lib/apt/lists/*
 
 FROM base AS dev
 

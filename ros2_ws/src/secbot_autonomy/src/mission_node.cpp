@@ -1042,8 +1042,8 @@ void MissionNode::stepMission() {
         drone_cmd_pub_->publish(cmd);
       }
 
-      // Wait for drone to take off (3s or drone reports RUNNING)
-      if (sec >= 3.0 || drone_state_ == mcu_msgs::msg::DroneState::RUNNING) {
+      // Wait for drone to take off (3s or drone reports VELOCITY_CONTROL)
+      if (sec >= 3.0 || drone_state_ == mcu_msgs::msg::DroneState::VELOCITY_CONTROL) {
         sendArmCommand(JOINT_DRONE_LATCH, SERVO_RETRACTED, SERVO_SPEED);
         RCLCPP_INFO(this->get_logger(), "Drone deployed, navigating to finish");
         transitionTo(MissionPhase::NAV_TO_FINISH);

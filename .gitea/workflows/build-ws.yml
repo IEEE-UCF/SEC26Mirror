@@ -108,12 +108,9 @@ jobs:
           
           # The sanitized slug MUST remain here to keep caches separate.
           cache-from: |
-            type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:latest
             type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:cache-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_platform.outputs.slug }}
             type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:cache-main-${{ steps.sanitize_platform.outputs.slug }}
           cache-to: type=registry,ref=${{ vars.REGISTRY_URL_PORT }}/syndric/ws-arduino-ros:cache-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_platform.outputs.slug }},mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
 
   colcon-build:
     name: Colcon Build for ${{ matrix.platform }}
@@ -168,10 +165,10 @@ jobs:
         run: |
           echo "slug=$(echo ${{ matrix.platform }} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
 
-      - name: Compute config hash (Dockerfile/Compose/workflow)
+      - name: Compute config hash (Dockerfile/Compose/workflow + ROS2 source)
         id: config_hash
         run: |
-          echo "hash=${{ hashFiles('Dockerfile', 'docker-compose.yml', '.gitea/workflows/build-ws.yml') }}" >> $GITHUB_OUTPUT
+          echo "hash=${{ hashFiles('Dockerfile', 'docker-compose.yml', '.gitea/workflows/build-ws.yml', 'ros2_ws/src/**') }}" >> $GITHUB_OUTPUT
 
       - name: Restore colcon build cache (tarballs)
         uses: actions/cache/restore@v4
@@ -203,7 +200,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci up -d devcontainer
 
-      - name: Restore build/install/log inside devcontainer (from tarballs)
+      - name: Restore build/install inside devcontainer (from tarballs)
         run: |
           set -euxo pipefail
           mkdir -p .colcon-cache
@@ -213,15 +210,16 @@ jobs:
             WS=/home/ubuntu/ros2_workspaces;
             mkdir -p "$WS/build" "$WS/install" "$WS/log";
           '
-          # Restore each tarball if present
+          # Restore each tarball if present (warn on failure instead of silently ignoring)
           if [ -f .colcon-cache/ros2_build.tgz ]; then
-            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/build/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/build' < ./.colcon-cache/ros2_build.tgz || true
+            if ! docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/build/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/build' < ./.colcon-cache/ros2_build.tgz; then
+              echo "::warning::Failed to restore build cache tarball, will do a clean build"
+            fi
           fi
           if [ -f .colcon-cache/ros2_install.tgz ]; then
-            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/install/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/install' < ./.colcon-cache/ros2_install.tgz || true
-          fi
-          if [ -f .colcon-cache/ros2_log.tgz ]; then
-            docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/log/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/log' < ./.colcon-cache/ros2_log.tgz || true
+            if ! docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc 'set -euo pipefail; rm -rf /home/ubuntu/ros2_workspaces/install/* || true; tar -xzf - -C /home/ubuntu/ros2_workspaces/install' < ./.colcon-cache/ros2_install.tgz; then
+              echo "::warning::Failed to restore install cache tarball, will do a clean build"
+            fi
           fi
 
       - name: Dependencies + Colcon build (CI override)
@@ -235,7 +233,7 @@ jobs:
             rosdep install --from-paths src src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python; \
             echo "Discovered packages:"; \
             colcon list || true; \
-            colcon build --base-paths src src/sec26ros --continue-on-error'
+            colcon build --base-paths src src/sec26ros'
 
           set +e
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc "$BUILD_CMD"
@@ -244,7 +242,7 @@ jobs:
           if [ "$STATUS" -ne 0 ]; then
             echo "First colcon build failed. Cleaning caches and retrying..."
             # Remove host tarball caches to avoid uploading stale cache on failure
-            rm -f .colcon-cache/ros2_build.tgz .colcon-cache/ros2_install.tgz .colcon-cache/ros2_log.tgz || true
+            rm -f .colcon-cache/ros2_build.tgz .colcon-cache/ros2_install.tgz || true
             # Clean in-container build/install/log directories
             docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
               set -euo pipefail;
@@ -252,7 +250,7 @@ jobs:
               sudo rm -rf "$WS/build"/* "$WS/install"/* "$WS/log"/* || true;
               mkdir -p "$WS/build" "$WS/install" "$WS/log";
             '
-            # Retry once more
+            # Retry once more (no --continue-on-error so partial builds are never cached)
             docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc "$BUILD_CMD"
           fi
 
@@ -302,24 +300,18 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p .colcon-cache
-          # Save build
+          # Save build (fail loudly — corrupt tarballs must not be cached)
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
             set -euo pipefail;
-            WS=/home/ubuntu/ros2_workspaces; cd "$WS/build" 2>/dev/null || mkdir -p "$WS/build" && cd "$WS/build";
-            tar -czf - . || true;
+            WS=/home/ubuntu/ros2_workspaces; cd "$WS/build";
+            tar -czf - .;
           ' > ./.colcon-cache/ros2_build.tgz
           # Save install
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
             set -euo pipefail;
-            WS=/home/ubuntu/ros2_workspaces; cd "$WS/install" 2>/dev/null || mkdir -p "$WS/install" && cd "$WS/install";
-            tar -czf - . || true;
+            WS=/home/ubuntu/ros2_workspaces; cd "$WS/install";
+            tar -czf - .;
           ' > ./.colcon-cache/ros2_install.tgz
-          # Save log
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc '
-            set -euo pipefail;
-            WS=/home/ubuntu/ros2_workspaces; cd "$WS/log" 2>/dev/null || mkdir -p "$WS/log" && cd "$WS/log";
-            tar -czf - . || true;
-          ' > ./.colcon-cache/ros2_log.tgz
 
       - name: Debug check cache directory after save
         run: |
@@ -342,13 +334,15 @@ jobs:
             fi
           done
 
-      - name: Save primary colcon cache (if miss)
+      - name: Save primary colcon cache (only on success)
+        if: success()
         uses: actions/cache/save@v4
         with:
           path: .colcon-cache
           key: colcon-${{ env.BRANCH_SLUG }}-${{ steps.sanitize_cache_platform.outputs.slug }}-${{ steps.config_hash.outputs.hash }}
 
-      - name: Save shared fallback cache (if miss)
+      - name: Save shared fallback cache (only on success)
+        if: success()
         uses: actions/cache/save@v4
         with:
           path: .colcon-cache

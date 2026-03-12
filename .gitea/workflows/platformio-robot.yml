@@ -46,13 +46,12 @@ jobs:
           path: |
             ~/.platformio
             mcu_ws/.pio
-            mcu_ws/.pioenvs
             mcu_ws/libs_external/esp32/micro_ros_platformio/build
             mcu_ws/libs_external/esp32/micro_ros_platformio/libmicroros
             mcu_ws/libs_external/teensy/micro_ros_platformio/build
             mcu_ws/libs_external/teensy/micro_ros_platformio/libmicroros
             ~/.cache/pip
-          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/extra_packages/**','mcu_ws/libs_external/**') }}
+          key: platformio-${{ runner.os }}-${{ hashFiles('mcu_ws/platformio.ini', 'mcu_ws/extra_packages/mcu_msgs/msg/**', 'mcu_ws/extra_packages/mcu_msgs/srv/**', 'mcu_ws/extra_packages/mcu_msgs/action/**', 'mcu_ws/libs_external/**/library.json', 'mcu_ws/libs_external/**/metas/**') }}
           restore-keys: |
             platformio-${{ runner.os }}-
 

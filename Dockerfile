@@ -54,8 +54,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /home/$USER_NAME/ros2_workspaces/src
 
 # 3. Clone micro-ROS setup (Done as root to avoid permission jumping, chown later)
+# Pinned to a specific commit for reproducible Docker layer caching.
+# To update: check https://github.com/micro-ROS/micro_ros_setup/commits/jazzy for latest.
 WORKDIR /home/$USER_NAME/ros2_workspaces
-RUN git clone -b $ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
+RUN git clone https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup && \
+    cd src/micro_ros_setup && git checkout 526d0c5
 
 # Install dependencies for the workspace
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
@@ -72,7 +75,7 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 
 # Upgrade cmake to 3.29+ — system cmake 3.28 lacks GCC 13.3 compiler feature
 # tables and has a cross-compilation regression for ARM STATIC_LIBRARY builds.
-RUN pip3 install --break-system-packages --upgrade cmake
+RUN pip3 install --break-system-packages cmake==3.29.6
 
 # Fix permissions so the user/group own their workspace
 RUN chown -R $USER_UID:$USER_GID /home/$USER_NAME || true

@@ -194,8 +194,12 @@ void MissionSequencer::tickNavMove() {
       return;
 
     case NavSubStep::TURN_TO_FACE: {
-      // Send turn-in-place: stay at current position, face travel heading
-      if (!goal_reached_) {
+      // P-controller turn via DRIVE_VECTOR — no GOAL mode position correction
+      if (turnReachedHeading(nav_travel_heading_)) {
+        RCLCPP_INFO(this->get_logger(), "  NavMove: TURN_TO_FACE complete");
+        advanceNavSubStep(NavSubStep::PAUSE);  // stopRobot() called inside
+      } else {
+        sendTurnInPlace(nav_travel_heading_);
         double elapsed =
             std::chrono::duration<double>(std::chrono::steady_clock::now() -
                                           nav_substep_timer_)
@@ -203,11 +207,8 @@ void MissionSequencer::tickNavMove() {
         if (elapsed > TURN_TIMEOUT_S) {
           RCLCPP_WARN(this->get_logger(),
                       "  NavMove: TURN_TO_FACE timed out (%.1f s)", elapsed);
-          advanceNavSubStep(NavSubStep::PAUSE);
+          advanceNavSubStep(NavSubStep::PAUSE);  // stopRobot() called inside
         }
-      } else {
-        RCLCPP_INFO(this->get_logger(), "  NavMove: TURN_TO_FACE complete");
-        advanceNavSubStep(NavSubStep::PAUSE);
       }
       break;
     }
@@ -244,7 +245,12 @@ void MissionSequencer::tickNavMove() {
     }
 
     case NavSubStep::TURN_TO_HEADING: {
-      if (!goal_reached_) {
+      // P-controller turn via DRIVE_VECTOR
+      if (turnReachedHeading(nav_final_heading_)) {
+        RCLCPP_INFO(this->get_logger(), "  NavMove: TURN_TO_HEADING complete");
+        advanceNavSubStep(NavSubStep::DONE);  // stopRobot() called inside
+      } else {
+        sendTurnInPlace(nav_final_heading_);
         double elapsed =
             std::chrono::duration<double>(std::chrono::steady_clock::now() -
                                           nav_substep_timer_)
@@ -252,11 +258,8 @@ void MissionSequencer::tickNavMove() {
         if (elapsed > TURN_TIMEOUT_S) {
           RCLCPP_WARN(this->get_logger(),
                       "  NavMove: TURN_TO_HEADING timed out (%.1f s)", elapsed);
-          advanceNavSubStep(NavSubStep::DONE);
+          advanceNavSubStep(NavSubStep::DONE);  // stopRobot() called inside
         }
-      } else {
-        RCLCPP_INFO(this->get_logger(), "  NavMove: TURN_TO_HEADING complete");
-        advanceNavSubStep(NavSubStep::DONE);
       }
       break;
     }
@@ -288,15 +291,21 @@ void MissionSequencer::tickNavMove() {
           nav_substep_timer_ = std::chrono::steady_clock::now();
           RCLCPP_INFO(this->get_logger(), "  NavMove: → DRIVE");
         } else if (nav_pause_next_ == NavSubStep::TURN_TO_HEADING) {
-          // Start final heading turn
-          goal_reached_ = false;
-          goal_x_m_ = nav_target_.x_m;
-          goal_y_m_ = nav_target_.y_m;
-          goal_theta_rad_ = nav_final_heading_;
-          sendGoalMcu(nav_target_.x_m, nav_target_.y_m, nav_final_heading_);
-          nav_sub_step_ = NavSubStep::TURN_TO_HEADING;
-          nav_substep_timer_ = std::chrono::steady_clock::now();
-          RCLCPP_INFO(this->get_logger(), "  NavMove: → TURN_TO_HEADING");
+          // Check if heading turn is even needed
+          double hdg_err = std::abs(
+              normalizeAngle(nav_final_heading_ - robot_theta_rad_));
+          if (hdg_err < HEADING_TOL_RAD) {
+            RCLCPP_INFO(this->get_logger(),
+                        "  NavMove: skip TURN_TO_HEADING (err=%.1f deg < tol)",
+                        rad2deg(hdg_err));
+            nav_sub_step_ = NavSubStep::DONE;
+          } else {
+            // Enter turn sub-step — P-controller runs on next tick
+            goal_reached_ = false;  // clear stale flag from DRIVE
+            nav_sub_step_ = NavSubStep::TURN_TO_HEADING;
+            nav_substep_timer_ = std::chrono::steady_clock::now();
+            RCLCPP_INFO(this->get_logger(), "  NavMove: → TURN_TO_HEADING");
+          }
         } else {
           nav_sub_step_ = NavSubStep::DONE;
         }
@@ -317,18 +326,12 @@ void MissionSequencer::advanceNavSubStep(NavSubStep next) {
       RCLCPP_INFO(this->get_logger(),
                   "  NavMove: skip TURN_TO_FACE (err=%.1f deg < tol)",
                   rad2deg(hdg_err));
-      // Go to pause before drive
       nav_pause_next_ = NavSubStep::DRIVE;
       nav_sub_step_ = NavSubStep::PAUSE;
       nav_substep_timer_ = std::chrono::steady_clock::now();
       return;
     }
-    // Send turn-in-place command
-    goal_reached_ = false;
-    goal_x_m_ = robot_x_m_;
-    goal_y_m_ = robot_y_m_;
-    goal_theta_rad_ = nav_travel_heading_;
-    sendGoalMcu(robot_x_m_, robot_y_m_, nav_travel_heading_);
+    // Enter turn sub-step — tickNavMove() runs P-controller via DRIVE_VECTOR
     nav_sub_step_ = NavSubStep::TURN_TO_FACE;
     nav_substep_timer_ = std::chrono::steady_clock::now();
     RCLCPP_INFO(this->get_logger(), "  NavMove: → TURN_TO_FACE (%.1f deg)",
@@ -357,11 +360,7 @@ void MissionSequencer::advanceNavSubStep(NavSubStep next) {
       nav_sub_step_ = NavSubStep::DONE;
       return;
     }
-    goal_reached_ = false;
-    goal_x_m_ = nav_target_.x_m;
-    goal_y_m_ = nav_target_.y_m;
-    goal_theta_rad_ = nav_final_heading_;
-    sendGoalMcu(nav_target_.x_m, nav_target_.y_m, nav_final_heading_);
+    // Enter turn sub-step — tickNavMove() runs P-controller via DRIVE_VECTOR
     nav_sub_step_ = NavSubStep::TURN_TO_HEADING;
     nav_substep_timer_ = std::chrono::steady_clock::now();
     RCLCPP_INFO(this->get_logger(),
@@ -394,6 +393,27 @@ void MissionSequencer::sendGoalMcu(double x_m, double y_m, double theta_rad,
   last_drive_cmd_ = msg;
   last_drive_mode_ = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
   drive_cmd_pub_->publish(msg);
+}
+
+void MissionSequencer::sendTurnInPlace(double target_rad) {
+  double err = normalizeAngle(target_rad - robot_theta_rad_);
+  double omega = TURN_KP * err;
+
+  // Clamp magnitude
+  if (omega > TURN_MAX_OMEGA) omega = TURN_MAX_OMEGA;
+  if (omega < -TURN_MAX_OMEGA) omega = -TURN_MAX_OMEGA;
+
+  // Apply minimum omega to overcome static friction (keep sign)
+  if (std::abs(omega) < TURN_MIN_OMEGA && std::abs(err) > 0.01) {
+    omega = (err > 0) ? TURN_MIN_OMEGA : -TURN_MIN_OMEGA;
+  }
+
+  sendVelocity(0.0, omega);
+}
+
+bool MissionSequencer::turnReachedHeading(double target_rad) const {
+  return std::abs(normalizeAngle(target_rad - robot_theta_rad_)) <
+         HEADING_TOL_RAD;
 }
 
 void MissionSequencer::sendVelocity(double vx_mps, double omega_radps) {

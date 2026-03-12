@@ -24,7 +24,6 @@
 #include <mcu_msgs/msg/drive_base.hpp>
 #include <mcu_msgs/msg/intake_command.hpp>
 #include <mcu_msgs/msg/intake_state.hpp>
-#include <mcu_msgs/msg/mini_robot_state.hpp>
 #include <mcu_msgs/msg/robot_inputs.hpp>
 #include <mcu_msgs/srv/reset.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -89,9 +88,6 @@ class MissionSequencer : public rclcpp::Node {
   }
 
   // ── Unit helpers ──
-  static double cm2m(double cm) { return cm * 0.01; }
-  static double m2cm(double m) { return m * 100.0; }
-  static double deg2rad(double deg) { return deg * M_PI / 180.0; }
   static double rad2deg(double rad) { return rad * 180.0 / M_PI; }
 
   static double normalizeAngle(double a) {
@@ -111,6 +107,13 @@ class MissionSequencer : public rclcpp::Node {
   static constexpr double DEFAULT_STEP_TIMEOUT_S = 15.0;
   static constexpr double NUDGE_SPEED_MPS = 0.25;
   static constexpr double SETUP_SETTLE_S = 0.5;
+
+  // ── Turn-in-place P-controller ──
+  // Uses DRIVE_VECTOR mode (vx=0, omega=K*err) so MCU never tries to
+  // correct a phantom position error from atan2 when dist < poseDistTol.
+  static constexpr double TURN_KP = 2.0;              // rad/s per rad (matches MCU)
+  static constexpr double TURN_MAX_OMEGA = 3.0;       // rad/s cap (conservative)
+  static constexpr double TURN_MIN_OMEGA = 0.3;       // rad/s floor to overcome friction
 
   // ── Task IDs ──
   static constexpr uint8_t TASK_NONE = 0;
@@ -152,6 +155,8 @@ class MissionSequencer : public rclcpp::Node {
   // ── Low-level MCU command helpers ──
   void sendGoalMcu(double x_m, double y_m, double theta_rad,
                    bool reverse = false);
+  void sendTurnInPlace(double target_rad);  // P-controller via DRIVE_VECTOR
+  bool turnReachedHeading(double target_rad) const;
   void sendVelocity(double vx_mps, double omega_radps);
   void sendNudge(double speed_mps);
   void stopRobot();

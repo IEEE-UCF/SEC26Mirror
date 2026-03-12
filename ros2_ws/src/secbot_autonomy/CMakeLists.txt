@@ -74,6 +74,21 @@ ament_target_dependencies(mission_node
   mcu_msgs
 )
 
+# Mission sequencer executable (corrected turn-before-drive)
+add_executable(mission_sequencer
+  src/mission_sequencer.cpp
+)
+
+ament_target_dependencies(mission_sequencer
+  rclcpp
+  std_msgs
+  std_srvs
+  geometry_msgs
+  nav_msgs
+  secbot_msgs
+  mcu_msgs
+)
+
 # Drive test node executable
 add_executable(drive_test_node
   src/drive_test_node.cpp
@@ -96,6 +111,7 @@ install(TARGETS
 install(TARGETS
   autonomy_node
   mission_node
+  mission_sequencer
   drive_test_node
   DESTINATION lib/${PROJECT_NAME}
 )

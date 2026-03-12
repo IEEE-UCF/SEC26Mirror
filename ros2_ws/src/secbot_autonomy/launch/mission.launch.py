@@ -12,8 +12,8 @@ def generate_launch_description():
         ),
         Node(
             package='secbot_autonomy',
-            executable='mission_node',
-            name='mission_node',
+            executable='mission_sequencer',
+            name='mission_sequencer',
             output='screen',
         ),
     ])

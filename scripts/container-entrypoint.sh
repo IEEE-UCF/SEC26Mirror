@@ -42,9 +42,9 @@ is_running() {
 # Serial agent for Teensy (auto-reconnect loop)
 (
   while true; do
-    if [ -e /dev/ttyACM0 ] && ! is_running "micro_ros_agent serial"; then
-      echo "[entrypoint] Starting serial micro-ROS agent on /dev/ttyACM0"
-      ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600 || true
+    if [ -e /dev/ttyTeensyROS ] && ! is_running "micro_ros_agent serial"; then
+      echo "[entrypoint] Starting serial micro-ROS agent on /dev/ttyTeensyROS"
+      ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600 || true
       wait $! 2>/dev/null  # reap child
     fi
     sleep 2

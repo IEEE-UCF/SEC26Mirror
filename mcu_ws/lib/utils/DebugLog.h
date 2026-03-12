@@ -20,12 +20,21 @@
 
 #include <Arduino.h>
 
-// USB CDC ignores baud rate — the parameter is only for API compatibility.
+#if defined(__IMXRT1062__)
+// Teensy: use SerialUSB1 (dual-CDC second port), primary Serial for micro-ROS
 #define DEBUG_BEGIN()         do { SerialUSB1.begin(115200); } while (0)
 #define DEBUG_PRINT(...)      SerialUSB1.print(__VA_ARGS__)
 #define DEBUG_PRINTLN(...)    SerialUSB1.println(__VA_ARGS__)
 #define DEBUG_PRINTF(fmt, ...) SerialUSB1.printf(fmt, ##__VA_ARGS__)
 #define DEBUG_FLUSH()         SerialUSB1.flush()
+#else
+// ESP32: use primary Serial (USB CDC or UART0)
+#define DEBUG_BEGIN()         do { Serial.begin(115200); } while (0)
+#define DEBUG_PRINT(...)      Serial.print(__VA_ARGS__)
+#define DEBUG_PRINTLN(...)    Serial.println(__VA_ARGS__)
+#define DEBUG_PRINTF(fmt, ...) Serial.printf(fmt, ##__VA_ARGS__)
+#define DEBUG_FLUSH()         Serial.flush()
+#endif
 
 #else
 

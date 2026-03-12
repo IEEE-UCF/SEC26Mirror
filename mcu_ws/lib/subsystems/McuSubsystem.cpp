@@ -73,7 +73,7 @@ bool MCUSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
 
 void MCUSubsystem::onDestroy() {
   if (pub_.impl) {
-    (void)rcl_publisher_fini(&pub_, node_);
+    [[maybe_unused]] auto rc = rcl_publisher_fini(&pub_, node_);
   }
   node_ = nullptr;
 }
@@ -81,7 +81,7 @@ void MCUSubsystem::onDestroy() {
 void MCUSubsystem::publishStatus() {
   if (!pub_.impl) return;
   msg_.state = uint8_t(data_.mcu_state_);
-  (void)rcl_publish(&pub_, &msg_, NULL);
+  [[maybe_unused]] auto rc2 = rcl_publish(&pub_, &msg_, NULL);
 }
 
 }  // namespace Subsystem

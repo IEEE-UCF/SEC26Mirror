@@ -66,6 +66,14 @@ class IMicroRosParticipant {
 class MicrorosManagerSetup : public Classes::BaseSetup {
  public:
   MicrorosManagerSetup(const char* _id) : Classes::BaseSetup(_id){};
+  MicrorosManagerSetup(const char* _id, const char* node_name,
+                       const char* debug_topic)
+      : Classes::BaseSetup(_id),
+        node_name(node_name),
+        debug_topic(debug_topic){};
+
+  const char* node_name = "robot_manager";
+  const char* debug_topic = "/mcu_robot/debug";
 };
 class MicrorosManager : public Subsystem::RTOSSubsystem {
  public:

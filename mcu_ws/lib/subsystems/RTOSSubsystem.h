@@ -52,6 +52,29 @@ class RTOSSubsystem : public Classes::BaseSubsystem {
     }
   }
 
+  // ESP32-only: core-pinned task with drift-free vTaskDelayUntil timing.
+  // Use for flight-critical subsystems that need precise loop rates.
+#if !defined(__IMXRT1062__)  // ESP32 only
+  void beginThreadedPinned(uint32_t stackSize, int priority,
+                           uint32_t updateRateMs, int core) {
+    task_delay_ms_ = updateRateMs;
+    TaskHandle_t handle = nullptr;
+    BaseType_t rc = xTaskCreatePinnedToCore(
+        taskFunctionPrecise, getInfo(), stackSize,
+        static_cast<void*>(this), priority, &handle, core);
+    if (rc != pdPASS || handle == nullptr) {
+      RTOS_DEBUG_SERIAL.printf(
+          "[RTOS] FAIL xTaskCreatePinnedToCore '%s' rc=%ld stack=%lu pri=%d core=%d heap=%lu\n",
+          getInfo(), (long)rc, stackSize, priority, core,
+          (unsigned long)xPortGetFreeHeapSize());
+    } else {
+      RTOS_DEBUG_SERIAL.printf(
+          "[RTOS] Task '%s' created OK (core=%d, heap free=%lu)\n",
+          getInfo(), core, (unsigned long)xPortGetFreeHeapSize());
+    }
+  }
+#endif
+
  private:
   static void taskFunction(void* pv) {
     auto* self = static_cast<RTOSSubsystem*>(pv);
@@ -63,6 +86,21 @@ class RTOSSubsystem : public Classes::BaseSubsystem {
       vTaskDelay(pdMS_TO_TICKS(self->task_delay_ms_));
     }
   }
+
+#if !defined(__IMXRT1062__)  // ESP32 only
+  static void taskFunctionPrecise(void* pv) {
+    auto* self = static_cast<RTOSSubsystem*>(pv);
+    RTOS_DEBUG_SERIAL.printf("[RTOS] Task '%s' RUNNING (begin, precise)\n", self->getInfo());
+    self->begin();   // virtual dispatch
+    RTOS_DEBUG_SERIAL.printf("[RTOS] Task '%s' begin() done, entering precise loop\n", self->getInfo());
+    TickType_t prev_wake = xTaskGetTickCount();
+    while (true) {
+      self->update();  // virtual dispatch
+      vTaskDelayUntil(&prev_wake, pdMS_TO_TICKS(self->task_delay_ms_));
+    }
+  }
+#endif
+
   uint32_t task_delay_ms_ = 20;
 
 #endif

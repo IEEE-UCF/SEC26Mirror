@@ -11,7 +11,7 @@
 namespace Drone {
 
 struct IRConfig {
-  uint8_t ir_pin = 4;       // GPIO pin for IR LED
+  uint8_t ir_pin = 6;       // GPIO pin for IR LED
   uint16_t address = 0xBB;  // NEC address (from ruleset)
 };
 

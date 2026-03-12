@@ -167,7 +167,7 @@ Verify micro-ROS communication between MCUs and ROS2 nodes.
 1. **Start micro-ROS Agent**:
    ```bash
    # On host or inside Docker
-   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0
+   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS
    ```
 
 2. **Flash micro-ROS Firmware**:

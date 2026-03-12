@@ -9,7 +9,7 @@
  *   Battery load connected across INA219 IN+ / IN- with shunt
  *
  * micro-ROS agent (on host):
- *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b
+ *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b
  * 921600
  *
  * Monitor battery topic:

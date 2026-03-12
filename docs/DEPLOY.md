@@ -54,7 +54,7 @@ The system has three layers:
 ## Prerequisites
 
 Before starting, you need:
-- Raspberry Pi with Raspbian/Ubuntu, connected to Teensy via USB (`/dev/ttyACM0`)
+- Raspberry Pi with Raspbian/Ubuntu, connected to Teensy via USB (`/dev/ttyTeensyROS`)
 - Docker and Docker Compose installed on the Pi
 - The SEC26 repo cloned at `/home/ieee/SEC26`
 - All ESP32s powered (beacons, minibot, drone) with USB cables available for first-time flash
@@ -166,7 +166,7 @@ docker compose up -d --build
 ```
 
 The container-entrypoint.sh (configured in `docker-compose.yml`) automatically starts:
-- A **serial micro-ROS agent** on `/dev/ttyACM0` for the Teensy (auto-reconnects if Teensy reboots)
+- A **serial micro-ROS agent** on `/dev/ttyTeensyROS` for the Teensy (auto-reconnects if Teensy reboots)
 - A **UDP micro-ROS agent** on port 8888 for all ESP32s
 
 ---
@@ -378,7 +378,7 @@ docker compose exec devcontainer bash -c "ps aux | grep micro_ros_agent"
 ```
 
 You should see two processes:
-- `micro_ros_agent serial --dev /dev/ttyACM0 -b 921600` (Teensy)
+- `micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600` (Teensy)
 - `micro_ros_agent udp4 --port 8888` (ESP32s)
 
 Verify ROS2 topics are flowing:
@@ -550,8 +550,8 @@ ls -la /home/ieee/SEC26/scripts/.deploy/
 # Check agents are running inside container
 docker compose exec devcontainer bash -c "ps aux | grep micro_ros_agent"
 
-# If serial agent isn't running, check Teensy USB
-ls /dev/ttyACM*
+# If serial agent isn't running, check Teensy USB symlinks
+ls /dev/ttyTeensyROS /dev/ttyTeensyDebug /dev/ttyDrone
 
 # Restart the container (this restarts the agents)
 docker compose restart devcontainer
@@ -582,10 +582,11 @@ docker compose exec devcontainer bash -c \
 
 ```bash
 # Check Teensy is visible
-ls -la /dev/ttyACM*
+ls -la /dev/ttyTeensyROS /dev/ttyTeensyDebug
 
-# If /dev/ttyACM0 doesn't exist:
+# If symlinks don't exist:
 # - Unplug and replug the Teensy USB cable
+# - Check udev rules are installed
 # - Check dmesg for USB errors: dmesg | tail -20
 
 # Flash manually inside Docker:

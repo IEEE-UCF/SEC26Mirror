@@ -277,7 +277,7 @@ void UWBSubsystem::publishPeerRanges() {
 void UWBSubsystem::publishRanging() {
   if (!pub_.impl || !is_tag_mode_) return;
   updateRangingMessage();
-  (void)rcl_publish(&pub_, &msg_, NULL);
+  [[maybe_unused]] auto rc = rcl_publish(&pub_, &msg_, NULL);
 }
 
 void UWBSubsystem::publishAll() {

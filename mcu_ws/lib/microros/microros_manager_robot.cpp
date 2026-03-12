@@ -128,19 +128,21 @@ void MicrorosManager::update() {
       }
       break;
     case AGENT_CONNECTED:
-      EXECUTE_EVERY_N_MS(2000,
-                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(30, 1))
+      // IMPORTANT: Spin executor FIRST to drain any pending data (service
+      // requests, subscriptions) from the UDP socket buffer.  If we ping
+      // first, rmw_uros_ping_agent reads from the same socket and can
+      // consume/discard non-ping XRCE-DDS packets (like service requests),
+      // causing the ping to fail and tearing down the entire connection.
+      rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(1));
+      // Publish all participant data under the same g_microros_mutex hold.
+      for (size_t i = 0; i < participants_count_; ++i) {
+        if (participants_[i]) participants_[i]->publishAll();
+      }
+      // Keep-alive ping every 5s (after executor has drained the socket).
+      EXECUTE_EVERY_N_MS(5000,
+                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 3))
                                       ? AGENT_CONNECTED
                                       : AGENT_DISCONNECTED;);
-      if (state_ == AGENT_CONNECTED) {
-        rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(1));
-        // Publish all participant data under the same g_microros_mutex hold.
-        // Each participant's publishAll() acquires its own data_mutex_ (inner
-        // lock) and calls rcl_publish if new data is ready.
-        for (size_t i = 0; i < participants_count_; ++i) {
-          if (participants_[i]) participants_[i]->publishAll();
-        }
-      }
       break;
     case AGENT_DISCONNECTED:
       destroy_entities();
@@ -197,10 +199,10 @@ void MicrorosManager::debugLog(const char* text) {
 #if defined(USE_FREERTOS)
   {
     Threads::Scope guard(g_microros_mutex);
-    (void)rcl_publish(&debug_pub_, &debug_msg_, NULL);
+    [[maybe_unused]] auto rc = rcl_publish(&debug_pub_, &debug_msg_, NULL);
   }
 #else
-  (void)rcl_publish(&debug_pub_, &debug_msg_, NULL);
+  [[maybe_unused]] auto rc = rcl_publish(&debug_pub_, &debug_msg_, NULL);
 #endif
 }
 

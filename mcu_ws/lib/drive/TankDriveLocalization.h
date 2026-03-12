@@ -84,6 +84,8 @@ class TankDriveLocalization {
   Pose2D currentPose;
   long prevLeftTicks = 0;
   long prevRightTicks = 0;
+  float yaw_offset_ = 0.0f;
+  float last_raw_yaw_ = 0.0f;
   char infoBuffer_[64];
 };
 

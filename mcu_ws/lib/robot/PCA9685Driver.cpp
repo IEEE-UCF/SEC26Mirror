@@ -33,25 +33,21 @@ bool PCA9685Driver::init() {
 void PCA9685Driver::writeDigital(uint8_t channel, bool on) {
   if (channel > 15) return;
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
   if (on)
     pwm_.setPWM(channel, 4096, 0);
   else
     pwm_.setPWM(channel, 0, 4096);
-  __enable_irq();
 }
 
 void PCA9685Driver::writePWM(uint8_t channel, uint16_t duty) {
   if (channel > 15) return;
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
   if (duty >= 4095)
     pwm_.setPWM(channel, 4096, 0);
   else if (duty == 0)
     pwm_.setPWM(channel, 0, 4096);
   else
     pwm_.setPWM(channel, 0, duty);
-  __enable_irq();
 }
 
 // ── Buffered operations
@@ -71,7 +67,6 @@ void PCA9685Driver::bufferPWM(uint8_t channel, uint16_t duty) {
 
 void PCA9685Driver::applyBuffered() {
   I2CBus::Lock lock(setup_.wire_);
-  __disable_irq();
   for (uint8_t ch = 0; ch < 16; ++ch) {
     if (!buffer_dirty_[ch]) continue;
     uint16_t duty = buffer_[ch];
@@ -83,7 +78,6 @@ void PCA9685Driver::applyBuffered() {
       pwm_.setPWM(ch, 0, duty);
     buffer_dirty_[ch] = false;
   }
-  __enable_irq();
 }
 
 void PCA9685Driver::update() { applyBuffered(); }

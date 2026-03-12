@@ -226,26 +226,27 @@ Each subsystem runs as an independent **TeensyThreads** task with configurable p
 
 | Priority | Subsystem | Rate | Stack |
 |----------|-----------|------|-------|
-| 4 (highest) | micro-ROS Manager | — | 8192 |
-| 3 | IMU | 30ms (~33 Hz) | 8192 |
-| 3 | Drive | 20ms (50 Hz) | 4096 |
-| 2 | Servo | 25ms (40 Hz) | 1024 |
-| 2 | Motor Manager | 1ms (1000 Hz) | 1024 |
-| 2 | Encoder | 20ms (50 Hz) | 1024 |
-| 2 | UWB | 50ms (20 Hz) | 2048 |
-| 2 | Arm, Intake | 20ms (50 Hz) | 1024 |
-| 1 | OLED | 25ms (40 Hz) | 2048 |
-| 1 | Battery | 100ms (10 Hz) | 1024 |
-| 1 | Sensor (TOF) | 100ms (10 Hz) | 1024 |
-| 1 | DIP Switch | 500ms (2 Hz) | 1024 |
-| 1 | Button | 20ms (50 Hz) | 1024 |
-| 1 | LED | 50ms (20 Hz) | 1024 |
-| 1 | Heartbeat | 1000ms (1 Hz) | 1024 |
-| 1 | Deploy | 20ms (50 Hz) | 1024 |
-| 1 | Crank | 50ms (20 Hz) | 1024 |
-| 1 | Keypad | 50ms (20 Hz) | 1024 |
-| main loop | RC Receiver | 5ms delay | — |
-| dedicated | PCA9685 PWM flush | 20ms | 1024 |
+| 4 (highest) | IMU | 10ms (100 Hz) | 8192 |
+| 4 | Drive | 20ms (50 Hz) | 4096 |
+| 3 | Servo | 100ms (10 Hz) | 2048 |
+| 3 | Motor Manager | 1ms (1000 Hz) | 2048 |
+| 3 | Encoder | 50ms (20 Hz) | 2048 |
+| 3 | UWB | 200ms (5 Hz) | 2048 |
+| 3 | Arm, Intake | 50ms (20 Hz) | 2048 |
+| 3 | PCA9685 DMA flush (Wire2) | DMA-driven | 2048 |
+| 2 | OLED | 100ms (10 Hz) | 2048 |
+| 2 | Battery | 2000ms (0.5 Hz) | 2048 |
+| 2 | Sensor (TOF) | 500ms (2 Hz) | 2048 |
+| 2 | DIP Switch | 2000ms (0.5 Hz) | 2048 |
+| 2 | Button | 100ms (10 Hz) | 2048 |
+| 2 | LED | 200ms (5 Hz) | 2048 |
+| 2 | Heartbeat | 1000ms (1 Hz) | 2048 |
+| 2 | Deploy | 100ms (10 Hz) | 2048 |
+| 2 | Crank | 200ms (5 Hz) | 2048 |
+| 2 | Keypad | 200ms (5 Hz) | 2048 |
+| 2 | Wire0 DMA (mux+battery+GPIO) | 20ms (50 Hz) | 2048 |
+| 2 | RC + manual drive | 5ms (200 Hz) | 2048 |
+| 1 (lowest) | micro-ROS Manager | 10ms (leftover cycles) | 8192 |
 
 **Important hardware quirks:**
 - **RC Receiver**: Must be polled from main `loop()`, not a TeensyThreads thread — IBusBM NOTIMER mode only works from the main thread context.

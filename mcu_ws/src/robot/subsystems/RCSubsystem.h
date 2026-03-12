@@ -7,16 +7,12 @@
 #pragma once
 
 #include <Arduino.h>
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <IBusBM.h>
 #include <mcu_msgs/msg/rc.h>
 #include <microros_manager_robot.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -54,10 +50,10 @@ class RCSubsystemSetup : public Classes::BaseSetup {
  * to the "mcu_robot/rc" topic. No input commands from Raspberry Pi are
  * required.
  */
-class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
+class RCSubsystem : public IMicroRosParticipant, public Subsystem::RTOSSubsystem {
  public:
   explicit RCSubsystem(const RCSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override;
@@ -77,26 +73,6 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   /** @brief Access raw RC channel data (updated every loop cycle). */
   const RCSubsystemData& getData() const { return data_; }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 5) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<RCSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 5;
-#endif
-
  private:
   void updateRCData();
   void publishRC();
@@ -114,9 +90,7 @@ class RCSubsystem : public IMicroRosParticipant, public Classes::BaseSubsystem {
   rcl_node_t* node_ = nullptr;
   uint32_t last_publish_ms_ = 0;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

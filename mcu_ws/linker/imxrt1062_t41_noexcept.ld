@@ -55,6 +55,13 @@ SECTIONS
 	__exidx_start = .;
 	__exidx_end = .;
 
+	/* Dummy symbols for framework-arduinoteensy-ts startup.c ResetHandler2()
+	 * which does memory_copy(&_sexidx, &_sexidxload, &_eexidx).
+	 * All equal => zero-length copy (no exception tables to copy). */
+	_sexidx = .;
+	_eexidx = .;
+	_sexidxload = .;
+
 	.data : {
 		*(.endpoint_queue)
 		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.rodata*)))

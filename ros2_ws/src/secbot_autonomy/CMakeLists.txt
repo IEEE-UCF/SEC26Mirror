@@ -14,6 +14,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(secbot_msgs REQUIRED)
 find_package(mcu_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -73,6 +74,17 @@ ament_target_dependencies(mission_node
   mcu_msgs
 )
 
+# Drive test node executable
+add_executable(drive_test_node
+  src/drive_test_node.cpp
+)
+
+ament_target_dependencies(drive_test_node
+  rclcpp
+  mcu_msgs
+  sensor_msgs
+)
+
 # Install targets
 install(TARGETS
   secbot_tasks
@@ -84,6 +96,7 @@ install(TARGETS
 install(TARGETS
   autonomy_node
   mission_node
+  drive_test_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

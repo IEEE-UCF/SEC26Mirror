@@ -16,6 +16,8 @@
 
 #include "I2CBusLock.h"
 
+class I2CDMABus;
+
 namespace Drivers {
 
 // Forward declaration — keeps I2CPowerDriver.h independent of I2CMuxDriver.h.
@@ -92,11 +94,20 @@ class I2CPowerDriver : public Classes::BaseDriver {
 
   const char* getInfo() override;
 
+  // ── DMA support ──────────────────────────────────────────────────────
+  void setDMABus(I2CDMABus* bus) { dma_bus_ = bus; }
+  void queueDMAReads();
+  void processDMAResults();
+
  private:
   const I2CPowerDriverSetup _setup;
   PowerDriverData _data;
   Adafruit_INA219 _sensor;
   char _infoBuf[128] = {};
+
+  I2CDMABus* dma_bus_ = nullptr;
+  uint8_t dma_rx_shunt_[2] = {};
+  uint8_t dma_rx_bus_[2] = {};
 };
 
 }  // namespace Drivers

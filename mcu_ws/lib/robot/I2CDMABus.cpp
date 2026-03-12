@@ -1,3 +1,10 @@
+/**
+ * @file I2CDMABus.cpp
+ * @brief Implementation of I2CDMABus — two-phase DMA engine for shared
+ *        I2C buses on Teensy 4.1 (i.MX RT1062).
+ * @see I2CDMABus.h
+ */
+
 #include "I2CDMABus.h"
 
 // ── Static instance table for ISR routing ──────────────────────────────────
@@ -32,6 +39,10 @@ I2CDMABus::I2CDMABus(TwoWire &wire, uint32_t clock_hz)
   // Mark TX DMA as done so first fire() succeeds.
   tx_dma_.TCD->CSR |= DMA_TCD_CSR_DONE;
   rx_dma_.TCD->CSR |= DMA_TCD_CSR_DONE;
+
+  // Configure bus clock speed once (all users on this bus share the same rate).
+  wire_.begin();
+  wire_.setClock(clock_hz_);
 }
 
 // ── Queue: register write ──────────────────────────────────────────────────
@@ -111,12 +122,29 @@ bool I2CDMABus::fire()
   I2CBus::mutexFor(wire_).lock();
   bus_locked_ = true;
 
-  // Set bus clock speed.
+  // Re-assert clock speed: driver inits (e.g. PCA9685) may have called
+  // Wire.begin() which resets to 100 kHz defaults.
   wire_.setClock(clock_hz_);
+
+#if defined(USE_FREERTOS)
+  // Record caller so DMA ISR can notify on completion.
+  waiting_task_ = xTaskGetCurrentTaskHandle();
+#endif
 
   // Flush TX buffer from data cache if it lives in cached memory (OCRAM).
   if ((uint32_t)tx_buf_ >= 0x20200000u)
     arm_dcache_flush((void *)tx_buf_, tx_pos_ * sizeof(uint16_t));
+
+  // ── RX DMA setup (must be ready BEFORE TX starts sending RECEIVE cmds) ──
+  if (rx_expect_ > 0) {
+    rx_dma_.clearComplete();
+    rx_dma_.source(port_->MRDR);
+    rx_dma_.destinationBuffer(rx_buf_, rx_expect_);
+    rx_dma_.transferSize(1);               // 1-byte reads from LSB of MRDR
+    rx_dma_.transferCount(rx_expect_);
+    rx_dma_.disableOnCompletion();
+    rx_dma_.triggerAtHardwareEvent(dma_mux_src_);
+  }
 
   // ── TX DMA setup ───────────────────────────────────────────────────
   tx_dma_.clearComplete();
@@ -125,6 +153,7 @@ bool I2CDMABus::fire()
   tx_dma_.transferSize(2);         // 16-bit MTDR writes
   tx_dma_.transferCount(tx_pos_);
   tx_dma_.disableOnCompletion();
+  tx_dma_.interruptAtCompletion();
   tx_dma_.triggerAtHardwareEvent(dma_mux_src_);
 
   // Attach TX-complete ISR.
@@ -134,14 +163,27 @@ bool I2CDMABus::fire()
     case 2: tx_dma_.attachInterrupt(txISR2); break;
   }
 
-  // If there are reads pending, we need the two-phase handoff.
-  // If TX-only, we just let TX complete and mark done.
-
-  // Enable TX DMA requests on the LPI2C peripheral.
-  port_->MDER = LPI2C_MDER_TDDE;
+  // Enable both TX and RX DMA requests simultaneously so the peripheral
+  // can drain MRDR via DMA as soon as RECEIVE commands produce data.
+  port_->MDER = LPI2C_MDER_TDDE | (rx_expect_ > 0 ? LPI2C_MDER_RDDE : 0);
+  if (rx_expect_ > 0) rx_dma_.enable();
   tx_dma_.enable();
 
   return true;
+}
+
+// ── Notify waiting task from ISR ────────────────────────────────────────────
+
+void I2CDMABus::notifyTaskFromISR()
+{
+#if defined(USE_FREERTOS)
+  if (waiting_task_) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(waiting_task_, &xHigherPriorityTaskWoken);
+    waiting_task_ = nullptr;
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
+#endif
 }
 
 // ── TX complete ISR ────────────────────────────────────────────────────────
@@ -151,46 +193,28 @@ void I2CDMABus::onTxComplete()
   tx_dma_.clearInterrupt();
   tx_dma_.clearComplete();
 
-  if (rx_expect_ == 0) {
-    // TX-only cycle — we're done.
-    transfer_done_ = true;
-    return;
-  }
-
-  // ── Phase 2: set up RX DMA ──────────────────────────────────────────
-  // Disable TX DMA requests, enable RX DMA requests.
-  port_->MDER = LPI2C_MDER_RDDE;
-
-  rx_dma_.clearComplete();
-  rx_dma_.source(port_->MRDR);           // read from MRDR register
-  rx_dma_.destinationBuffer(rx_buf_, rx_expect_);
-  rx_dma_.transferSize(1);                // 1-byte reads from LSB of MRDR
-  rx_dma_.transferCount(rx_expect_);
-  rx_dma_.disableOnCompletion();
-  rx_dma_.triggerAtHardwareEvent(dma_mux_src_);
-
-  // Attach RX-complete ISR.
-  switch (instance_idx_) {
-    case 0: rx_dma_.attachInterrupt(rxISR0); break;
-    case 1: rx_dma_.attachInterrupt(rxISR1); break;
-    case 2: rx_dma_.attachInterrupt(rxISR2); break;
-  }
-
-  rx_dma_.enable();
-}
-
-// ── RX complete ISR ────────────────────────────────────────────────────────
-
-void I2CDMABus::onRxComplete()
-{
-  rx_dma_.clearInterrupt();
-  rx_dma_.clearComplete();
-
-  // Disable all DMA requests on the peripheral.
+  // RX DMA (if any) already completed during the TX phase.
   port_->MDER = 0;
-
   transfer_done_ = true;
+  notifyTaskFromISR();
 }
+
+
+// ── Wait for completion (FreeRTOS) ──────────────────────────────────────────
+
+#if defined(USE_FREERTOS)
+bool I2CDMABus::waitComplete(uint32_t timeout_ms)
+{
+  if (transfer_done_) return true;
+
+  // Block until ISR notifies us or timeout expires.
+  TickType_t ticks = pdMS_TO_TICKS(timeout_ms);
+  if (ticks == 0) ticks = 1;  // at least 1 tick
+  ulTaskNotifyTake(pdTRUE, ticks);
+
+  return transfer_done_;
+}
+#endif
 
 // ── Dispatch: copy RX data to destinations, release lock, reset ────────────
 

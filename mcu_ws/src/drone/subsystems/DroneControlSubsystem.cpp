@@ -5,7 +5,15 @@ namespace Drone {
 //  Lifecycle
 
 void DroneControlSubsystem::init() {
-  // Setup ESP32 LEDC PWM channels for each motor (Arduino Core v2 API)
+  // Setup ESP32 LEDC PWM for each motor
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  // Arduino Core v3 API: ledcAttach(pin, freq, resolution)
+  ledcAttach(cfg_.motors.pin_fl, cfg_.motors.pwm_freq, cfg_.motors.pwm_resolution);
+  ledcAttach(cfg_.motors.pin_fr, cfg_.motors.pwm_freq, cfg_.motors.pwm_resolution);
+  ledcAttach(cfg_.motors.pin_rr, cfg_.motors.pwm_freq, cfg_.motors.pwm_resolution);
+  ledcAttach(cfg_.motors.pin_rl, cfg_.motors.pwm_freq, cfg_.motors.pwm_resolution);
+#else
+  // Arduino Core v2 API: ledcSetup(channel, freq, resolution) + ledcAttachPin(pin, channel)
   ledcSetup(LEDC_FL, cfg_.motors.pwm_freq, cfg_.motors.pwm_resolution);
   ledcSetup(LEDC_FR, cfg_.motors.pwm_freq, cfg_.motors.pwm_resolution);
   ledcSetup(LEDC_RR, cfg_.motors.pwm_freq, cfg_.motors.pwm_resolution);
@@ -15,12 +23,16 @@ void DroneControlSubsystem::init() {
   ledcAttachPin(cfg_.motors.pin_fr, LEDC_FR);
   ledcAttachPin(cfg_.motors.pin_rr, LEDC_RR);
   ledcAttachPin(cfg_.motors.pin_rl, LEDC_RL);
+#endif
 
   // Motors off
   disarm();
 }
 
 void DroneControlSubsystem::arm() {
+  // GPIO 1 is shared with UART0 TX — release it so Serial doesn't
+  // glitch the motor PWM signal while flying.
+  Serial.end();
   resetPIDStates();
   armed_ = true;
 }
@@ -30,6 +42,8 @@ void DroneControlSubsystem::disarm() {
   motors_[0] = motors_[1] = motors_[2] = motors_[3] = 0.0f;
   writeMotors();
   resetPIDStates();
+  // Re-enable Serial now that motors are off and GPIO 1 is free.
+  Serial.begin(921600);
 }
 
 void DroneControlSubsystem::update(const IMUData& imu, float altitude_m,
@@ -182,10 +196,19 @@ void DroneControlSubsystem::writeMotors() {
     return (uint32_t)(constrain(val, 0.0f, 1.0f) * max_duty);
   };
 
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  // v3 API: ledcWrite(pin, duty)
+  ledcWrite(cfg_.motors.pin_fl, duty(motors_[0]));
+  ledcWrite(cfg_.motors.pin_fr, duty(motors_[1]));
+  ledcWrite(cfg_.motors.pin_rr, duty(motors_[2]));
+  ledcWrite(cfg_.motors.pin_rl, duty(motors_[3]));
+#else
+  // v2 API: ledcWrite(channel, duty)
   ledcWrite(LEDC_FL, duty(motors_[0]));
   ledcWrite(LEDC_FR, duty(motors_[1]));
   ledcWrite(LEDC_RR, duty(motors_[2]));
   ledcWrite(LEDC_RL, duty(motors_[3]));
+#endif
 }
 
 }  // namespace Drone

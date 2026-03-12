@@ -17,7 +17,7 @@ constexpr uint32_t PWM_FREQ = 20000;
 constexpr uint8_t PWM_RES = 10;
 constexpr uint32_t PWM_MAX = (1 << PWM_RES) - 1;
 
-constexpr float MAX_DUTY = 1.0f;
+constexpr float MAX_DUTY = 0.5f;
 constexpr uint32_t RAMP_MS = 4000;  // 10s total: 5s up, 5s down
 
 void setAll(float duty) {

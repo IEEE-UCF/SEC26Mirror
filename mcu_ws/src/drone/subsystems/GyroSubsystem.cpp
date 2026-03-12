@@ -156,6 +156,15 @@ void GyroSubsystem::update() {
   if (events_read >= MAX_EVENTS_PER_UPDATE) {
     DRONE_PRINTF("[Gyro] WARN: hit event cap (%d)\n", events_read);
   }
+
+  // Rate measurement — count only ticks with new sensor data
+  if (events_read > 0) rate_count_++;
+  uint32_t now_ms = millis();
+  if (now_ms - rate_start_ms_ >= 1000) {
+    measured_hz_ = rate_count_ * 1000.0f / (now_ms - rate_start_ms_);
+    rate_count_ = 0;
+    rate_start_ms_ = now_ms;
+  }
 }
 
 }  // namespace Drone

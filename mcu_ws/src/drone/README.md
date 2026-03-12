@@ -56,10 +56,97 @@ ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam \
 | `altitude_kp/ki/kd` | 1.2 / 0.15 / 0.0 | Altitude position PID |
 | `alt_vel_kp/ki/kd` | 0.5 / 0.0 / 0.0 | Altitude velocity PID |
 | `hover_throttle` | 0.45 | Baseline throttle for hover |
-| `motor_max_slew` | 5.0 | Max motor change per second (brownout protection) |
+| `motor_max_slew` | 0.5 | Max motor change per second (brownout protection) |
 | `max_roll_deg` | 30.0 | Maximum roll angle limit |
 | `max_pitch_deg` | 30.0 | Maximum pitch angle limit |
 | `max_yaw_rate_dps` | 160.0 | Maximum yaw rate limit |
+
+### Apply All Defaults
+
+```bash
+# Edit values and paste into terminal:
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_angle_kp', value: 1.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_angle_ki', value: 0.5}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_angle_kd', value: 0.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_angle_kp', value: 1.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_angle_ki', value: 0.5}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_angle_kd', value: 0.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_rate_kp', value: 0.003}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_rate_ki', value: 0.001}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_rate_kd', value: 0.00003}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_rate_kp', value: 0.003}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_rate_ki', value: 0.001}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_rate_kd', value: 0.00003}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'yaw_rate_kp', value: 0.005}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'yaw_rate_ki', value: 0.001}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'yaw_rate_kd', value: 0.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'altitude_kp', value: 0.7}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'altitude_ki', value: 0.15}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'altitude_kd', value: 0.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'alt_vel_kp', value: 0.5}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'alt_vel_ki', value: 0.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'alt_vel_kd', value: 0.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'hover_throttle', value: 0.45}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'motor_max_slew', value: 0.5}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_roll_deg', value: 30.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_pitch_deg', value: 30.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_yaw_rate_dps', value: 160.0}"
+```
+
+## PID Tuning Guide
+
+### Tuning Order (always inner loops first)
+
+1. **Rate PIDs** (`roll_rate_kp/ki/kd`, `pitch_rate_kp/ki/kd`)
+2. **Angle PIDs** (`roll_angle_kp/ki/kd`, `pitch_angle_kp/ki/kd`)
+3. **Yaw rate** (`yaw_rate_kp/ki/kd`)
+4. **Altitude velocity** (`alt_vel_kp`) then **altitude position** (`altitude_kp/ki`)
+
+### Method
+
+```bash
+# Shorthand
+alias dp='ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam'
+```
+
+1. Arm the drone, hold by hand or tether loosely
+2. Zero ki and kd, start with kp only:
+   ```bash
+   dp "{param_name: 'roll_rate_ki', value: 0.0}"
+   dp "{param_name: 'roll_rate_kd', value: 0.0}"
+   ```
+3. Increase `roll_rate_kp` until the drone resists rotation when tilted by hand, back off when it oscillates
+4. Add `roll_rate_kd` in small increments to dampen oscillation
+5. Add `roll_rate_ki` last, very small — only if there's steady-state error
+6. Copy roll gains to pitch (symmetric frame)
+7. Move to outer angle loop — same process
+
+### Diagnostics
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Oscillation | kp too high or kd too low | Reduce kp or increase kd |
+| Sluggish response | kp too low | Increase kp |
+| Slow drift / won't hold angle | ki too low | Increase ki |
+| High-frequency vibration | kd too high (amplifying noise) | Reduce kd |
+| Motors saturating (0 or 1.0) | Gains too aggressive | Reduce output limits |
+
+### Monitoring While Tuning
+
+```bash
+# Attitude and state
+ros2 topic echo /mcu_drone/state
+
+# Loop rates and debug info (every 5s)
+ros2 topic echo /mcu_drone/debug
+```
+
+## Safety
+
+- **Crash detection**: If roll or pitch exceeds 2x the max angle limits (default 60 deg) or goes past 90 deg (upside down) for 200ms while flying, motors are immediately killed.
+- **Height timeout**: If VL53L0X data is stale for >200ms (except during LAUNCHING), triggers emergency land.
+- **micro-ROS disconnect**: If agent is unreachable for >3s, triggers emergency land.
+- **IMU failure**: Immediate disarm.
 
 ## Published Topics
 

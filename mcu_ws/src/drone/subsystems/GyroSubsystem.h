@@ -88,6 +88,7 @@ class GyroSubsystem : public Subsystem::RTOSSubsystem {
   }
 
   bool isInitialized() const { return initialized_; }
+  float getHz() const { return measured_hz_; }
 
   // Tare: capture current roll/pitch/yaw as zero reference
   void tare() {
@@ -112,6 +113,9 @@ class GyroSubsystem : public Subsystem::RTOSSubsystem {
   float yaw_offset_ = 0.0f;
   bool auto_tare_pending_ = true;
   mutable SemaphoreHandle_t data_mutex_ = nullptr;
+  uint32_t rate_count_ = 0;
+  uint32_t rate_start_ms_ = 0;
+  float measured_hz_ = 0.0f;
 };
 
 }  // namespace Drone

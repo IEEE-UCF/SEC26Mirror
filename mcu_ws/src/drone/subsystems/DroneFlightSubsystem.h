@@ -101,6 +101,7 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
   void clearOverride() { override_active_ = false; }
 
   float getMotor(uint8_t idx) const { return (idx < 4) ? motors_[idx] : 0.0f; }
+  float getHz() const { return measured_hz_; }
 
   // Runtime parameter tuning (returns true if param_name was recognized)
   bool setParam(const char* param_name, float value);
@@ -162,6 +163,11 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
   // Motor outputs (0.0 to 1.0) [FL, FR, BR, BL]
   float motors_[4] = {};
   float motors_prev_[4] = {};  // previous tick for slew rate limiting
+
+  // Rate tracking
+  uint32_t rate_count_ = 0;
+  uint32_t rate_start_ms_ = 0;
+  float measured_hz_ = 0.0f;
 };
 
 }  // namespace Drone

@@ -25,4 +25,9 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/drone_pid_tuner.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

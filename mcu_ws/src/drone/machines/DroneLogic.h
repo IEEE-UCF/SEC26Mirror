@@ -163,6 +163,10 @@ static Drone::DroneSafetySubsystem g_safety(
 static Drone::DroneIRSubsystem g_drone_ir(g_ir, g_state);
 #endif  // DRONE_DEBUG_STAGE >= 2
 
+// ── Reset reason (published over micro-ROS on first connect) ──
+static char g_reset_reason_str[48] = {0};
+static bool g_reset_reason_published = false;
+
 // Forward declarations
 #if DRONE_DEBUG_STAGE >= 2
 static const char* stateToStr(Drone::DroneState s);
@@ -176,24 +180,26 @@ static void debugDashboardTask(void*);
 // ════════════════════════════════════════════════════════════
 
 void setup() {
+  delay(3000);
   // Disable brownout detector — WiFi + motor current causes transient voltage
   // dips that trigger the default threshold, but the hardware handles it fine
   // (bare motor test runs 4 motors at 100% without issues).
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
-  // Always print reset reason (even without DRONE_SERIAL_DEBUG) so we can
-  // diagnose unexpected restarts via USB serial monitor.
-  Serial.begin(921600);
-  delay(500);
-  if (Serial) {
+  // Capture reset reason — will be published over micro-ROS debug topic
+  // once connected (serial is useless since drone is WiFi-only).
+  {
     esp_reset_reason_t reason = esp_reset_reason();
     const char* reasons[] = {"UNKNOWN","POWERON","EXT","SW","PANIC",
                              "INT_WDT","TASK_WDT","WDT","DEEPSLEEP",
                              "BROWNOUT","SDIO"};
     int r = (int)reason;
-    Serial.printf("[Drone] Reset reason: %s (%d)\n",
-                  (r >= 0 && r <= 10) ? reasons[r] : "?", r);
+    snprintf(g_reset_reason_str, sizeof(g_reset_reason_str),
+             "[Drone] Reset: %s (%d)",
+             (r >= 0 && r <= 10) ? reasons[r] : "?", r);
+    g_reset_reason_published = false;
   }
+  Serial.begin(921600);
 
 #ifdef DRONE_SERIAL_DEBUG
   // Already called Serial.begin above, just wait for terminal
@@ -313,11 +319,33 @@ void setup() {
   g_mr.beginThreaded(8192, 2, 10);  // Lower than flight (4) and safety (3)
   g_hb.beginThreaded(2048, 1, 1000);
 
-  // WiFi + OTA task
+  // WiFi + OTA + debug telemetry task
   xTaskCreate([](void*) {
+    uint32_t last_rate_pub = 0;
     while (true) {
       g_wifi.update();
       ArduinoOTA.handle();
+
+      if (g_mr.isConnected()) {
+        // Publish reset reason once
+        if (!g_reset_reason_published && g_reset_reason_str[0]) {
+          g_mr.debugLog(g_reset_reason_str);
+          g_reset_reason_published = true;
+        }
+
+#if DRONE_DEBUG_STAGE >= 2
+        // Publish loop rates every 5s
+        uint32_t now = millis();
+        if (now - last_rate_pub >= 5000) {
+          last_rate_pub = now;
+          char buf[64];
+          snprintf(buf, sizeof(buf), "Hz: gyro=%.0f flight=%.0f",
+                   g_gyro.getHz(), g_flight.getHz());
+          g_mr.debugLog(buf);
+        }
+#endif
+      }
+
       vTaskDelay(pdMS_TO_TICKS(100));
     }
   }, "wifi_ota", 4096, nullptr, 1, nullptr);

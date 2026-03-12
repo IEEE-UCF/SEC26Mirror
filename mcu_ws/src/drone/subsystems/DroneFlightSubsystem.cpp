@@ -125,6 +125,15 @@ void DroneFlightSubsystem::update() {
 
   // Run PID + motor mixer
   compute(imu, alt, dt);
+
+  // Rate measurement
+  rate_count_++;
+  uint32_t now_ms = millis();
+  if (now_ms - rate_start_ms_ >= 1000) {
+    measured_hz_ = rate_count_ * 1000.0f / (now_ms - rate_start_ms_);
+    rate_count_ = 0;
+    rate_start_ms_ = now_ms;
+  }
 }
 
 void DroneFlightSubsystem::compute(const IMUData& imu, float altitude_m,

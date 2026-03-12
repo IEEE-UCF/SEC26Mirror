@@ -544,6 +544,7 @@ void test_multi_range_three_anchors_converges() {
 
 void test_multi_range_single_range_works() {
   EKFState s;
+  s.x = 2.0f; // Offset from anchor so Jacobian is well-conditioned
   float P[16];
   init_P(P);
   float d[] = {3.0f};
@@ -554,6 +555,8 @@ void test_multi_range_single_range_works() {
 
 void test_multi_range_two_ranges_works() {
   EKFState s;
+  s.x = 1.0f; // Start near true position to avoid Mahalanobis gate rejection
+  s.y = 1.0f;
   float P[16];
   init_P(P);
   float tx = 1.0f, ty = 1.0f;

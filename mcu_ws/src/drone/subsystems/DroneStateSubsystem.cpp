@@ -169,6 +169,53 @@ bool DroneStateSubsystem::onCreate(rcl_node_t* node,
     return false;
   }
 
+  DRONE_PRINTLN("[State] onCreate: save_config_srv...");
+  // Save config service (reuses DroneTare type)
+  if (rclc_service_init_default(
+          &save_config_srv_, node,
+          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneTare),
+          "/mcu_drone/save_config") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: save_config_srv init");
+    return false;
+  }
+  if (rclc_executor_add_service(executor, &save_config_srv_, &save_config_req_,
+                                &save_config_res_, saveConfigCallback) !=
+      RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: save_config_srv executor");
+    return false;
+  }
+
+  DRONE_PRINTLN("[State] onCreate: ready_srv...");
+  // Ready for takeoff service (reuses DroneTare type)
+  if (rclc_service_init_default(
+          &ready_srv_, node,
+          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneTare),
+          "/mcu_drone/ready_for_takeoff") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: ready_srv init");
+    return false;
+  }
+  if (rclc_executor_add_service(executor, &ready_srv_, &ready_req_,
+                                &ready_res_, readyCallback) != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: ready_srv executor");
+    return false;
+  }
+
+  DRONE_PRINTLN("[State] onCreate: get_config_srv...");
+  // Get config service — publishes CONFIG: via debug topic on demand
+  if (rclc_service_init_default(
+          &get_config_srv_, node,
+          ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, DroneTare),
+          "/mcu_drone/get_config") != RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: get_config_srv init");
+    return false;
+  }
+  if (rclc_executor_add_service(executor, &get_config_srv_, &get_config_req_,
+                                &get_config_res_, getConfigCallback) !=
+      RCL_RET_OK) {
+    DRONE_PRINTLN("[State] FAIL: get_config_srv executor");
+    return false;
+  }
+
   // Initialize string fields so rosidl_runtime_c__String__assign
   // can safely realloc on each service call without leaking.
   rosidl_runtime_c__String__init(&arm_res_.message);
@@ -176,6 +223,9 @@ bool DroneStateSubsystem::onCreate(rcl_node_t* node,
   rosidl_runtime_c__String__init(&land_res_.message);
   rosidl_runtime_c__String__init(&motors_res_.message);
   rosidl_runtime_c__String__init(&tare_res_.message);
+  rosidl_runtime_c__String__init(&save_config_res_.message);
+  rosidl_runtime_c__String__init(&ready_res_.message);
+  rosidl_runtime_c__String__init(&get_config_res_.message);
   // Pre-allocate param_name buffer so the XRCE-DDS deserializer has
   // somewhere to write the incoming string (init alone gives capacity=0).
   set_param_req_.param_name.data = (char*)malloc(64);
@@ -197,6 +247,9 @@ void DroneStateSubsystem::onDestroy() {
   set_motors_srv_ = rcl_get_zero_initialized_service();
   tare_srv_ = rcl_get_zero_initialized_service();
   set_param_srv_ = rcl_get_zero_initialized_service();
+  save_config_srv_ = rcl_get_zero_initialized_service();
+  ready_srv_ = rcl_get_zero_initialized_service();
+  get_config_srv_ = rcl_get_zero_initialized_service();
 
   // Free string buffers allocated by rosidl_runtime_c__String__assign
   rosidl_runtime_c__String__fini(&arm_res_.message);
@@ -204,6 +257,9 @@ void DroneStateSubsystem::onDestroy() {
   rosidl_runtime_c__String__fini(&land_res_.message);
   rosidl_runtime_c__String__fini(&motors_res_.message);
   rosidl_runtime_c__String__fini(&tare_res_.message);
+  rosidl_runtime_c__String__fini(&save_config_res_.message);
+  rosidl_runtime_c__String__fini(&ready_res_.message);
+  rosidl_runtime_c__String__fini(&get_config_res_.message);
   rosidl_runtime_c__String__fini(&set_param_req_.param_name);
   rosidl_runtime_c__String__fini(&set_param_res_.message);
 }
@@ -303,6 +359,17 @@ void DroneStateSubsystem::update() {
         flight_.disarm();
         state_ = DroneState::UNARMED;
       }
+      break;
+    }
+
+    case DroneState::READY_FOR_TAKEOFF: {
+      FlightSetpoint sp;
+      sp.altitude_hold = false;
+      sp.throttle = flight_.ready_throttle;
+      sp.roll_des = 0.0f;
+      sp.pitch_des = 0.0f;
+      sp.yaw_rate_des = 0.0f;
+      flight_.setSetpoint(sp);
       break;
     }
 
@@ -480,9 +547,10 @@ void DroneStateSubsystem::takeoffCallback(const void* req_raw,
     return;
   }
 
-  if (self->state_ != DroneState::ARMED) {
+  if (self->state_ != DroneState::ARMED &&
+      self->state_ != DroneState::READY_FOR_TAKEOFF) {
     res->success = false;
-    rosidl_runtime_c__String__assign(&res->message, "Not in ARMED state");
+    rosidl_runtime_c__String__assign(&res->message, "Not in ARMED or READY state");
     return;
   }
 
@@ -617,6 +685,68 @@ void DroneStateSubsystem::setParamCallback(const void* req_raw,
     snprintf(buf, sizeof(buf), "Unknown param: %s", name);
     rosidl_runtime_c__String__assign(&res->message, buf);
   }
+}
+
+void DroneStateSubsystem::saveConfigCallback(const void* /*req_raw*/,
+                                              void* res_raw) {
+  auto* res = (mcu_msgs__srv__DroneTare_Response*)res_raw;
+  auto* self = s_instance_;
+  if (!self) {
+    res->success = false;
+    return;
+  }
+
+  size_t count = self->config_store_.save(self->flight_);
+  if (count > 0) {
+    res->success = true;
+    char buf[48];
+    snprintf(buf, sizeof(buf), "Saved %u params to NVS", (unsigned)count);
+    rosidl_runtime_c__String__assign(&res->message, buf);
+    DRONE_PRINTF("[State] Config saved: %u params\n", (unsigned)count);
+  } else {
+    res->success = false;
+    rosidl_runtime_c__String__assign(&res->message, "NVS save failed");
+  }
+}
+
+void DroneStateSubsystem::readyCallback(const void* /*req_raw*/,
+                                         void* res_raw) {
+  auto* res = (mcu_msgs__srv__DroneTare_Response*)res_raw;
+  auto* self = s_instance_;
+  if (!self) {
+    res->success = false;
+    return;
+  }
+
+  if (self->state_ != DroneState::ARMED) {
+    res->success = false;
+    rosidl_runtime_c__String__assign(&res->message, "Not in ARMED state");
+    return;
+  }
+
+  self->state_ = DroneState::READY_FOR_TAKEOFF;
+  res->success = true;
+  rosidl_runtime_c__String__assign(&res->message, "READY_FOR_TAKEOFF");
+}
+
+void DroneStateSubsystem::getConfigCallback(const void* /*req_raw*/,
+                                             void* res_raw) {
+  auto* res = (mcu_msgs__srv__DroneTare_Response*)res_raw;
+  auto* self = s_instance_;
+  if (!self) {
+    res->success = false;
+    return;
+  }
+
+  size_t chunks = self->config_store_.formatConfigString(self->flight_,
+      [](const char* msg) {
+        if (s_instance_) s_instance_->mr_.debugLog(msg);
+      });
+
+  res->success = true;
+  char buf[48];
+  snprintf(buf, sizeof(buf), "Published %u config chunks", (unsigned)chunks);
+  rosidl_runtime_c__String__assign(&res->message, buf);
 }
 
 }  // namespace Drone

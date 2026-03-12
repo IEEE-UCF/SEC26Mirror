@@ -77,6 +77,8 @@ inline PIDController::Config altitudeVelocityPID() {
 
 constexpr float HOVER_THROTTLE = 0.45f;
 constexpr float MOTOR_MAX_SLEW = 0.5f;   // max change per second (full 0→1 in 2s)
+constexpr float MOTOR_MIN_OUTPUT = 0.045f;  // ~4.5% duty — ESC dead zone threshold
+constexpr float READY_THROTTLE = 0.35f;     // throttle in READY_FOR_TAKEOFF state
 
 // ── Angle / rate limits ────────────────────────────────────
 constexpr float MAX_ROLL_DEG = 30.0f;

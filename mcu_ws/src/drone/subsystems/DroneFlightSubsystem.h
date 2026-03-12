@@ -105,6 +105,8 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
 
   // Runtime parameter tuning (returns true if param_name was recognized)
   bool setParam(const char* param_name, float value);
+  bool getParam(const char* name, float& out) const;
+  size_t getAllParams(float* values, const char** names, size_t max) const;
 
   // Runtime-mutable config (initialized from DroneConfig.h defaults)
   float hover_throttle = Config::HOVER_THROTTLE;
@@ -112,6 +114,8 @@ class DroneFlightSubsystem : public Subsystem::RTOSSubsystem {
   float max_roll_deg = Config::MAX_ROLL_DEG;
   float max_pitch_deg = Config::MAX_PITCH_DEG;
   float max_yaw_rate_dps = Config::MAX_YAW_RATE_DPS;
+  float motor_min_output = Config::MOTOR_MIN_OUTPUT;
+  float ready_throttle = Config::READY_THROTTLE;
 
  private:
   void compute(const IMUData& imu, float altitude_m, float dt);

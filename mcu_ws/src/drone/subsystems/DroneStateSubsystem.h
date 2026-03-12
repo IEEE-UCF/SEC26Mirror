@@ -22,6 +22,7 @@
 #include <mcu_msgs/srv/drone_set_param.h>
 
 #include "../DroneConfig.h"
+#include "DroneConfigStore.h"
 #include "DroneEKFSubsystem.h"
 #include "DroneFlightSubsystem.h"
 #include "GyroSubsystem.h"
@@ -39,7 +40,8 @@ enum class DroneState : uint8_t {
   LAUNCHING = 3,
   VELOCITY_CONTROL = 4,
   LANDING = 5,
-  EMERGENCY_LAND = 6
+  EMERGENCY_LAND = 6,
+  READY_FOR_TAKEOFF = 7
 };
 
 class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
@@ -47,7 +49,9 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
  public:
   DroneStateSubsystem(const char* name,
                       DroneFlightSubsystem& flight, GyroSubsystem& gyro,
-                      DroneEKFSubsystem& ekf
+                      DroneEKFSubsystem& ekf,
+                      DroneConfigStore& config_store,
+                      Subsystem::MicrorosManager& mr
 #if DRONE_ENABLE_HEIGHT
                       ,
                       HeightSubsystem& height
@@ -57,7 +61,9 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
         setup_(name),
         flight_(flight),
         gyro_(gyro),
-        ekf_(ekf)
+        ekf_(ekf),
+        config_store_(config_store),
+        mr_(mr)
 #if DRONE_ENABLE_HEIGHT
         ,
         height_(height)
@@ -104,11 +110,16 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
   static void setMotorsCallback(const void* req, void* res);
   static void tareCallback(const void* req, void* res);
   static void setParamCallback(const void* req, void* res);
+  static void saveConfigCallback(const void* req, void* res);
+  static void readyCallback(const void* req, void* res);
+  static void getConfigCallback(const void* req, void* res);
 
   Classes::BaseSetup setup_;
   DroneFlightSubsystem& flight_;
   GyroSubsystem& gyro_;
   DroneEKFSubsystem& ekf_;
+  DroneConfigStore& config_store_;
+  Subsystem::MicrorosManager& mr_;
 #if DRONE_ENABLE_HEIGHT
   HeightSubsystem& height_;
 #endif
@@ -142,6 +153,9 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
   rcl_service_t set_motors_srv_{};
   rcl_service_t tare_srv_{};
   rcl_service_t set_param_srv_{};
+  rcl_service_t save_config_srv_{};
+  rcl_service_t ready_srv_{};
+  rcl_service_t get_config_srv_{};
 
   // Service request/response buffers
   mcu_msgs__srv__DroneArm_Request arm_req_{};
@@ -158,6 +172,12 @@ class DroneStateSubsystem : public Subsystem::RTOSSubsystem,
   mcu_msgs__srv__DroneTare_Response tare_res_{};
   mcu_msgs__srv__DroneSetParam_Request set_param_req_{};
   mcu_msgs__srv__DroneSetParam_Response set_param_res_{};
+  mcu_msgs__srv__DroneTare_Request save_config_req_{};
+  mcu_msgs__srv__DroneTare_Response save_config_res_{};
+  mcu_msgs__srv__DroneTare_Request ready_req_{};
+  mcu_msgs__srv__DroneTare_Response ready_res_{};
+  mcu_msgs__srv__DroneTare_Request get_config_req_{};
+  mcu_msgs__srv__DroneTare_Response get_config_res_{};
 
   uint32_t last_state_pub_ms_ = 0;
   uint32_t last_update_ms_ = 0;

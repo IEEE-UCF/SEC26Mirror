@@ -272,6 +272,10 @@ void DroneFlightSubsystem::writeMotors() {
     if (delta > max_delta) delta = max_delta;
     if (delta < -max_delta) delta = -max_delta;
     float output = clamp(motors_prev_[i] + delta, 0.0f, 1.0f);
+    // Dead zone elimination: ESCs don't spin below this threshold
+    if (output > 0.0f && output < motor_min_output) {
+      output = motor_min_output;
+    }
     motors_prev_[i] = output;
     ledcWrite(i, (uint32_t)(output * Config::MOTOR_PWM_MAX));
   }
@@ -345,8 +349,76 @@ bool DroneFlightSubsystem::setParam(const char* name, float value) {
   if (strcmp(name, "max_roll_deg") == 0) { max_roll_deg = value; return true; }
   if (strcmp(name, "max_pitch_deg") == 0) { max_pitch_deg = value; return true; }
   if (strcmp(name, "max_yaw_rate_dps") == 0) { max_yaw_rate_dps = value; return true; }
+  if (strcmp(name, "motor_min_output") == 0) { motor_min_output = value; return true; }
+  if (strcmp(name, "ready_throttle") == 0) { ready_throttle = value; return true; }
 
   return false;
+}
+
+bool DroneFlightSubsystem::getParam(const char* name, float& out) const {
+  if (!name) return false;
+
+  // Roll angle PID
+  if (strcmp(name, "roll_angle_kp") == 0) { out = roll_angle_pid_.config().gains.kp; return true; }
+  if (strcmp(name, "roll_angle_ki") == 0) { out = roll_angle_pid_.config().gains.ki; return true; }
+  if (strcmp(name, "roll_angle_kd") == 0) { out = roll_angle_pid_.config().gains.kd; return true; }
+  // Pitch angle PID
+  if (strcmp(name, "pitch_angle_kp") == 0) { out = pitch_angle_pid_.config().gains.kp; return true; }
+  if (strcmp(name, "pitch_angle_ki") == 0) { out = pitch_angle_pid_.config().gains.ki; return true; }
+  if (strcmp(name, "pitch_angle_kd") == 0) { out = pitch_angle_pid_.config().gains.kd; return true; }
+  // Roll rate PID
+  if (strcmp(name, "roll_rate_kp") == 0) { out = roll_rate_pid_.config().gains.kp; return true; }
+  if (strcmp(name, "roll_rate_ki") == 0) { out = roll_rate_pid_.config().gains.ki; return true; }
+  if (strcmp(name, "roll_rate_kd") == 0) { out = roll_rate_pid_.config().gains.kd; return true; }
+  // Pitch rate PID
+  if (strcmp(name, "pitch_rate_kp") == 0) { out = pitch_rate_pid_.config().gains.kp; return true; }
+  if (strcmp(name, "pitch_rate_ki") == 0) { out = pitch_rate_pid_.config().gains.ki; return true; }
+  if (strcmp(name, "pitch_rate_kd") == 0) { out = pitch_rate_pid_.config().gains.kd; return true; }
+  // Yaw rate PID
+  if (strcmp(name, "yaw_rate_kp") == 0) { out = yaw_rate_pid_.config().gains.kp; return true; }
+  if (strcmp(name, "yaw_rate_ki") == 0) { out = yaw_rate_pid_.config().gains.ki; return true; }
+  if (strcmp(name, "yaw_rate_kd") == 0) { out = yaw_rate_pid_.config().gains.kd; return true; }
+  // Altitude PID
+  if (strcmp(name, "altitude_kp") == 0) { out = altitude_pid_.config().gains.kp; return true; }
+  if (strcmp(name, "altitude_ki") == 0) { out = altitude_pid_.config().gains.ki; return true; }
+  if (strcmp(name, "altitude_kd") == 0) { out = altitude_pid_.config().gains.kd; return true; }
+  // Altitude velocity PID
+  if (strcmp(name, "alt_vel_kp") == 0) { out = alt_vel_pid_.config().gains.kp; return true; }
+  if (strcmp(name, "alt_vel_ki") == 0) { out = alt_vel_pid_.config().gains.ki; return true; }
+  if (strcmp(name, "alt_vel_kd") == 0) { out = alt_vel_pid_.config().gains.kd; return true; }
+  // Scalars
+  if (strcmp(name, "hover_throttle") == 0) { out = hover_throttle; return true; }
+  if (strcmp(name, "motor_max_slew") == 0) { out = motor_max_slew; return true; }
+  if (strcmp(name, "max_roll_deg") == 0) { out = max_roll_deg; return true; }
+  if (strcmp(name, "max_pitch_deg") == 0) { out = max_pitch_deg; return true; }
+  if (strcmp(name, "max_yaw_rate_dps") == 0) { out = max_yaw_rate_dps; return true; }
+  if (strcmp(name, "motor_min_output") == 0) { out = motor_min_output; return true; }
+  if (strcmp(name, "ready_throttle") == 0) { out = ready_throttle; return true; }
+
+  return false;
+}
+
+size_t DroneFlightSubsystem::getAllParams(float* values, const char** names, size_t max) const {
+  static const char* const PARAM_NAMES[] = {
+    "roll_angle_kp", "roll_angle_ki", "roll_angle_kd",
+    "pitch_angle_kp", "pitch_angle_ki", "pitch_angle_kd",
+    "roll_rate_kp", "roll_rate_ki", "roll_rate_kd",
+    "pitch_rate_kp", "pitch_rate_ki", "pitch_rate_kd",
+    "yaw_rate_kp", "yaw_rate_ki", "yaw_rate_kd",
+    "altitude_kp", "altitude_ki", "altitude_kd",
+    "alt_vel_kp", "alt_vel_ki", "alt_vel_kd",
+    "hover_throttle", "motor_max_slew", "max_roll_deg",
+    "max_pitch_deg", "max_yaw_rate_dps", "motor_min_output",
+    "ready_throttle",
+  };
+  constexpr size_t NUM_PARAMS = sizeof(PARAM_NAMES) / sizeof(PARAM_NAMES[0]);
+  size_t count = (max < NUM_PARAMS) ? max : NUM_PARAMS;
+
+  for (size_t i = 0; i < count; i++) {
+    names[i] = PARAM_NAMES[i];
+    getParam(PARAM_NAMES[i], values[i]);
+  }
+  return count;
 }
 
 }  // namespace Drone

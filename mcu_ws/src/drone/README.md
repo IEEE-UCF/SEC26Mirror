@@ -6,19 +6,22 @@ Transport: WiFi UDP to Pi (192.168.4.1:8888).
 ## State Machine
 
 ```
-INIT → UNARMED → ARMED → LAUNCHING → VELOCITY_CONTROL → LANDING → UNARMED
-                    ↓                        ↓
-               EMERGENCY_LAND          EMERGENCY_LAND
+INIT → UNARMED → ARMED → READY_FOR_TAKEOFF → LAUNCHING → VELOCITY_CONTROL → LANDING → UNARMED
+                    ↓            ↓                             ↓
+               EMERGENCY_LAND  EMERGENCY_LAND           EMERGENCY_LAND
 ```
 
 ## Services
 
 ```bash
-# Arm / disarm (only from UNARMED)
+# Arm / disarm (only from UNARMED; disarm works from any state)
 ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: true}"
 ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: false}"
 
-# Takeoff to altitude in meters (only from ARMED, clamped 0.3m - ceiling)
+# Ready for takeoff — pre-spins motors at ~35% (from ARMED only)
+ros2 service call /mcu_drone/ready_for_takeoff mcu_msgs/srv/DroneTare
+
+# Takeoff to altitude in meters (from ARMED or READY_FOR_TAKEOFF, clamped 0.3m - ceiling)
 ros2 service call /mcu_drone/takeoff mcu_msgs/srv/DroneTakeoff "{target_altitude: 0.5}"
 
 # Land (from LAUNCHING, VELOCITY_CONTROL, or LANDING)
@@ -42,6 +45,12 @@ ros2 service call /mcu_drone/transmit_ir mcu_msgs/srv/DroneTransmitIR \
 # Set flight parameter at runtime (PID gains, hover throttle, limits, etc.)
 ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam \
   "{param_name: 'hover_throttle', value: 0.50}"
+
+# Save all current params to EEPROM (NVS) — persists across reboots
+ros2 service call /mcu_drone/save_config mcu_msgs/srv/DroneTare
+
+# Request current config (publishes via debug topic as CONFIG: messages)
+ros2 service call /mcu_drone/get_config mcu_msgs/srv/DroneTare
 ```
 
 ### Available Parameters for set_param
@@ -60,6 +69,8 @@ ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam \
 | `max_roll_deg` | 30.0 | Maximum roll angle limit |
 | `max_pitch_deg` | 30.0 | Maximum pitch angle limit |
 | `max_yaw_rate_dps` | 160.0 | Maximum yaw rate limit |
+| `motor_min_output` | 0.045 | ESC dead zone threshold (~4.5% duty) |
+| `ready_throttle` | 0.35 | Throttle in READY_FOR_TAKEOFF state |
 
 ### Apply All Defaults
 
@@ -91,6 +102,8 @@ ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 
 ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_roll_deg', value: 30.0}"
 ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_pitch_deg', value: 30.0}"
 ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_yaw_rate_dps', value: 160.0}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'motor_min_output', value: 0.045}"
+ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'ready_throttle', value: 0.35}"
 ```
 
 ## PID Tuning Guide
@@ -140,6 +153,41 @@ ros2 topic echo /mcu_drone/state
 # Loop rates and debug info (every 5s)
 ros2 topic echo /mcu_drone/debug
 ```
+
+## EEPROM Persistence (NVS)
+
+All tunable parameters (28 total: 7 PIDs x 3 gains + 7 scalars) are saved to ESP32 NVS flash via `save_config` service. On boot, saved values are automatically loaded before any tasks start.
+
+- Parameters are stored under NVS namespace `"drone_cfg"` with index-based keys (`"p0"` through `"p27"`) because some param names exceed the 15-char NVS key limit.
+- On first micro-ROS connect, the drone publishes all current config values via debug topic (`"CONFIG:name=val,..."` format) so the tuner can sync. Config can also be requested on demand via `get_config` service.
+- To clear saved config, erase the ESP32 NVS partition.
+
+## PID Tuner TUI
+
+```bash
+ros2 run secbot_drone_teleop drone_pid_tuner.py
+```
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` | Navigate params |
+| `h`/`l` | Fine adjust (1 step) |
+| `[`/`]` | Coarse adjust (5x step) |
+| `Enter` | Type exact value |
+| `c` | Copy roll gains to pitch |
+| `r` | Reset selected param |
+| `R` | Reset ALL params |
+| `a` | Arm |
+| `d` | Disarm |
+| `D` | Emergency disarm (same as `d`, explicit for flying state) |
+| `f` | Ready for takeoff (pre-spin motors) |
+| `t` | Takeoff (prompts for altitude, default 1.0m) |
+| `L` | Land |
+| `T` | Tare IMU yaw |
+| `S` | Save config to EEPROM |
+| `q` | Quit |
+
+The tuner auto-syncs param values from the drone on connect via CONFIG: debug messages.
 
 ## Safety
 

@@ -8,6 +8,7 @@ uint8 LAUNCHING=3
 uint8 VELOCITY_CONTROL=4
 uint8 LANDING=5
 uint8 EMERGENCY_LAND=6
+uint8 READY_FOR_TAKEOFF=7
 uint8 state
 
 # Task states

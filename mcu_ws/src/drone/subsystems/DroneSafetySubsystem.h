@@ -54,7 +54,8 @@ class DroneSafetySubsystem : public Subsystem::RTOSSubsystem {
   // Check all failure conditions (called by RTOSSubsystem task loop).
   void update() override {
     if (!state_.isFlying() &&
-        state_.getState() != DroneState::EMERGENCY_LAND) {
+        state_.getState() != DroneState::EMERGENCY_LAND &&
+        state_.getState() != DroneState::READY_FOR_TAKEOFF) {
       return;
     }
 
@@ -73,6 +74,7 @@ class DroneSafetySubsystem : public Subsystem::RTOSSubsystem {
     // the VL53L0X may not have valid readings yet (out of range,
     // blocked, or stale from before arm).
     if (state_.getState() != DroneState::LAUNCHING &&
+        state_.getState() != DroneState::READY_FOR_TAKEOFF &&
         now - height_.lastValidMs() > Config::HEIGHT_TIMEOUT_MS &&
         height_.lastValidMs() > 0) {
       state_.triggerEmergencyLand();
@@ -118,7 +120,10 @@ class DroneSafetySubsystem : public Subsystem::RTOSSubsystem {
         if (m > max_motor) max_motor = m;
       }
       float total_rate = abs_gx + abs_gy + fabsf(imu.gyro_z);
-      bool possibly_stalled = max_motor > 0.3f && total_rate < 5.0f &&
+      // Skip stall detection in READY_FOR_TAKEOFF — motors intentionally
+      // spinning while drone sits on ground (would always trigger).
+      bool possibly_stalled = state_.getState() != DroneState::READY_FOR_TAKEOFF &&
+                              max_motor > 0.3f && total_rate < 5.0f &&
                               abs_roll < 5.0f && abs_pitch < 5.0f;
       if (possibly_stalled) {
         if (stall_start_ms_ == 0) stall_start_ms_ = now;

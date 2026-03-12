@@ -47,6 +47,7 @@
 #endif
 #if DRONE_DEBUG_STAGE >= 2
 #include "../subsystems/DroneFlightSubsystem.h"
+#include "../subsystems/DroneConfigStore.h"
 #include "../subsystems/DroneEKFSubsystem.h"
 #include "../subsystems/DroneStateSubsystem.h"
 #include "../subsystems/DroneSafetySubsystem.h"
@@ -128,6 +129,8 @@ static Drone::FlightMotorPins g_motor_pins{
     .br = Drone::Pins::MOTOR_BR,
     .bl = Drone::Pins::MOTOR_BL,
 };
+static Drone::DroneConfigStore g_config_store;
+
 static Drone::DroneFlightSubsystem g_flight(
     g_motor_pins, g_gyro, g_ekf
 #if DRONE_ENABLE_HEIGHT
@@ -145,7 +148,7 @@ static Drone::DroneUWBSubsystem g_drone_uwb(g_uwb, g_ekf);
 #endif
 
 static Drone::DroneStateSubsystem g_state(
-    "drone_state", g_flight, g_gyro, g_ekf
+    "drone_state", g_flight, g_gyro, g_ekf, g_config_store, g_mr
 #if DRONE_ENABLE_HEIGHT
     ,
     g_height
@@ -166,6 +169,7 @@ static Drone::DroneIRSubsystem g_drone_ir(g_ir, g_state);
 // ── Reset reason (published over micro-ROS on first connect) ──
 static char g_reset_reason_str[48] = {0};
 static bool g_reset_reason_published = false;
+static bool g_config_published = false;
 
 // Forward declarations
 #if DRONE_DEBUG_STAGE >= 2
@@ -265,7 +269,11 @@ void setup() {
   DRONE_PRINTLN("[Drone] IR: OK");
 
   g_flight.init();
-  DRONE_PRINTLN("[Drone] Flight controller: OK");
+  {
+    size_t loaded = g_config_store.load(g_flight);
+    DRONE_PRINTF("[Drone] Flight controller: OK (NVS: %u params loaded)\n",
+                 (unsigned)loaded);
+  }
 
   g_ekf.init();
   DRONE_PRINTLN("[Drone] EKF: OK");
@@ -334,6 +342,15 @@ void setup() {
         }
 
 #if DRONE_DEBUG_STAGE >= 2
+        // Publish config to tuner on first connect
+        if (!g_config_published) {
+          g_config_store.formatConfigString(g_flight,
+              [](const char* msg) { g_mr.debugLog(msg); });
+          g_config_published = true;
+        }
+#endif
+
+#if DRONE_DEBUG_STAGE >= 2
         // Publish loop rates every 5s
         uint32_t now = millis();
         if (now - last_rate_pub >= 5000) {
@@ -373,8 +390,9 @@ static const char* stateToStr(Drone::DroneState s) {
     case Drone::DroneState::LAUNCHING:        return "LAUNCHING";
     case Drone::DroneState::VELOCITY_CONTROL: return "VELOCITY_CONTROL";
     case Drone::DroneState::LANDING:          return "LANDING";
-    case Drone::DroneState::EMERGENCY_LAND:   return "EMERGENCY_LAND";
-    default:                                  return "UNKNOWN";
+    case Drone::DroneState::EMERGENCY_LAND:     return "EMERGENCY_LAND";
+    case Drone::DroneState::READY_FOR_TAKEOFF: return "READY_FOR_TAKEOFF";
+    default:                                   return "UNKNOWN";
   }
 }
 #endif

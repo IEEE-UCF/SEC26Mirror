@@ -41,8 +41,9 @@ MissionNode::MissionNode() : Node("mission_node") {
       "/mcu_drone/control", 10);
 
   // Subscribers
+  // IMPORTANT: drive_base/status is published with best-effort (SensorDataQoS)
   drive_status_sub_ = this->create_subscription<mcu_msgs::msg::DriveBase>(
-      "drive_base/status", 10,
+      "drive_base/status", rclcpp::SensorDataQoS(),
       std::bind(&MissionNode::onDriveStatus, this, _1));
   task_status_sub_ = this->create_subscription<secbot_msgs::msg::TaskStatus>(
       "/autonomy/task_status", 10,
@@ -99,11 +100,33 @@ void MissionNode::onStartService(
 
 void MissionNode::onDriveStatus(
     const mcu_msgs::msg::DriveBase::SharedPtr msg) {
+  if (!has_drive_status_) {
+    RCLCPP_INFO(this->get_logger(),
+                "First drive_base/status received! QoS OK.");
+  }
+  has_drive_status_ = true;
+
   // Extract robot pose from transform
   robot_x_ = msg->transform.transform.translation.x;
   robot_y_ = msg->transform.transform.translation.y;
   auto& r = msg->transform.transform.rotation;
   robot_theta_ = 2.0 * std::atan2(r.z, r.w);
+
+  // Periodic debug log (every 10th callback, around 1Hz at 10Hz status rate)
+  if (++debug_status_tick_ >= 10) {
+    debug_status_tick_ = 0;
+    double dx = robot_x_ - nav_target_.x;
+    double dy = robot_y_ - nav_target_.y;
+    double dist = std::sqrt(dx * dx + dy * dy);
+    double heading_err = std::abs(
+        std::remainder(robot_theta_ - nav_target_.theta, 2.0 * M_PI));
+    RCLCPP_INFO(this->get_logger(),
+                "[DBG] pose=(%.3f, %.3f, %.2frad) target=(%.3f, %.3f, %.2frad) "
+                "dist=%.3f hdg_err=%.2f mode=%d goal_reached=%d",
+                robot_x_, robot_y_, robot_theta_,
+                nav_target_.x, nav_target_.y, nav_target_.theta,
+                dist, heading_err, msg->drive_mode, goal_reached_ ? 1 : 0);
+  }
 
   // Goal-reached: distance AND heading within tolerance
   double dx = robot_x_ - nav_target_.x;
@@ -119,7 +142,7 @@ void MissionNode::onDriveStatus(
                 dist, heading_err);
   }
 
-  // Also detect mode transition: GOAL/TRAJ → DRIVE_VECTOR with zero velocity
+  // Also detect mode transition: GOAL/TRAJ -> DRIVE_VECTOR with zero velocity
   // indicates MCU finished its goal (position + heading)
   uint8_t mode = msg->drive_mode;
   if ((last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_GOAL ||
@@ -366,8 +389,10 @@ bool MissionNode::checkStateTimeout(double timeout_s) {
 void MissionNode::transitionTo(MissionPhase phase) {
   auto match_elapsed = std::chrono::steady_clock::now() - match_start_;
   double match_sec = std::chrono::duration<double>(match_elapsed).count();
-  RCLCPP_INFO(this->get_logger(), "MISSION [%.1fs]: %s -> %s", match_sec,
-              phaseName(phase_), phaseName(phase));
+  RCLCPP_INFO(this->get_logger(),
+              "MISSION [%.1fs]: %s -> %s  (robot at %.3f, %.3f, %.2frad)",
+              match_sec, phaseName(phase_), phaseName(phase),
+              robot_x_, robot_y_, robot_theta_);
   phase_ = phase;
   phase_entry_ = true;
   phase_timer_ = std::chrono::steady_clock::now();
@@ -437,6 +462,16 @@ const char* MissionNode::phaseName(MissionPhase phase) const {
 // Main State Machine
 
 void MissionNode::stepMission() {
+  // Warn if we haven't received drive status yet
+  if (!has_drive_status_ && phase_ != MissionPhase::WAIT_FOR_START) {
+    if (++debug_tick_ >= 10) {
+      debug_tick_ = 0;
+      RCLCPP_WARN(this->get_logger(),
+                  "[DBG] NO drive_base/status received yet! Phase=%s",
+                  phaseName(phase_));
+    }
+  }
+
   // Duck interrupt check (active after COLLECT_KNOWN_DUCKS)
   if (duck_interrupt_enabled_ && pending_duck_interrupt_) {
     bool in_nav_phase = (phase_ == MissionPhase::NAV_TO_KEYPAD ||

@@ -224,19 +224,26 @@ class MissionNode : public rclcpp::Node {
 
   // Debug logging
   uint8_t debug_tick_ = 0;
+  uint8_t debug_status_tick_ = 0;
+  bool has_drive_status_ = false;
 
   // Arena positions: real field coordinates (inches -> meters, 1" = 0.0254m)
-  // Headings: 0 = +X (right), pi/2 = +Y (up), pi = -X (left), -pi/2 = -Y (down)
-  static constexpr ArenaPosition POS_START_ZONE = {0.1524, 0.1524, 0.0};
+  // Headings: 0 = +X (east), pi/2 = +Y (north), pi = -X (west), -pi/2 = -Y (south)
+  // Antenna facing directions (from ruleset):
+  //   #1 button  (Area #2 upper-left): dome faces south -> robot faces north  (pi/2)
+  //   #2 crank   (Area #3 right side): dome faces south -> robot faces north  (pi/2)
+  //   #3 pressure(Area #4 crater):     dome faces west  -> robot faces east   (0)
+  //   #4 keypad  (Area #1 lower-left): dome faces north -> robot faces south  (-pi/2)
+  static constexpr ArenaPosition POS_START_ZONE = {0.1524, 0.1524, M_PI_2};            // face north (blue arrow)
   static constexpr ArenaPosition POS_UWB_CORNER = {1.1176, 0.0762, 0.0};
-  static constexpr ArenaPosition POS_BUTTON_APPROACH = {0.9652, 0.1397, 0.0};
+  static constexpr ArenaPosition POS_BUTTON_APPROACH = {0.9652, 0.1397, M_PI_2};     // face north (button faces south)
   static constexpr ArenaPosition POS_CRANK_FLAG = {1.1176, 2.1590, M_PI_2};
-  static constexpr ArenaPosition POS_CRANK_APPROACH = {0.9652, 2.2733, M_PI_2};
-  static constexpr ArenaPosition POS_KEYPAD_APPROACH = {0.2032, 0.9779, M_PI};
-  static constexpr ArenaPosition POS_PRESSURE_APPROACH = {0.3810, 1.5113, M_PI_2};
-  static constexpr ArenaPosition POS_DUCK_DEPOSIT = {0.9144, 0.9144, 0.0};
-  static constexpr ArenaPosition POS_LAUNCH_POINT = {0.1524, 0.3048, M_PI_2};
-  static constexpr ArenaPosition POS_FINISH = {0.1524, 0.1524, 0.0};
+  static constexpr ArenaPosition POS_CRANK_APPROACH = {0.9652, 2.2733, M_PI_2};      // face north (crank faces south)
+  static constexpr ArenaPosition POS_KEYPAD_APPROACH = {0.2032, 0.9779, -M_PI_2};    // face south (keypad faces north)
+  static constexpr ArenaPosition POS_PRESSURE_APPROACH = {0.3810, 1.5113, 0.0};      // face east (pressure faces west)
+  static constexpr ArenaPosition POS_DUCK_DEPOSIT = {0.9144, 0.9144, 0.0};           // Lunar Landing area
+  static constexpr ArenaPosition POS_LAUNCH_POINT = {0.1524, 0.3048, 0.0};
+  static constexpr ArenaPosition POS_FINISH = {0.1524, 0.1524, M_PI_2};                // face north (same as start)
 
   // Per-state timeout defaults (seconds)
   static constexpr double DEFAULT_NAV_TIMEOUT_S = 30.0;

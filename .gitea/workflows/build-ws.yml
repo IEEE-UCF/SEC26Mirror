@@ -232,10 +232,10 @@ jobs:
             set +u; . /opt/ros/$ROS_DISTRO/setup.bash; set -u; \
             sudo apt-get update; \
             rosdep update || true; \
-            rosdep install --from-paths src src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python; \
+            rosdep install --from-paths src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python; \
             echo "Discovered packages:"; \
-            colcon list || true; \
-            colcon build --base-paths src src/sec26ros --continue-on-error'
+            colcon list --base-paths src/sec26ros || true; \
+            colcon build --base-paths src/sec26ros --continue-on-error'
 
           set +e
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env.ci exec -T devcontainer bash -lc "$BUILD_CMD"

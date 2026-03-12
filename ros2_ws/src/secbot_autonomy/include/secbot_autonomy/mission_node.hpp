@@ -18,6 +18,7 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <geometry_msgs/msg/twist.hpp>
 #include <mcu_msgs/msg/antenna_marker.hpp>
 #include <mcu_msgs/msg/arm_command.hpp>
@@ -99,10 +100,11 @@ enum class LedReadStep : uint8_t {
   DONE
 };
 
-/** @brief Simple 2D position for arena waypoints */
+/** @brief Arena waypoint with heading */
 struct ArenaPosition {
   double x;
   double y;
+  double theta;  // heading in radians (0 = +X, pi/2 = +Y)
 };
 
 /**
@@ -124,8 +126,9 @@ class MissionNode : public rclcpp::Node {
   const char* phaseName(MissionPhase phase) const;
 
   // Navigation helpers (DriveBase)
-  void sendDriveGoal(const ArenaPosition& pos);
-  void sendDrivePath(const std::vector<ArenaPosition>& waypoints);
+  void sendDriveGoal(const ArenaPosition& pos, bool reverse = false);
+  void sendDrivePath(const std::vector<ArenaPosition>& waypoints,
+                     double final_heading = NAN);
   void sendVelocity(double vx, double omega);
   void stopRobot();
   void refreshDriveCommand();
@@ -159,7 +162,7 @@ class MissionNode : public rclcpp::Node {
 
   // Navigation state
   bool goal_reached_ = false;
-  ArenaPosition nav_target_ = {0.0, 0.0};
+  ArenaPosition nav_target_ = {0.0, 0.0, 0.0};
   mcu_msgs::msg::DriveBase last_drive_cmd_;
   uint8_t last_drive_mode_ = 0;
 
@@ -176,6 +179,7 @@ class MissionNode : public rclcpp::Node {
   // Robot pose from drive_base/status
   double robot_x_ = 0.0;
   double robot_y_ = 0.0;
+  double robot_theta_ = 0.0;
 
   // Start signal
   bool start_button_pressed_ = false;
@@ -208,7 +212,7 @@ class MissionNode : public rclcpp::Node {
   bool pending_duck_interrupt_ = false;
   MissionPhase saved_phase_ = MissionPhase::WAIT_FOR_START;
   bool saved_phase_entry_ = true;
-  ArenaPosition interrupt_duck_pos_ = {0.0, 0.0};
+  ArenaPosition interrupt_duck_pos_ = {0.0, 0.0, 0.0};
 
   // Deposit duck sub-state
   DepositStep deposit_step_ = DepositStep::NAV_TO_ZONE;
@@ -221,24 +225,26 @@ class MissionNode : public rclcpp::Node {
   // Debug logging
   uint8_t debug_tick_ = 0;
 
-  // Arena positions — real field coordinates (inches -> meters, 1" = 0.0254m)
-  static constexpr ArenaPosition POS_START_ZONE = {0.1524, 0.1524};
-  static constexpr ArenaPosition POS_UWB_CORNER = {1.1176, 0.0762};
-  static constexpr ArenaPosition POS_BUTTON_APPROACH = {0.9652, 0.1397};
-  static constexpr ArenaPosition POS_CRANK_FLAG = {1.1176, 2.1590};
-  static constexpr ArenaPosition POS_CRANK_APPROACH = {0.9652, 2.2733};
-  static constexpr ArenaPosition POS_KEYPAD_APPROACH = {0.2032, 0.9779};
-  static constexpr ArenaPosition POS_PRESSURE_APPROACH = {0.3810, 1.5113};
-  static constexpr ArenaPosition POS_DUCK_DEPOSIT = {0.9144, 0.9144};
-  static constexpr ArenaPosition POS_LAUNCH_POINT = {0.1524, 0.3048};
-  static constexpr ArenaPosition POS_FINISH = {0.1524, 0.1524};
+  // Arena positions: real field coordinates (inches -> meters, 1" = 0.0254m)
+  // Headings: 0 = +X (right), pi/2 = +Y (up), pi = -X (left), -pi/2 = -Y (down)
+  static constexpr ArenaPosition POS_START_ZONE = {0.1524, 0.1524, 0.0};
+  static constexpr ArenaPosition POS_UWB_CORNER = {1.1176, 0.0762, 0.0};
+  static constexpr ArenaPosition POS_BUTTON_APPROACH = {0.9652, 0.1397, 0.0};
+  static constexpr ArenaPosition POS_CRANK_FLAG = {1.1176, 2.1590, M_PI_2};
+  static constexpr ArenaPosition POS_CRANK_APPROACH = {0.9652, 2.2733, M_PI_2};
+  static constexpr ArenaPosition POS_KEYPAD_APPROACH = {0.2032, 0.9779, M_PI};
+  static constexpr ArenaPosition POS_PRESSURE_APPROACH = {0.3810, 1.5113, M_PI_2};
+  static constexpr ArenaPosition POS_DUCK_DEPOSIT = {0.9144, 0.9144, 0.0};
+  static constexpr ArenaPosition POS_LAUNCH_POINT = {0.1524, 0.3048, M_PI_2};
+  static constexpr ArenaPosition POS_FINISH = {0.1524, 0.1524, 0.0};
 
   // Per-state timeout defaults (seconds)
   static constexpr double DEFAULT_NAV_TIMEOUT_S = 30.0;
   static constexpr double DEFAULT_TASK_TIMEOUT_S = 15.0;
 
-  // Goal-reached distance tolerance (meters)
-  static constexpr double GOAL_REACHED_TOL = 0.05;
+  // Goal-reached tolerances
+  static constexpr double GOAL_REACHED_TOL = 0.05;       // meters
+  static constexpr double HEADING_REACHED_TOL = 0.10;    // radians (around 5.7 degrees)
 
   // Task IDs (must match autonomy_node TaskId enum)
   static constexpr uint8_t TASK_NONE = 0;

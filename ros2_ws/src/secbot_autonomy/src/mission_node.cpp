@@ -14,6 +14,7 @@
 #include "secbot_autonomy/mission_node.hpp"
 
 #include <cmath>
+#include <nav_msgs/msg/path.hpp>
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -101,19 +102,25 @@ void MissionNode::onDriveStatus(
   // Extract robot pose from transform
   robot_x_ = msg->transform.transform.translation.x;
   robot_y_ = msg->transform.transform.translation.y;
+  auto& r = msg->transform.transform.rotation;
+  robot_theta_ = 2.0 * std::atan2(r.z, r.w);
 
-  // Goal-reached: distance to nav_target_ within tolerance
+  // Goal-reached: distance AND heading within tolerance
   double dx = robot_x_ - nav_target_.x;
   double dy = robot_y_ - nav_target_.y;
   double dist = std::sqrt(dx * dx + dy * dy);
-  if (dist < GOAL_REACHED_TOL && !goal_reached_) {
+  double heading_err = std::abs(
+      std::remainder(robot_theta_ - nav_target_.theta, 2.0 * M_PI));
+  if (dist < GOAL_REACHED_TOL && heading_err < HEADING_REACHED_TOL &&
+      !goal_reached_) {
     goal_reached_ = true;
     RCLCPP_INFO(this->get_logger(),
-                "Navigation goal reached! (dist=%.3fm)", dist);
+                "Navigation goal reached! (dist=%.3fm, heading_err=%.2frad)",
+                dist, heading_err);
   }
 
   // Also detect mode transition: GOAL/TRAJ → DRIVE_VECTOR with zero velocity
-  // indicates MCU finished its trajectory
+  // indicates MCU finished its goal (position + heading)
   uint8_t mode = msg->drive_mode;
   if ((last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_GOAL ||
        last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_TRAJ) &&
@@ -168,7 +175,7 @@ void MissionNode::onDuckDetections(
   for (const auto& det : msg->detections) {
     if (det.confidence < 0.7) continue;
 
-    ArenaPosition duck_pos = {robot_x_, robot_y_};
+    ArenaPosition duck_pos = {robot_x_, robot_y_, 0.0};
 
     // Avoid storing duplicates (within 0.5m of existing)
     bool is_new = true;
@@ -220,7 +227,7 @@ void MissionNode::onAntennaMarker(
 
 // Navigation helpers
 
-void MissionNode::sendDriveGoal(const ArenaPosition& pos) {
+void MissionNode::sendDriveGoal(const ArenaPosition& pos, bool reverse) {
   goal_reached_ = false;
   nav_target_ = pos;
   auto msg = mcu_msgs::msg::DriveBase();
@@ -228,31 +235,68 @@ void MissionNode::sendDriveGoal(const ArenaPosition& pos) {
   msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
   msg.goal_transform.transform.translation.x = pos.x;
   msg.goal_transform.transform.translation.y = pos.y;
-  msg.goal_transform.transform.rotation.w = 1.0;
+  msg.goal_transform.transform.translation.z = reverse ? -1.0 : 0.0;
+
+  // Encode heading as yaw-only quaternion
+  float half = static_cast<float>(pos.theta) * 0.5f;
+  msg.goal_transform.transform.rotation.x = 0.0;
+  msg.goal_transform.transform.rotation.y = 0.0;
+  msg.goal_transform.transform.rotation.z = std::sin(half);
+  msg.goal_transform.transform.rotation.w = std::cos(half);
+
   last_drive_cmd_ = msg;
   drive_cmd_pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "Sent drive goal: (%.3f, %.3f)", pos.x,
-              pos.y);
+  RCLCPP_INFO(this->get_logger(),
+              "Sent drive goal: (%.3f, %.3f, %.2frad)%s", pos.x, pos.y,
+              pos.theta, reverse ? " [reverse]" : "");
 }
 
 void MissionNode::sendDrivePath(
-    const std::vector<ArenaPosition>& waypoints) {
+    const std::vector<ArenaPosition>& waypoints, double final_heading) {
   goal_reached_ = false;
   if (!waypoints.empty()) {
     nav_target_ = waypoints.back();
+    // Override nav_target heading if explicit final_heading given
+    if (!std::isnan(final_heading)) {
+      nav_target_.theta = final_heading;
+    }
   }
   auto msg = mcu_msgs::msg::DriveBase();
   msg.header.stamp = this->now();
   msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_TRAJ;
+
+  nav_msgs::msg::Path path;
+  path.header.stamp = this->now();
+  path.header.frame_id = "odom";
+
   for (const auto& wp : waypoints) {
     geometry_msgs::msg::PoseStamped ps;
-    ps.header.stamp = this->now();
-    ps.header.frame_id = "map";
+    ps.header = path.header;
     ps.pose.position.x = wp.x;
     ps.pose.position.y = wp.y;
     ps.pose.orientation.w = 1.0;
-    msg.goal_path.poses.push_back(ps);
+    path.poses.push_back(std::move(ps));
   }
+
+  // Encode final heading in last waypoint quaternion
+  double heading = std::isnan(final_heading) && !waypoints.empty()
+                       ? waypoints.back().theta
+                       : final_heading;
+  if (!std::isnan(heading) && !path.poses.empty()) {
+    float half = static_cast<float>(heading) * 0.5f;
+    auto& last = path.poses.back();
+    last.pose.orientation.z = std::sin(half);
+    last.pose.orientation.w = std::cos(half);
+  }
+
+  msg.goal_path = path;
+
+  // Also set goal_transform to last waypoint for the MCU
+  if (!waypoints.empty()) {
+    msg.goal_transform.transform.translation.x = waypoints.back().x;
+    msg.goal_transform.transform.translation.y = waypoints.back().y;
+  }
+
   last_drive_cmd_ = msg;
   drive_cmd_pub_->publish(msg);
   RCLCPP_INFO(this->get_logger(), "Sent drive path with %zu waypoints",
@@ -747,7 +791,7 @@ void MissionNode::stepMission() {
     // Multi-waypoint: crank area → below crater → keypad (west side)
     case MissionPhase::NAV_TO_KEYPAD: {
       if (phase_entry_) {
-        sendDrivePath({{1.04, 1.14}, {0.20, 0.98}});
+        sendDrivePath({{1.04, 1.14, 0.0}, POS_KEYPAD_APPROACH});
         phase_entry_ = false;
       } else {
         refreshDriveCommand();
@@ -805,7 +849,7 @@ void MissionNode::stepMission() {
     // Multi-waypoint: keypad → up left wall → approach crater from west
     case MissionPhase::NAV_TO_PRESSURE: {
       if (phase_entry_) {
-        sendDrivePath({{0.13, 1.40}, POS_PRESSURE_APPROACH});
+        sendDrivePath({{0.13, 1.40, M_PI_2}, POS_PRESSURE_APPROACH});
         phase_entry_ = false;
       } else {
         refreshDriveCommand();
@@ -914,7 +958,7 @@ void MissionNode::stepMission() {
       if (phase_entry_) {
         deposit_step_ = DepositStep::NAV_TO_ZONE;
         RCLCPP_INFO(this->get_logger(), "Depositing duck in target zone");
-        sendDrivePath({{0.25, 1.40}, POS_DUCK_DEPOSIT});
+        sendDrivePath({{0.25, 1.40, 0.0}, POS_DUCK_DEPOSIT});
         phase_entry_ = false;
       }
 

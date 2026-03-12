@@ -1,5 +1,7 @@
 #include "I2CMuxDriver.h"
 
+#include "I2CDMABus.h"
+
 namespace Drivers {
 
 bool I2CMuxDriver::init() {
@@ -39,6 +41,12 @@ bool I2CMuxDriver::deselectAll() {
     return true;
   }
   return false;
+}
+
+void I2CMuxDriver::queueDMASelect(uint8_t channel) {
+  if (!dma_bus_ || channel > 7) return;
+  dma_bus_->queueWriteByte(setup_.i2cAddress_, 1 << channel);
+  currentChannel_ = channel;
 }
 
 }  // namespace Drivers

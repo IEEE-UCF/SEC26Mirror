@@ -65,15 +65,15 @@ class IMicroRosParticipant {
 
 class MicrorosManagerSetup : public Classes::BaseSetup {
  public:
-  MicrorosManagerSetup(const char* _id) : Classes::BaseSetup(_id){};
-  MicrorosManagerSetup(const char* _id, const char* node_name,
-                       const char* debug_topic)
-      : Classes::BaseSetup(_id),
-        node_name(node_name),
-        debug_topic(debug_topic){};
+  const char* node_name;
+  const char* debug_topic;
 
-  const char* node_name = "robot_manager";
-  const char* debug_topic = "/mcu_robot/debug";
+  MicrorosManagerSetup(const char* _id,
+                       const char* _node_name = "robot_manager",
+                       const char* _debug_topic = "/mcu_robot/debug")
+      : Classes::BaseSetup(_id),
+        node_name(_node_name),
+        debug_topic(_debug_topic){};
 };
 class MicrorosManager : public Subsystem::RTOSSubsystem {
  public:

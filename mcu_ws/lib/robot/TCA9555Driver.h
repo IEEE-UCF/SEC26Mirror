@@ -28,6 +28,8 @@
 
 #include "I2CBusLock.h"
 
+class I2CDMABus;
+
 namespace Drivers {
 
 class TCA9555DriverSetup : public Classes::BaseSetup {
@@ -96,11 +98,12 @@ class TCA9555Driver : public Classes::BaseDriver {
    */
   bool digitalRead(uint8_t pin) const;
 
-  // ── DMA injection ───────────────────────────────────────────────────────
+  // ── DMA support ─────────────────────────────────────────────────────────
 
-  /// Inject DMA-read input data into the cached input ports.
-  /// Call this from the bus task after dispatch() copies RX bytes.
-  /// Existing readPort() / digitalRead() will see the updated values.
+  void setDMABus(I2CDMABus* bus) { dma_bus_ = bus; }
+  void queueDMARead();
+  void processDMAResults();
+
   void injectDMA(uint8_t port0, uint8_t port1) {
     data_.inputPort0 = port0;
     data_.inputPort1 = port1;
@@ -119,11 +122,13 @@ class TCA9555Driver : public Classes::BaseDriver {
 
  private:
   bool writeReg(uint8_t reg, uint8_t value);
-  uint8_t readReg(uint8_t reg);
+  bool readReg(uint8_t reg, uint8_t* value);
 
   const TCA9555DriverSetup setup_;
   TCA9555DriverData data_;
   char infoBuf_[64] = {};
+  I2CDMABus* dma_bus_ = nullptr;
+  uint8_t dma_rx_[2] = {};
 };
 
 }  // namespace Drivers

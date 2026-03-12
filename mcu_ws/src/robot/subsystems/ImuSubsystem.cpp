@@ -22,7 +22,10 @@ bool ImuSubsystem::init() {
 void ImuSubsystem::update() {
   if (!setup_.driver_) return;
 
+  uint32_t t0 = micros();
   setup_.driver_->update();
+  uint32_t t_drv = micros();
+  DEBUG_PRINTF("[IMU] driver->update() took %lu us\n", t_drv - t0);
 
   // Cache yaw for cross-thread access (e.g., DriveSubsystem localization)
   yaw_rad_.store(setup_.driver_->getData().yaw, std::memory_order_relaxed);
@@ -34,9 +37,13 @@ void ImuSubsystem::update() {
 
   // Populate message under data_mutex_ for deferred publishing
   {
+    uint32_t t_m0 = micros();
     Threads::Scope lock(data_mutex_);
+    uint32_t t_m1 = micros();
     publishData();
     data_ready_ = true;
+    DEBUG_PRINTF("[IMU] data_mutex + publishData took %lu us (lock wait %lu us)\n",
+                 micros() - t_m0, t_m1 - t_m0);
   }
 }
 
@@ -48,7 +55,6 @@ const char* ImuSubsystem::getInfo() {
 }
 
 bool ImuSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
-  (void)executor;
   node_ = node;
 
   // Initialize the IMU message
@@ -68,12 +74,28 @@ bool ImuSubsystem::onCreate(rcl_node_t* node, rclc_executor_t* executor) {
     return false;
   }
 
+  // Tare service: zeros the IMU heading via BNO085 hardware tare
+  if (rclc_service_init_default(
+          &tare_srv_, node, ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, Reset),
+          "/mcu_robot/imu/tare") != RCL_RET_OK) {
+    DEBUG_PRINTLN("[IMU] onCreate FAIL: tare service init");
+    return false;
+  }
+
+  if (rclc_executor_add_service_with_context(
+          executor, &tare_srv_, &tare_req_, &tare_res_,
+          &ImuSubsystem::tareCallback, this) != RCL_RET_OK) {
+    DEBUG_PRINTLN("[IMU] onCreate FAIL: tare executor add");
+    return false;
+  }
+
   DEBUG_PRINTLN("[IMU] onCreate OK");
   return true;
 }
 
 void ImuSubsystem::onDestroy() {
   pub_ = rcl_get_zero_initialized_publisher();
+  tare_srv_ = rcl_get_zero_initialized_service();
   // Null out the frame_id string BEFORE calling __fini.  publishData() sets
   // frame_id.data to a static char[], and __fini would try to free() it,
   // causing heap corruption.
@@ -82,6 +104,18 @@ void ImuSubsystem::onDestroy() {
   msg_.header.frame_id.capacity = 0;
   sensor_msgs__msg__Imu__fini(&msg_);
   node_ = nullptr;
+}
+
+bool ImuSubsystem::tare() {
+  if (!setup_.driver_) return false;
+  return setup_.driver_->tare();
+}
+
+void ImuSubsystem::tareCallback(const void* req, void* res, void* ctx) {
+  (void)req;
+  auto* self = static_cast<ImuSubsystem*>(ctx);
+  auto* rsp = static_cast<mcu_msgs__srv__Reset_Response*>(res);
+  rsp->success = self->tare();
 }
 
 void ImuSubsystem::initCovariances() {

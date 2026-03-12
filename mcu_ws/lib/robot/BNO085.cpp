@@ -100,10 +100,9 @@ void BNO085Driver::update() {
   I2CBus::Lock lock(setup_.wire_);
 #endif
 
-  // BNO085 can spontaneously reset — re-enable reports when it does.
-  // Release the I2C lock during the 300ms boot delay so other threads
-  // aren't blocked.
-  if (imu_.wasReset()) {
+  bool wasRst = imu_.wasReset();
+
+  if (wasRst) {
     ++resetCount_;
     DEBUG_PRINTF("[BNO085] Reset detected (#%lu) — waiting 300ms\n", resetCount_);
 #if defined(USE_FREERTOS)
@@ -115,8 +114,7 @@ void BNO085Driver::update() {
 #endif
     if (!enableReports()) {
       DEBUG_PRINTLN("[BNO085] WARNING: enableReports failed after reset");
-    } else {
-      DEBUG_PRINTLN("[BNO085] Re-enabled reports after reset");
+      return;
     }
   }
 
@@ -160,6 +158,23 @@ float BNO085Driver::calculateYaw(float qx, float qy, float qz, float qw) {
   float t3 = 2.0f * (qw * qz + qx * qy);
   float t4 = 1.0f - 2.0f * (qy * qy + qz * qz);
   return atan2(t3, t4);
+}
+
+bool BNO085Driver::tare() {
+  if (!initSuccess_) return false;
+
+#if defined(USE_FREERTOS)
+  I2CBus::Lock lock(setup_.wire_);
+#endif
+  int rc = sh2_setTareNow(SH2_TARE_Z, SH2_TARE_BASIS_GAMING_ROTATION_VECTOR);
+
+  if (rc != SH2_OK) {
+    DEBUG_PRINTF("[BNO085] tare FAIL: rc=%d\n", rc);
+    return false;
+  }
+
+  DEBUG_PRINTLN("[BNO085] tare OK (Z-axis zeroed)");
+  return true;
 }
 
 const char* BNO085Driver::getInfo() {

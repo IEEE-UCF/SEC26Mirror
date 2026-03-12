@@ -23,11 +23,11 @@ namespace Subsystem {
 
 class HeartbeatSubsystemSetup : public Classes::BaseSetup {
  public:
-  HeartbeatSubsystemSetup(const char* _id) : Classes::BaseSetup(_id) {}
-  HeartbeatSubsystemSetup(const char* _id, const char* topic)
-      : Classes::BaseSetup(_id), topic(topic) {}
+  const char* topic_name;
 
-  const char* topic = "/mcu_robot/heartbeat";
+  HeartbeatSubsystemSetup(const char* _id,
+                          const char* _topic = "/mcu_robot/heartbeat")
+      : Classes::BaseSetup(_id), topic_name(_topic) {}
 };
 
 class HeartbeatSubsystem : public IMicroRosParticipant,
@@ -59,7 +59,7 @@ class HeartbeatSubsystem : public IMicroRosParticipant,
     node_ = node;
     if (rclc_publisher_init_best_effort(
             &pub_, node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
-            setup_.topic) != RCL_RET_OK) {
+            setup_.topic_name) != RCL_RET_OK) {
       DEBUG_PRINTLN("[HB] onCreate FAIL: publisher init");
       return false;
     }

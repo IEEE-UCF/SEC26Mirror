@@ -25,6 +25,7 @@
 #include "../RobotPins.h"
 #include "BNO085.h"
 #include "I2CBusLock.h"
+#include "I2CDMABus.h"
 #include "I2CMuxDriver.h"
 #include "I2CPowerDriver.h"
 #include "PCA9685Manager.h"
@@ -107,7 +108,8 @@ static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
 
-// --- Wire2: PCA9685 manager (servo + motor boards) ---
+// --- Wire2: I2C DMA bus + PCA9685 manager ---
+static I2CDMABus g_wire2_dma(Wire2, 1000000);
 static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
 static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
 
@@ -117,6 +119,11 @@ static Robot::PCA9685Driver* g_pca_servo =
 static Robot::PCA9685Driver* g_pca_motor =
     g_pca_mgr.createDriver(Robot::PCA9685DriverSetup(
         "pca_motor", I2C_ADDR_MOTOR, MOTOR_PCA9685_FREQ, Wire2));
+
+// --- Wire0 I2CDMABus (400 kHz Fast Mode) ---
+// TCA9548A mux, TCA9555 GPIO, INA219 battery
+// Wire1 not created, BNO085 SHTP protocol requires blocking multi-step I2C.
+static I2CDMABus g_dma_wire0(Wire, 400000);
 
 // --- Arm subsystem ---
 static Drivers::EncoderDriverSetup g_encoder_setup("arm_encoder", /*pin1*/ 1,
@@ -261,14 +268,22 @@ static void configureDriveSetup() {
   g_drive_setup.trajConfig.k_heading = TRAJ_K_HEADING;
   g_drive_setup.trajConfig.advance_tol = TRAJ_ADVANCE_TOL_M;
 
-  // Limits
+  // Limits — effective wheel cap is min(physical motor limit, user override)
+  // WHEEL_VEL_AT_RATED_RPM is the hard ceiling from motor specs.
+  // MAX_WHEEL_VEL_MPS is user-tunable (defaults to rated, can be lowered).
   g_drive_setup.maxLinearVel = MAX_LINEAR_VEL_MPS;
   g_drive_setup.maxAngularVel = MAX_ANGULAR_VEL_RADPS;
+  g_drive_setup.maxWheelVel = fminf(WHEEL_VEL_AT_RATED_RPM, MAX_WHEEL_VEL_MPS);
 
   // Pose drive gains
   g_drive_setup.poseKLinear = POSE_K_LINEAR;
   g_drive_setup.poseKAngular = POSE_K_ANGULAR;
   g_drive_setup.poseDistTol = POSE_DIST_TOL_M;
+  g_drive_setup.poseHeadingTol = POSE_HEADING_TOL_RAD;
+
+  // Gyro heading hold
+  g_drive_setup.gyroHoldKp = GYRO_HOLD_KP;
+  g_drive_setup.gyroHoldThreshold = GYRO_HOLD_THRESHOLD;
 
   // Motor direction multipliers
   g_drive_setup.leftMotorMultiplier = LEFT_MOTOR_MULTIPLIER;
@@ -285,11 +300,59 @@ static KeypadSubsystemSetup g_keypad_setup("keypad_subsystem", &g_servo,
                                             KEYPAD_SERVO_IDX, &g_drive);
 static KeypadSubsystem g_keypad(g_keypad_setup);
 
-// --- PCA9685 flush task ---
-static void pca_task(void*) {
+// Wire0 DMA bus task: batches mux select + INA219 + TCA9555 reads at 50 Hz.
+// TOF (VL53L0X) remains blocking, complex multi-step library protocol.
+static void wire0_dma_task(void*) {
+  static constexpr uint32_t DMA_TIMEOUT_MS = 50;
   while (true) {
-    g_pca_mgr.update();
-    threads.delay(20);
+    g_mux.queueDMASelect(MUX_CH_BATTERY);
+    g_power_driver.queueDMAReads();
+    g_gpio.queueDMARead();
+
+    if (g_dma_wire0.fire()) {
+      if (g_dma_wire0.waitComplete(DMA_TIMEOUT_MS)) {
+        g_dma_wire0.dispatch();
+        g_power_driver.processDMAResults();
+        g_gpio.processDMAResults();
+      } else {
+        g_dma_wire0.reset();
+      }
+    } else {
+      // fire() failed (empty or previous transfer stuck) — reset queues
+      g_dma_wire0.dispatch();
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+
+// PCA9685 DMA flush task (via I2CDMABus)
+// Uses task notification for zero-latency DMA completion wake-up.
+static void pca_task(void*) {
+  static constexpr uint32_t DMA_TIMEOUT_MS = 10;
+  while (true) {
+    if (g_wire2_dma.isComplete()) {
+      g_wire2_dma.dispatch();
+      g_pca_mgr.buildInto();
+      if (!g_wire2_dma.fire()) {
+        // Nothing dirty — sleep until next motor update tick
+        vTaskDelay(pdMS_TO_TICKS(1));
+        continue;
+      }
+      // Block until DMA completes (ISR wakes us) or timeout
+      if (!g_wire2_dma.waitComplete(DMA_TIMEOUT_MS)) {
+        g_wire2_dma.reset();
+      }
+      // Yield for 1ms to match old motor manager timing (1000 Hz)
+      // and prevent starving lower-priority tasks (MicrorosManager).
+      vTaskDelay(pdMS_TO_TICKS(1));
+    } else {
+      // Transfer still in progress — wait for notification
+      g_wire2_dma.waitComplete(DMA_TIMEOUT_MS);
+      if (!g_wire2_dma.isComplete()) {
+        g_wire2_dma.reset();
+      }
+    }
   }
 }
 
@@ -355,7 +418,9 @@ void setup() {
   g_battery.init();      DEBUG_PRINTLN("[INIT] Battery OK");
   g_sensor.init();       DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
   g_imu.init();          DEBUG_PRINTLN("[INIT] IMU OK");
-  g_pca_mgr.init();      DEBUG_PRINTLN("[INIT] PCA9685 Manager OK");
+  g_pca_mgr.init();
+  g_pca_mgr.setDMABus(&g_wire2_dma);
+  DEBUG_PRINTLN("[INIT] PCA9685 Manager + DMA OK");
   g_arm_encoder.init();  DEBUG_PRINTLN("[INIT] Arm Encoder OK");
   g_arm.init();          DEBUG_PRINTLN("[INIT] Arm OK");
   g_rc.init();           DEBUG_PRINTLN("[INIT] RC Receiver OK");
@@ -383,24 +448,31 @@ void setup() {
   g_drive.init();        DEBUG_PRINTLN("[INIT] Drive OK");
   g_keypad.init();       DEBUG_PRINTLN("[INIT] Keypad OK");
 
-  // 2a. Clear LEDs on startup
+  // 2a. Wire DMA buses to I2C drivers
+  g_mux.setDMABus(&g_dma_wire0);
+  g_power_driver.setDMABus(&g_dma_wire0);
+  g_gpio.setDMABus(&g_dma_wire0);
+  g_imu_driver.setDMABus(nullptr);  // BNO085 SHTP, keep blocking on Wire1
+  DEBUG_PRINTLN("[INIT] DMA buses wired to I2C drivers");
+
+  // 2c. Clear LEDs on startup
   g_led.setAll(0, 0, 0);
   FastLED.show();
 
-  // 2b. OLED startup debug info
+  // 2d. OLED startup debug info
   g_oled.appendText("SEC26 Robot v1.0");
   g_oled.appendText("Subsystems OK");
   g_oled.appendText("Waiting for uROS...");
 
-  // 2b2. Update OLED when micro-ROS connects/disconnects
+  // 2d2. Update OLED when micro-ROS connects/disconnects
   g_mr.setStateCallback([](bool connected) {
     g_oled.appendText(connected ? "uROS CONNECTED" : "uROS DISCONNECTED");
   });
 
-  // 2c. Wire battery → OLED status line
+  // 2e. Wire battery → OLED status line
   g_battery.setOLED(&g_oled);
 
-  // 2d. Wire OLED dashboard data sources (DIP 6 = debug dashboard)
+  // 2f. Wire OLED dashboard data sources (DIP 6 = debug dashboard)
   g_oled.setDashboardSources(&g_dip, &g_battery, &g_imu,
                              uwb_enabled ? &g_uwb : nullptr);
 
@@ -440,29 +512,35 @@ void setup() {
   DEBUG_PRINTF("[INIT] Registered %d participants\n", 20);
 
   // 4. Start threaded tasks
+  // micro-ROS at lowest priority — publishes with leftover CPU cycles.
+  // Sensor/control tasks promoted so they never get starved by publishing.
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 4, 10);   // ROS agent
-  g_imu.beginThreaded(8192, 3, 10);  // 100Hz poll — INT pin skips I2C when no data ready
-  g_servo.beginThreaded(2048, 2, 100);    // 10 Hz state pub
-  g_motor.beginThreaded(2048, 2, 1);      // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(2048, 2, 50);  // 20 Hz encoder reading
-  g_oled.beginThreaded(2048, 1, 100);     // 10 Hz display
-  g_battery.beginThreaded(2048, 1, 2000); // 0.5 Hz
-  g_sensor.beginThreaded(2048, 1, 500);   // 2 Hz TOF
-  g_dip.beginThreaded(2048, 1, 2000);     // 0.5 Hz
-  g_btn.beginThreaded(2048, 1, 100);      // 10 Hz
-  g_led.beginThreaded(2048, 1, 200);      // 5 Hz
-  g_hb.beginThreaded(2048, 1, 1000);      // 1 Hz
-  if (uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
-  g_arm.beginThreaded(2048, 2, 50);       // 20 Hz arm
-  g_intake.beginThreaded(2048, 2, 50);    // 20 Hz intake
-  g_deploy.beginThreaded(2048, 1, 100);   // 10 Hz deploy button
-  g_crank.beginThreaded(2048, 1, 200);    // 5 Hz crank
-  g_keypad.beginThreaded(2048, 1, 200);   // 5 Hz keypad
-  g_drive.beginThreaded(4096, 3, 20);     // 50 Hz drive control
-  threads.addThread(pca_task, nullptr, 2048);  // 50 Hz PWM flush
-  threads.addThread(rc_drive_task, nullptr, 2048);  // RC polling + manual drive
+  g_mr.beginThreaded(8192, 2, 1);    // ROS agent (pri 2, 1ms for fast publish)
+  g_imu.beginThreaded(8192, 4, 10);  // 100Hz poll — INT pin skips I2C when no data ready
+  g_servo.beginThreaded(2048, 3, 100);    // 10 Hz state pub
+  g_motor.beginThreaded(2048, 3, 1);      // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(2048, 3, 50);  // 20 Hz encoder reading
+  g_oled.beginThreaded(2048, 2, 100);     // 10 Hz display
+  g_battery.beginThreaded(2048, 2, 2000); // 0.5 Hz
+  g_sensor.beginThreaded(2048, 2, 500);   // 2 Hz TOF
+  g_dip.beginThreaded(2048, 2, 2000);     // 0.5 Hz
+  g_btn.beginThreaded(2048, 2, 100);      // 10 Hz
+  g_led.beginThreaded(2048, 2, 200);      // 5 Hz
+  g_hb.beginThreaded(2048, 2, 1000);      // 1 Hz
+  if (uwb_enabled) g_uwb.beginThreaded(2048, 3, 200);  // 5 Hz UWB ranging
+  g_arm.beginThreaded(2048, 3, 50);       // 20 Hz arm
+  g_intake.beginThreaded(2048, 3, 50);    // 20 Hz intake
+  g_deploy.beginThreaded(2048, 2, 100);   // 10 Hz deploy button
+  g_crank.beginThreaded(2048, 2, 200);    // 5 Hz crank
+  g_keypad.beginThreaded(2048, 2, 200);   // 5 Hz keypad
+  g_drive.beginThreaded(4096, 4, 20);     // 50 Hz drive control
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(wire0_dma_task),
+              "wire0_dma", 2048 / 4, nullptr, 2, nullptr);   // 50 Hz Wire0 DMA
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(pca_task),
+              "pca_dma", 2048 / 4, nullptr, 3, nullptr);     // Wire2 DMA (pri 3)
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(rc_drive_task),
+              "rc_drive", 2048 / 4, nullptr, 2, nullptr);    // RC polling + manual drive
   DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
 }
 

@@ -36,19 +36,46 @@ constexpr float WHEEL_CIRCUMFERENCE_M =
     static_cast<float>(M_PI) * WHEEL_DIAMETER_M;
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Encoder configuration
+//  Motor specs (before any gear reduction)
+// ═══════════════════════════════════════════════════════════════════════════
+
+constexpr float MOTOR_RATED_RPM = 9592.0f;   // continuous rated speed
+constexpr float MOTOR_MAX_RPM = 11880.0f;    // absolute max (no-load)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Gear train & encoder configuration
 // ═══════════════════════════════════════════════════════════════════════════
 
 constexpr int RAW_TICKS_PER_REVOLUTION = 3;
-constexpr int MOTOR_GEAR_RATIO = 34;
-constexpr int EXTERNAL_GEAR_SMALL = 36;   // motor-side gear teeth
-constexpr int EXTERNAL_GEAR_LARGE = 60;   // wheel-side gear teeth
+constexpr int MOTOR_GEAR_RATIO = 34;         // internal gearbox
+constexpr int EXTERNAL_GEAR_SMALL = 36;      // motor-side gear teeth
+constexpr int EXTERNAL_GEAR_LARGE = 60;      // wheel-side gear teeth
+
+// Total gear ratio: motor shaft → wheel
+constexpr float TOTAL_GEAR_RATIO =
+    static_cast<float>(MOTOR_GEAR_RATIO) *
+    static_cast<float>(EXTERNAL_GEAR_LARGE) /
+    static_cast<float>(EXTERNAL_GEAR_SMALL);  // 56.67
+
 constexpr long TICKS_PER_REVOLUTION =
     RAW_TICKS_PER_REVOLUTION * MOTOR_GEAR_RATIO
     * EXTERNAL_GEAR_LARGE / EXTERNAL_GEAR_SMALL;  // 170
 
 constexpr float DIST_PER_TICK_M =
     WHEEL_CIRCUMFERENCE_M / TICKS_PER_REVOLUTION;
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Physical wheel velocity limits (derived from motor specs + gear + wheel)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// wheel_vel = (motor_rpm / gear_ratio) × wheel_circumference / 60
+constexpr float WHEEL_VEL_AT_RATED_RPM =
+    (MOTOR_RATED_RPM / TOTAL_GEAR_RATIO) * WHEEL_CIRCUMFERENCE_M / 60.0f;
+    // ≈ 0.732 m/s
+
+constexpr float WHEEL_VEL_AT_MAX_RPM =
+    (MOTOR_MAX_RPM / TOTAL_GEAR_RATIO) * WHEEL_CIRCUMFERENCE_M / 60.0f;
+    // ≈ 0.907 m/s
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Motor / encoder channel mapping (PCA9685 motor board indices)
@@ -76,12 +103,16 @@ constexpr bool RIGHT_ENCODER_INVERTED = false;
 //  Velocity / acceleration limits (in m/s, m/s^2, rad/s, rad/s^2)
 // ═══════════════════════════════════════════════════════════════════════════
 
-constexpr float MAX_LINEAR_VEL_MPS = inps_to_mps(30.0f);        // ~0.76 m/s
-constexpr float MAX_LINEAR_ACCEL_MPS2 = inps_to_mps(30.0f);     // ~0.76 m/s^2
+constexpr float MAX_LINEAR_VEL_MPS = 0.7f;                      // chassis speed limit (m/s)
+constexpr float MAX_LINEAR_ACCEL_MPS2 = 0.7f;                   // m/s^2
 constexpr float MAX_LINEAR_JERK_MPS3 = inps_to_mps(120.0f);     // ~3.05 m/s^3
-constexpr float MAX_ANGULAR_VEL_RADPS = 4.0f;                   // rad/s
-constexpr float MAX_ANGULAR_ACCEL_RADPS2 = 10.0f;               // rad/s^2
-constexpr float MAX_ANGULAR_JERK_RADPS3 = 40.0f;                // rad/s^3
+constexpr float MAX_ANGULAR_VEL_RADPS = 6.0f;                   // rad/s
+constexpr float MAX_ANGULAR_ACCEL_RADPS2 = 15.0f;               // rad/s^2
+constexpr float MAX_ANGULAR_JERK_RADPS3 = 60.0f;                // rad/s^3
+
+// Effective wheel speed limit used for saturation.
+// Uses rated RPM (safe continuous). Change to WHEEL_VEL_AT_MAX_RPM for bursts.
+constexpr float MAX_WHEEL_VEL_MPS = WHEEL_VEL_AT_RATED_RPM;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Wheel velocity PID (tuning constants)
@@ -89,9 +120,9 @@ constexpr float MAX_ANGULAR_JERK_RADPS3 = 40.0f;                // rad/s^3
 
 // These control individual wheel speed tracking.
 // Output range maps to MotorManagerSubsystem::setSpeed() range [-1.0, 1.0].
-constexpr float WHEEL_PID_KP = 0.8f;
-constexpr float WHEEL_PID_KI = 0.1f;
-constexpr float WHEEL_PID_KD = 0.05f;
+constexpr float WHEEL_PID_KP = 0.4f;
+constexpr float WHEEL_PID_KI = 0.05f;
+constexpr float WHEEL_PID_KD = 0.025f;
 constexpr float WHEEL_PID_OUT_MIN = -1.0f;
 constexpr float WHEEL_PID_OUT_MAX = 1.0f;
 constexpr float WHEEL_PID_I_MIN = -0.3f;
@@ -102,9 +133,14 @@ constexpr float WHEEL_PID_D_FILTER = 0.1f;
 //  Pose drive gains
 // ═══════════════════════════════════════════════════════════════════════════
 
-constexpr float POSE_K_LINEAR = 2.0f;     // P gain for distance error
-constexpr float POSE_K_ANGULAR = 4.0f;    // P gain for heading error
+constexpr float POSE_K_LINEAR = 1.0f;     // P gain for distance error
+constexpr float POSE_K_ANGULAR = 2.0f;    // P gain for heading error
 constexpr float POSE_DIST_TOL_M = 0.015f; // 1.5cm goal tolerance
+constexpr float POSE_HEADING_TOL_RAD = 0.05f; // ~3 deg final heading tolerance
+
+// Gyro heading hold (straight-line drift correction in velocity mode)
+constexpr float GYRO_HOLD_KP = 2.0f;           // P gain for heading correction
+constexpr float GYRO_HOLD_THRESHOLD = 0.05f;   // rad/s — below this, hold heading
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Trajectory controller

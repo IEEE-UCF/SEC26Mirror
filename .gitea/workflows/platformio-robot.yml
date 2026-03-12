@@ -70,6 +70,7 @@ jobs:
         run: |
           echo "::notice::Cache restored from fallback key, cleaning microros"
           pio run -e robot -t clean_microros || true
+          pio run -e minibot -t clean_microros || true
 
       - name: Install CMake
         # Pin to 3.29.x — CMake 3.28 rejects PlatformIO's arm-cortexm7f-eabi-gcc

@@ -966,3 +966,10 @@ void MissionNode::onStartService(
 }
 
 }  // namespace secbot
+
+int main(int argc, char** argv) {
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<secbot::MissionNode>());
+  rclcpp::shutdown();
+  return 0;
+}

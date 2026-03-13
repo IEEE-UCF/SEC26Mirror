@@ -18,6 +18,8 @@
 
 #include "I2CBusLock.h"
 
+class I2CDMABus;
+
 namespace Drivers {
 
 class I2CMuxDriverSetup : public Classes::BaseSetup {
@@ -58,11 +60,18 @@ class I2CMuxDriver : public Classes::BaseDriver {
   bool selectChannel(uint8_t channel);
   bool deselectAll();
 
+  // ── DMA support ──────────────────────────────────────────────────────
+  void setDMABus(I2CDMABus* bus) { dma_bus_ = bus; }
+  void queueDMASelect(uint8_t channel);
+
+  uint8_t getAddress() const { return setup_.i2cAddress_; }
+
  private:
   TCA9548 mux_;
   const I2CMuxDriverSetup& setup_;
   char infoBuf_[64] = {};
   uint8_t currentChannel_;
+  I2CDMABus* dma_bus_ = nullptr;
 };
 
 }  // namespace Drivers

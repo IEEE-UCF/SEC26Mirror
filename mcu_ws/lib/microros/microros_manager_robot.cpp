@@ -6,7 +6,7 @@
 #include <micro_ros_utilities/type_utilities.h>
 #include <uxr/client/util/time.h>
 
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
 Threads::Mutex g_microros_mutex;
 #endif
 
@@ -21,7 +21,7 @@ bool MicrorosManager::create_entities() {
     DEBUG_PRINTLN("[uROS] FAIL: rclc_support_init");
     return false;
   }
-  if (rclc_node_init_default(&node_, "robot_manager", "", &support_) !=
+  if (rclc_node_init_default(&node_, setup_.node_name, "", &support_) !=
       RCL_RET_OK) {
     DEBUG_PRINTLN("[uROS] FAIL: rclc_node_init_default");
     return false;
@@ -52,7 +52,7 @@ bool MicrorosManager::create_entities() {
   if (rclc_publisher_init_best_effort(
           &debug_pub_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
-          "/mcu_robot/debug") != RCL_RET_OK) {
+          setup_.debug_topic) != RCL_RET_OK) {
     DEBUG_PRINTLN("[uROS] FAIL: debug publisher init");
     return false;
   }
@@ -88,7 +88,7 @@ void MicrorosManager::destroy_entities() {
 #ifdef MICRO_ROS_TRANSPORT_ARDUINO_SERIAL
   Serial.flush();
   while (Serial.available()) Serial.read();
-  delay(100);
+  vTaskDelay(pdMS_TO_TICKS(100));
 #endif
 }
 
@@ -107,7 +107,7 @@ void MicrorosManager::begin() {
 }
 
 void MicrorosManager::update() {
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
   Threads::Scope guard(g_microros_mutex);
 #else
   std::lock_guard<std::mutex> guard(mutex_);
@@ -128,19 +128,21 @@ void MicrorosManager::update() {
       }
       break;
     case AGENT_CONNECTED:
-      EXECUTE_EVERY_N_MS(2000,
-                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(30, 1))
+      // IMPORTANT: Spin executor FIRST to drain any pending data (service
+      // requests, subscriptions) from the UDP socket buffer.  If we ping
+      // first, rmw_uros_ping_agent reads from the same socket and can
+      // consume/discard non-ping XRCE-DDS packets (like service requests),
+      // causing the ping to fail and tearing down the entire connection.
+      rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(1));
+      // Publish all participant data under the same g_microros_mutex hold.
+      for (size_t i = 0; i < participants_count_; ++i) {
+        if (participants_[i]) participants_[i]->publishAll();
+      }
+      // Keep-alive ping every 5s (after executor has drained the socket).
+      EXECUTE_EVERY_N_MS(5000,
+                         state_ = (RMW_RET_OK == rmw_uros_ping_agent(100, 3))
                                       ? AGENT_CONNECTED
                                       : AGENT_DISCONNECTED;);
-      if (state_ == AGENT_CONNECTED) {
-        rclc_executor_spin_some(&executor_, RCL_MS_TO_NS(1));
-        // Publish all participant data under the same g_microros_mutex hold.
-        // Each participant's publishAll() acquires its own data_mutex_ (inner
-        // lock) and calls rcl_publish if new data is ready.
-        for (size_t i = 0; i < participants_count_; ++i) {
-          if (participants_[i]) participants_[i]->publishAll();
-        }
-      }
       break;
     case AGENT_DISCONNECTED:
       destroy_entities();
@@ -183,21 +185,7 @@ void MicrorosManager::registerParticipant(IMicroRosParticipant* participant) {
   }
 }
 
-#ifdef USE_TEENSYTHREADS
-void MicrorosManager::taskFunction(void* pvParams) {
-  auto* self = static_cast<MicrorosManager*>(pvParams);
-  self->begin();
-  while (true) {
-    self->update();
-    threads.delay(10);
-  }
-}
-
-void MicrorosManager::beginThreaded(uint32_t stackSize, int priority) {
-  int id = threads.addThread(taskFunction, this, stackSize);
-  threads.setTimeSlice(id, priority);
-}
-
+#if defined(USE_FREERTOS)
 Threads::Mutex& MicrorosManager::getMutex() { return mutex_; }
 #else
 std::mutex& MicrorosManager::getMutex() { return mutex_; }
@@ -208,13 +196,13 @@ bool MicrorosManager::isConnected() const { return state_ == AGENT_CONNECTED; }
 void MicrorosManager::debugLog(const char* text) {
   if (!debug_pub_.impl || state_ != AGENT_CONNECTED) return;
   debug_msg_.data = micro_ros_string_utilities_set(debug_msg_.data, text);
-#ifdef USE_TEENSYTHREADS
+#if defined(USE_FREERTOS)
   {
     Threads::Scope guard(g_microros_mutex);
-    (void)rcl_publish(&debug_pub_, &debug_msg_, NULL);
+    [[maybe_unused]] auto rc = rcl_publish(&debug_pub_, &debug_msg_, NULL);
   }
 #else
-  (void)rcl_publish(&debug_pub_, &debug_msg_, NULL);
+  [[maybe_unused]] auto rc = rcl_publish(&debug_pub_, &debug_msg_, NULL);
 #endif
 }
 

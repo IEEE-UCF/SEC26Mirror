@@ -1,0 +1,29 @@
+# Dynamically tune drive subsystem control constants at runtime.
+#
+# Only non-zero fields are applied — zero values are ignored, so you can
+# update a single gain without touching the others.
+#
+# Example:
+#   ros2 service call /mcu_robot/drive/config mcu_msgs/srv/SetDriveConfig
+#   "{wheel_kp: 0.5, wheel_ki: 0.05}"
+
+# Wheel velocity PID gains
+float32 wheel_kp         # Proportional gain (default 0.4)
+float32 wheel_ki         # Integral gain (default 0.05)
+float32 wheel_kd         # Derivative gain (default 0.025)
+float32 wheel_i_min      # Integral clamp min (default -0.3)
+float32 wheel_i_max      # Integral clamp max (default 0.3)
+
+# Pose drive gains (GOAL mode)
+float32 pose_k_linear    # P gain for distance error (default 1.0)
+float32 pose_k_angular   # P gain for heading error (default 2.0)
+
+# Velocity/accel limits
+float32 max_linear_vel   # Max chassis speed m/s (default 0.7)
+float32 max_angular_vel  # Max turn rate rad/s (default 6.0)
+float32 max_linear_accel # Max linear accel m/s^2 (default 0.7)
+float32 max_angular_accel # Max angular accel rad/s^2 (default 15.0)
+
+---
+bool success
+string message

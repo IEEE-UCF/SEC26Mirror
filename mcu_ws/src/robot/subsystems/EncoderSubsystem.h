@@ -18,14 +18,10 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <QTimerEncoder.h>
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/float32_multi_array.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 #include "robot/subsystems/MotorManagerSubsystem.h"
 
@@ -65,12 +61,12 @@ class EncoderSubsystemSetup : public Classes::BaseSetup {
 };
 
 class EncoderSubsystem : public IMicroRosParticipant,
-                          public Classes::BaseSubsystem {
+                          public Subsystem::RTOSSubsystem {
  public:
   static constexpr uint8_t NUM_CHANNELS = Encoders::NUM_ENCODER_CHANNELS;
 
   explicit EncoderSubsystem(const EncoderSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override {
     if (!setup_.encoder_) return false;
@@ -102,7 +98,6 @@ class EncoderSubsystem : public IMicroRosParticipant,
 
     // Publish
     if (!pub_.impl) return;
-#ifdef USE_TEENSYTHREADS
     {
       Threads::Scope lock(data_mutex_);
       for (uint8_t i = 0; i < NUM_CHANNELS; i++)
@@ -110,9 +105,6 @@ class EncoderSubsystem : public IMicroRosParticipant,
       pub_msg_.data.size = NUM_CHANNELS;
       data_ready_ = true;
     }
-#else
-    publishData();
-#endif
   }
 
   void pause() override {}
@@ -165,34 +157,12 @@ class EncoderSubsystem : public IMicroRosParticipant,
     return setup_.encoder_->getTicks(channel);
   }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<EncoderSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
-
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &pub_msg_, NULL);
     data_ready_ = false;
-#endif
   }
 
  private:
@@ -212,9 +182,7 @@ class EncoderSubsystem : public IMicroRosParticipant,
   float pub_data_[NUM_CHANNELS] = {};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

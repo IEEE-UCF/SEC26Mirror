@@ -19,7 +19,7 @@
  */
 
 #include <Arduino.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 #include "I2CBusLock.h"
@@ -97,11 +97,11 @@ void setup() {
 
   // 3. Start threads
   //                                     stack  pri  rate(ms)
-  g_mr.beginThreaded(8192, 4);                // ROS agent
-  g_servo.beginThreaded(1024, 2, 50);         // 20 Hz state pub
-  threads.addThread(pca_task, nullptr, 512);  // PWM flush @ 50 Hz
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  g_mr.beginThreaded(8192, 4, 10);             // ROS agent
+  g_servo.beginThreaded(2048, 2, 50);         // 20 Hz state pub
+  threads.addThread(pca_task, nullptr, 1024);  // PWM flush @ 50 Hz
+  threads.addThread(print_task, nullptr, 2048);
+  threads.addThread(blink_task, nullptr, 1024);
 
   Serial.println(PSTR("setup(): arm servo test threads started."));
 }

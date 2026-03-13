@@ -10,13 +10,11 @@
 #define IMUSUBSYSTEM_H
 
 #include <BNO085.h>
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
+#include <mcu_msgs/srv/reset.h>
 #include <microros_manager_robot.h>
 #include <sensor_msgs/msg/imu.h>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
+#include <atomic>
 
 namespace Subsystem {
 
@@ -28,10 +26,10 @@ class ImuSubsystemSetup : public Classes::BaseSetup {
 };
 
 class ImuSubsystem : public IMicroRosParticipant,
-                     public Classes::BaseSubsystem {
+                     public Subsystem::RTOSSubsystem {
  public:
   explicit ImuSubsystem(const ImuSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override;
   void begin() override {}
@@ -46,28 +44,11 @@ class ImuSubsystem : public IMicroRosParticipant,
 
   void publishData();
 
-  /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (atomic float read). */
-  float getYaw() const { return yaw_rad_; }
+  /** @brief Get latest yaw (Z-axis rotation) in radians. Thread-safe (std::atomic). */
+  float getYaw() const { return yaw_rad_.load(std::memory_order_relaxed); }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pvParams) {
-    auto* self = static_cast<ImuSubsystem*>(pvParams);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
+  /** @brief Zero the IMU heading via BNO085 hardware tare. */
+  bool tare();
 
  private:
   void initCovariances();
@@ -76,35 +57,20 @@ class ImuSubsystem : public IMicroRosParticipant,
   rcl_publisher_t pub_{};
   sensor_msgs__msg__Imu msg_{};
   rcl_node_t* node_ = nullptr;
-  float yaw_rad_ = 0.0f;
+  std::atomic<float> yaw_rad_{0.0f};
 
-  // Gyro calibration offsets (they're calculated during init)
-  float gyro_offset_x_ = 0.0f;
-  float gyro_offset_y_ = 0.0f;
-  float gyro_offset_z_ = 0.0f;
-  bool calibrated_ = false;
-
-  // Dead zone threshold for angular velocity (rad/s)
-  // Values below this are zeroed to reduce noise!
-  static constexpr float kGyroDeadZone = 0.01f;
-
-  // Covariance values based on BNO085 typical specs
-  // Orientation: around 2 degrees accuracy -> variance around 0.001 rad^2
+  // Orientation covariance (BNO085 Game Rotation Vector: ~2 deg accuracy)
   static constexpr double kOrientationVariance = 0.001;
-  // Angular velocity: around 0.1 deg/s noise -> variance around 0.00003
-  // rad^2/s^2
-  static constexpr double kAngularVelocityVariance = 0.00003;
-  // Linear acceleration: around 0.01 m/s^2 noise -> variance around 0.0001
-  // m^2/s^4
-  static constexpr double kLinearAccelerationVariance = 0.0001;
 
-  static constexpr int kCalibrationSamples = 40;
-  static constexpr int kCalibrationDelayMs = 50;
+  // Tare service
+  rcl_service_t tare_srv_{};
+  mcu_msgs__srv__Reset_Request tare_req_{};
+  mcu_msgs__srv__Reset_Response tare_res_{};
+
+  static void tareCallback(const void* req, void* res, void* ctx);
 
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 
  public:
   // Diagnostic counters (for external monitoring / debug)

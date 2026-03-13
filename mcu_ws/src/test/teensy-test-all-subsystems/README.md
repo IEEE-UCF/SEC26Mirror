@@ -40,7 +40,7 @@ pio device monitor -e teensy-test-all-subsystems
 Start the micro-ROS agent (separate terminal):
 
 ```bash
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600
 ```
 
 **Expected serial output:**

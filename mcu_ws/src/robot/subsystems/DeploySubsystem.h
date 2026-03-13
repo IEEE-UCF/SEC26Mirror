@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <microros_manager_robot.h>
 #include "DebugLog.h"
 #include <std_msgs/msg/string.h>
@@ -31,10 +31,6 @@
 #include "robot/subsystems/DipSwitchSubsystem.h"
 #include "robot/subsystems/LEDSubsystem.h"
 #include "robot/subsystems/OLEDSubsystem.h"
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -61,7 +57,7 @@ class DeploySubsystemSetup : public Classes::BaseSetup {
 };
 
 class DeploySubsystem : public IMicroRosParticipant,
-                        public Classes::BaseSubsystem {
+                        public Subsystem::RTOSSubsystem {
  public:
   enum class State { IDLE, HOLD_DETECT, DEPLOYING, CANCEL_HOLD };
 
@@ -84,7 +80,7 @@ class DeploySubsystem : public IMicroRosParticipant,
   static constexpr uint8_t NUM_PHASE_LEDS = 5;
 
   explicit DeploySubsystem(const DeploySubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override { return setup_.btn_ && setup_.dip_ && setup_.led_; }
   void begin() override {}
@@ -192,26 +188,6 @@ class DeploySubsystem : public IMicroRosParticipant,
 
   State getState() const { return state_; }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<DeploySubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
-
  private:
   void oledPrint(const char* text) {
     if (setup_.oled_) {
@@ -260,14 +236,10 @@ class DeploySubsystem : public IMicroRosParticipant,
     trigger_msg_.data.size = strlen(trigger_buf_);
     trigger_msg_.data.capacity = sizeof(trigger_buf_);
 
-#ifdef USE_TEENSYTHREADS
     {
       Threads::Scope lock(data_mutex_);
       data_ready_ = true;
     }
-#else
-    (void)rcl_publish(&pub_, &trigger_msg_, NULL);
-#endif
   }
 
   static void statusCallback(const void* msg, void* ctx) {
@@ -420,12 +392,10 @@ class DeploySubsystem : public IMicroRosParticipant,
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &trigger_msg_, NULL);
     data_ready_ = false;
-#endif
   }
 
  private:
@@ -437,9 +407,7 @@ class DeploySubsystem : public IMicroRosParticipant,
   char trigger_buf_[64] = {};
   rcl_node_t* node_ = nullptr;
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

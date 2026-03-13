@@ -9,7 +9,7 @@
  *   Battery load connected across INA219 IN+ / IN- with shunt
  *
  * micro-ROS agent (on host):
- *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b
+ *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b
  * 921600
  *
  * Monitor battery topic:
@@ -19,7 +19,7 @@
 #include <Arduino.h>
 #include <I2CBusLock.h>
 #include <I2CMuxDriver.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 #include <robot/subsystems/BatterySubsystem.h>
 
@@ -107,10 +107,10 @@ void setup() {
   g_mr.registerParticipant(&g_battery);
 
   //                            stackSize  priority  rateMs
-  g_mr.beginThreaded(8192, 4);
-  g_battery.beginThreaded(1024, 1, 100);
-  threads.addThread(print_task, nullptr, 1024);
-  threads.addThread(blink_task, nullptr, 512);
+  g_mr.beginThreaded(8192, 4, 10);
+  g_battery.beginThreaded(2048, 1, 100);
+  threads.addThread(print_task, nullptr, 2048);
+  threads.addThread(blink_task, nullptr, 1024);
 
   Serial.println(PSTR("setup(): threads started."));
   Serial.flush();

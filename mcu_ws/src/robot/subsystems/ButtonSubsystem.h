@@ -15,17 +15,13 @@
 
 #pragma once
 
-#include <BaseSubsystem.h>
+#include <RTOSSubsystem.h>
 #include <TCA9555Driver.h>
 #include "DebugLog.h"
 #include <microros_manager_robot.h>
 #include <std_msgs/msg/u_int8.h>
 
 #include <functional>
-
-#ifdef USE_TEENSYTHREADS
-#include <TeensyThreads.h>
-#endif
 
 namespace Subsystem {
 
@@ -44,12 +40,12 @@ class ButtonSubsystemSetup : public Classes::BaseSetup {
 };
 
 class ButtonSubsystem : public IMicroRosParticipant,
-                        public Classes::BaseSubsystem {
+                        public Subsystem::RTOSSubsystem {
  public:
   static constexpr uint8_t NUM_BUTTONS = 8;
 
   explicit ButtonSubsystem(const ButtonSubsystemSetup& setup)
-      : Classes::BaseSubsystem(setup), setup_(setup) {}
+      : Subsystem::RTOSSubsystem(setup), setup_(setup) {}
 
   bool init() override {
     if (!setup_.driver_) {
@@ -83,16 +79,11 @@ class ButtonSubsystem : public IMicroRosParticipant,
     uint32_t now = millis();
     if (now - last_publish_ms_ >= PUBLISH_INTERVAL_MS) {
       last_publish_ms_ = now;
-#ifdef USE_TEENSYTHREADS
       {
         Threads::Scope lock(data_mutex_);
         msg_.data = current;
         data_ready_ = true;
       }
-#else
-      msg_.data = current;
-      (void)rcl_publish(&pub_, &msg_, NULL);
-#endif
     }
   }
 
@@ -128,26 +119,6 @@ class ButtonSubsystem : public IMicroRosParticipant,
     return button < NUM_BUTTONS && ((prev_state_ >> button) & 0x01);
   }
 
-#ifdef USE_TEENSYTHREADS
-  void beginThreaded(uint32_t stackSize, int priority = 1,
-                     uint32_t updateRateMs = 20) {
-    task_delay_ms_ = updateRateMs;
-    int id = threads.addThread(taskFunction, this, stackSize);
-    threads.setTimeSlice(id, priority);
-  }
-
- private:
-  static void taskFunction(void* pv) {
-    auto* self = static_cast<ButtonSubsystem*>(pv);
-    self->begin();
-    while (true) {
-      self->update();
-      threads.delay(self->task_delay_ms_);
-    }
-  }
-  uint32_t task_delay_ms_ = 20;
-#endif
-
  private:
   // Hardware is active-low and bit-reversed (button 0 appears at bit 7).
   // Reverse bits and invert so bit 0 = button 0, 1 = pressed.
@@ -160,12 +131,10 @@ class ButtonSubsystem : public IMicroRosParticipant,
 
  public:
   void publishAll() override {
-#ifdef USE_TEENSYTHREADS
     Threads::Scope lock(data_mutex_);
     if (!data_ready_ || !pub_.impl) return;
     (void)rcl_publish(&pub_, &msg_, NULL);
     data_ready_ = false;
-#endif
   }
 
  private:
@@ -178,9 +147,7 @@ class ButtonSubsystem : public IMicroRosParticipant,
   uint8_t prev_state_ = 0;
   std::function<void()> callbacks_[NUM_BUTTONS];
   bool data_ready_ = false;
-#ifdef USE_TEENSYTHREADS
   Threads::Mutex data_mutex_;
-#endif
 };
 
 }  // namespace Subsystem

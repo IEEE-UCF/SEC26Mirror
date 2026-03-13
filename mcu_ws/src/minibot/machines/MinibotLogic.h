@@ -1,76 +1,58 @@
 /**
  * @file MinibotLogic.h
- * @author Rafeed Khan
- * @brief Wiring logic for the minibot ESP32-S3 (UWB tag + motor control +
- * IMU over micro-ROS WiFi)
+ * @brief Wiring logic for the minibot ESP32-S3: service-triggered crater
+ *        navigation + micro-ROS WiFi + OTA.
+ *
+ * FreeRTOS tasks:
+ *   MicrorosManager        (pri 2, 100Hz, 8192 stack)
+ *   MinibotMission         (pri 2, 20Hz,  2048 stack)
+ *   HeartbeatSubsystem     (pri 1, 1Hz,   2048 stack)
+ *   WiFi+OTA               (pri 1, 10Hz,  raw xTaskCreate)
  */
 #pragma once
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 #include <ESP32WifiSubsystem.h>
-#include <SPI.h>
 #include <WiFi.h>
-#include <Wire.h>
 #include <microros_manager_robot.h>
 
-#include "../MiniBotIMUSubsystem.h"
-#include "../MinibotDriveSubsystem.h"
 #include "../MinibotMotorDriver.h"
-#include "UWBDriver.h"
-#include "UWBSubsystem.h"
+#include "../subsystems/MinibotMissionSubsystem.h"
+#include "robot/machines/HeartbeatSubsystem.h"
 
 using namespace Subsystem;
 
-// ── Pin Definitions (ESP32-S3 XIAO Plus — update when hardware is wired) ──
+// ── Pin Definitions (from MinibotCorrectCode.ino) ──
+#define MOTOR_A_IN1_PIN 5
+#define MOTOR_A_IN2_PIN 15
+#define MOTOR_A_PWM_PIN 2
 
-// I2C for MPU6050
-#define I2C_SDA_PIN 5   // TODO: assign real pin
-#define I2C_SCL_PIN 6   // TODO: assign real pin
+#define MOTOR_B_IN1_PIN 18
+#define MOTOR_B_IN2_PIN 19
+#define MOTOR_B_PWM_PIN 4
 
-// SPI for UWB DW3000
-#define UWB_CS_PIN  7   // TODO: assign real pin
-#define UWB_RST_PIN 8   // TODO: assign real pin
-
-// Motor A (left): IN1 + IN2 direction, PWM speed
-#define MOTOR_A_IN1_PIN 1   // TODO: assign real pin
-#define MOTOR_A_IN2_PIN 2   // TODO: assign real pin
-#define MOTOR_A_PWM_PIN 3   // TODO: assign real pin
-
-// Motor B (right): IN1 + IN2 direction, PWM speed
-#define MOTOR_B_IN1_PIN 4   // TODO: assign real pin
-#define MOTOR_B_IN2_PIN 9   // TODO: assign real pin
-#define MOTOR_B_PWM_PIN 10  // TODO: assign real pin
-
-// ── UWB Configuration ──
-#define MINIBOT_TAG_ID 2
-static const uint8_t ANCHOR_IDS[] = {10, 11, 12, 13};
-static const uint8_t NUM_ANCHORS = 4;
-
-// ── WiFi subsystem (manages connection lifecycle + auto-reconnect) ──
+// ── WiFi subsystem ──
 static IPAddress g_local_ip(LOCAL_IP);
 static ESP32WifiSubsystemSetup g_wifi_setup(
     "wifi", WIFI_SSID, WIFI_PASSWORD, g_local_ip,
     IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0),
-    /*connection_timeout_ms=*/10000,
-    /*reconnect_interval_ms=*/5000,
-    /*max_retries=*/0);  // 0 = infinite retries
+    10000, 5000, 0);
 static ESP32WifiSubsystem g_wifi(g_wifi_setup);
 
 // ── micro-ROS Manager ──
-static MicrorosManagerSetup g_mr_setup("microros_manager");
+static MicrorosManagerSetup g_mr_setup("microros_manager", "minibot_manager",
+                                       "/mcu_minibot/debug");
 static MicrorosManager g_mr(g_mr_setup);
 
-// ── UWB Driver and Subsystem ──
-static Drivers::UWBDriverSetup g_uwb_driver_setup(
-    "uwb_driver", Drivers::UWBMode::TAG, MINIBOT_TAG_ID, UWB_CS_PIN,
-    UWB_RST_PIN);
-static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
+// ── Heartbeat ──
+static HeartbeatSubsystemSetup g_hb_setup("heartbeat",
+                                          "/mcu_minibot/heartbeat");
+static HeartbeatSubsystem g_hb(g_hb_setup);
 
-static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver);
-static UWBSubsystem g_uwb(g_uwb_setup);
-
-// ── Motor Drivers (3-pin: IN1 + IN2 + PWM per channel) ──
+// ── Motor Drivers ──
 static Drivers::MinibotMotorDriver g_left_motor(MOTOR_A_IN1_PIN,
                                                 MOTOR_A_IN2_PIN,
                                                 MOTOR_A_PWM_PIN);
@@ -78,80 +60,103 @@ static Drivers::MinibotMotorDriver g_right_motor(MOTOR_B_IN1_PIN,
                                                  MOTOR_B_IN2_PIN,
                                                  MOTOR_B_PWM_PIN);
 
-// ── Drive Subsystem ──
-static MinibotDriveSubsystemSetup g_drive_setup("minibot_drive", &g_left_motor,
-                                                &g_right_motor);
-static MinibotDriveSubsystem g_drive(g_drive_setup);
+// ── Mission Subsystem ──
+static MinibotMissionSubsystem g_mission("minibot_mission", g_left_motor,
+                                         g_right_motor);
 
-// ── IMU Subsystem ──
-static Drivers::MPU6050DriverSetup g_mpu_driver_setup("mpu6050");
-static MiniBotIMUSubsystemSetup g_imu_setup("minibot_imu", g_mpu_driver_setup);
-static MiniBotIMUSubsystem g_imu(g_imu_setup);
+// ── Reset reason (published over micro-ROS debug topic on first connect) ──
+static char g_reset_reason_str[48] = {0};
+static bool g_reset_reason_published = false;
 
-// ── Arduino Entry Points ──
+// ════════════════════════════════════════════════════════════
+//  Arduino setup() / loop()
+// ════════════════════════════════════════════════════════════
 
 void setup() {
-  Serial.begin(115200);
-  delay(2000);
-  Serial.println("Minibot starting...");
+  delay(3000);
 
-  // WiFi connection
+  // Disable brownout detector — WiFi current causes transient voltage dips
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
+  // Capture reset reason
+  {
+    esp_reset_reason_t reason = esp_reset_reason();
+    const char* reasons[] = {"UNKNOWN", "POWERON", "EXT",       "SW",
+                             "PANIC",   "INT_WDT", "TASK_WDT",  "WDT",
+                             "DEEPSLEEP","BROWNOUT","SDIO"};
+    int r = (int)reason;
+    snprintf(g_reset_reason_str, sizeof(g_reset_reason_str),
+             "[Minibot] Reset: %s (%d)",
+             (r >= 0 && r <= 10) ? reasons[r] : "?", r);
+    g_reset_reason_published = false;
+  }
+
+  Serial.begin(921600);
+  delay(500);
+  Serial.println("[Minibot] Starting...");
+
+  // ── WiFi (15s timeout, continue anyway) ──
   g_wifi.init();
   g_wifi.begin();
-  Serial.println("Waiting for WiFi...");
-  while (!g_wifi.isConnected()) {
-    g_wifi.update();
-    delay(10);
+  Serial.println("[Minibot] Waiting for WiFi...");
+  {
+    uint32_t wifi_start = millis();
+    while (!g_wifi.isConnected()) {
+      g_wifi.update();
+      delay(50);
+      if (millis() - wifi_start > 15000) {
+        Serial.println("[Minibot] WiFi timeout — continuing anyway");
+        break;
+      }
+    }
   }
-  Serial.printf("WiFi connected: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[Minibot] WiFi: %s\n", WiFi.localIP().toString().c_str());
 
-  // ArduinoOTA for wireless firmware updates
+  // ── ArduinoOTA ──
   ArduinoOTA.setHostname("sec26-minibot");
   ArduinoOTA.begin();
-  Serial.println("[OTA] Ready");
+  Serial.println("[Minibot] OTA ready");
 
-  // I2C for MPU6050
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  // ── micro-ROS ──
+  g_mr.init();
 
-  // SPI for UWB
-  SPI.begin();
+  // ── Initialize subsystems ──
+  g_left_motor.init();
+  g_right_motor.init();
+  g_mission.init();
+  g_hb.init();
 
-  // Init all subsystems
-  bool ok = true;
-  ok = ok && g_mr.init();
-  ok = ok && g_uwb.init();
-  ok = ok && g_left_motor.init();
-  ok = ok && g_right_motor.init();
-  ok = ok && g_drive.init();
-  ok = ok && g_imu.init();
+  // ── Register micro-ROS participants ──
+  g_mr.registerParticipant(&g_mission);
+  g_mr.registerParticipant(&g_hb);
 
-  if (!ok) {
-    Serial.println("ERROR: One or more subsystems failed init!");
-    // Continue anyway — non-critical subsystems may have failed
-  }
+  // ── Start FreeRTOS tasks ──
+  g_mr.beginThreaded(8192, 2, 10);
+  g_mission.beginThreaded(2048, 2, 50);
+  g_hb.beginThreaded(2048, 1, 1000);
 
-  g_uwb_driver.setTargetAnchors(ANCHOR_IDS, NUM_ANCHORS);
+  // WiFi + OTA task
+  xTaskCreate([](void*) {
+    while (true) {
+      g_wifi.update();
+      ArduinoOTA.handle();
 
-  // Register micro-ROS participants
-  g_mr.registerParticipant(&g_uwb);
-  g_mr.registerParticipant(&g_drive);
-  g_mr.registerParticipant(&g_imu);
-  g_mr.begin();
+      if (g_mr.isConnected()) {
+        if (!g_reset_reason_published && g_reset_reason_str[0]) {
+          g_mr.debugLog(g_reset_reason_str);
+          g_reset_reason_published = true;
+        }
+      }
 
-  g_uwb.begin();
-  g_drive.begin();
-  g_imu.begin();
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+  }, "wifi_ota", 4096, nullptr, 1, nullptr);
 
-  Serial.println("Minibot initialized!");
+  Serial.printf("[Minibot] Free heap: %u bytes\n", ESP.getFreeHeap());
+  Serial.println("[Minibot] All tasks started. Ready!");
 }
 
+// loop() empty — all work runs in FreeRTOS tasks.
 void loop() {
-  g_wifi.update();
-  ArduinoOTA.handle();
-  g_mr.update();
-  g_uwb.update();
-  g_drive.update();
-  g_imu.update();
-
-  delay(1);
+  vTaskDelay(pdMS_TO_TICKS(1000));
 }

@@ -76,7 +76,7 @@
 #endif
 
 #include <SPI.h>
-#include <TeensyThreads.h>
+#include <FreeRTOSCompat.h>
 #include <microros_manager_robot.h>
 
 // Debug logging (routed to SerialUSB1 when SERIAL_DEBUG is defined)
@@ -92,6 +92,7 @@
 // Drivers
 #include "BNO085.h"
 #include "I2CBusLock.h"
+#include "I2CDMABus.h"
 #include "I2CMuxDriver.h"
 #include "I2CPowerDriver.h"
 #include "PCA9685Manager.h"
@@ -141,7 +142,8 @@ static Drivers::BNO085Driver g_imu_driver(g_imu_driver_setup);
 static ImuSubsystemSetup g_imu_setup("imu_subsystem", &g_imu_driver);
 static ImuSubsystem g_imu(g_imu_setup);
 
-// --- Wire2: PCA9685 manager (servo + motor boards) ---
+// --- Wire2: I2C DMA bus + PCA9685 manager ---
+static I2CDMABus g_wire2_dma(Wire2, 1000000);
 static Robot::PCA9685ManagerSetup g_pca_mgr_setup("pca_manager");
 static Robot::PCA9685Manager g_pca_mgr(g_pca_mgr_setup);
 
@@ -335,23 +337,78 @@ static void configureDriveSetup() {
   g_drive_setup.commandTimeoutMs = COMMAND_TIMEOUT_MS;
 }
 
-// --- PCA9685 flush task ---
+// --- PCA9685 DMA flush task (1000 Hz via I2CDMABus) ---
+static volatile uint32_t pca_flush_count_ = 0;
+static volatile uint32_t pca_skip_count_ = 0;
+static volatile uint32_t pca_last_flush_us_ = 0;
+static volatile uint32_t pca_max_flush_us_ = 0;
+
 static void pca_task(void*) {
   while (true) {
-    g_pca_mgr.update();
-    threads.delay(20);
+    if (g_wire2_dma.isComplete()) {
+      uint32_t t0 = micros();
+      g_wire2_dma.dispatch();
+      g_pca_mgr.buildInto();
+      g_wire2_dma.fire();
+      uint32_t dt = micros() - t0;
+      pca_last_flush_us_ = dt;
+      if (dt > pca_max_flush_us_) pca_max_flush_us_ = dt;
+      ++pca_flush_count_;
+    } else {
+      ++pca_skip_count_;
+    }
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
 }
+
+// --- RC + drive task (IBusBM NOTIMER needs its own task, not idle) ---
+#if DEBUG_STAGE >= 6
+static void rc_drive_task(void*) {
+  while (true) {
+    g_rc.update();
+
+    // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
+    if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
+      const auto& rc = g_rc.getData();
+      bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
+
+      if (swa_high) {
+        float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
+        float steering = static_cast<float>(rc.channels[3]) / 255.0f;
+        g_drive.rcDrive(throttle, steering);
+      } else {
+        if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
+          g_drive.stop();
+        }
+      }
+    }
+
+    // RC knob motor control — knob 1 (left) → motor 2 (linear extension),
+    //                         knob 2 (right) → motor 3 (intake)
+    {
+      const auto& rc = g_rc.getData();
+      float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;
+      float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;
+      g_motor.setSpeed(2, knob1);
+      g_motor.setSpeed(3, knob2);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+#endif
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Arduino entry points
 // ═══════════════════════════════════════════════════════════════════════════
 
 static bool s_uwb_enabled = false;
+static void debugMonitorTask(void*);
 
 void setup() {
   Serial.begin(0);
   DEBUG_BEGIN();
+  delay(3000);  // Wait for USB serial ports to enumerate
   if (CrashReport) {
     Serial.print(CrashReport);
     DEBUG_PRINT(CrashReport);
@@ -361,7 +418,9 @@ void setup() {
   }
 
   Serial.println(
-      PSTR("\r\nSEC26 Robot — All Subsystems Test (TeensyThreads)\r\n"));
+      PSTR("\r\nSEC26 Robot — All Subsystems Test (FreeRTOS)\r\n"));
+  DEBUG_PRINTF("[HEAP] Free at start: %lu bytes\n",
+               (unsigned long)xPortGetFreeHeapSize());
   DEBUG_PRINTLN("\r\n=== SEC26 All-Subsystems Test — Debug Console (SerialUSB1) ===\r\n");
   DEBUG_PRINTF("[CONFIG] DEBUG_STAGE = %d\n", DEBUG_STAGE);
 
@@ -391,7 +450,9 @@ void setup() {
   // ─── Stage 3: + Wire2 (PCA servo/motor, encoder) ─────────────────────
 #if DEBUG_STAGE >= 3
   DEBUG_PRINTLN("[INIT] --- Stage 3: + Wire2 (PCA, servo, motor, encoder) ---");
-  g_pca_mgr.init();      DEBUG_PRINTLN("[INIT] PCA9685 Manager OK");
+  g_pca_mgr.init();
+  g_pca_mgr.setDMABus(&g_wire2_dma);
+  DEBUG_PRINTLN("[INIT] PCA9685 Manager + DMA OK");
   g_servo.init();         DEBUG_PRINTLN("[INIT] Servo OK");
   g_motor.init();         DEBUG_PRINTLN("[INIT] Motor Manager OK");
   g_encoder_sub.init();   DEBUG_PRINTLN("[INIT] Encoder OK");
@@ -506,90 +567,73 @@ void setup() {
 #endif
 
   // ─── Start threaded tasks ─────────────────────────────────────────────
+  // micro-ROS at lowest priority — publishes with leftover CPU cycles.
+  // Sensor/control tasks promoted so they never get starved by publishing.
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  // Priority: 4=highest (IMU/drive/motor/encoder), 3=microros, 2=mid, 1=low
-  g_mr.beginThreaded(8192, 3);       // ROS agent
-  g_hb.beginThreaded(1024, 1, 1000); // 1 Hz
+  g_mr.beginThreaded(8192, 1, 2);   // ROS agent (leftover cycles)
+  g_hb.beginThreaded(2048, 2, 1000); // 1 Hz
 
 #if DEBUG_STAGE >= 2
   g_imu.beginThreaded(8192, 4, 30);  // target ~20 Hz — highest priority
 #endif
 
 #if DEBUG_STAGE >= 3
-  g_servo.beginThreaded(1024, 2, 100);       // 10 Hz state pub
-  g_motor.beginThreaded(1024, 4, 1);         // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(1024, 4, 50);  // 20 Hz encoder reading
-  threads.addThread(pca_task, nullptr, 1024);  // 50 Hz PWM flush
+  g_servo.beginThreaded(2048, 3, 100);       // 10 Hz state pub
+  g_motor.beginThreaded(2048, 3, 1);         // 1000 Hz — NFPShop reverse-pulse
+  g_encoder_sub.beginThreaded(2048, 3, 50);  // 20 Hz encoder reading
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(pca_task),
+              "pca_dma", 2048 / 4, nullptr, 3, nullptr);  // Wire2 DMA (pri 3)
 #endif
 
 #if DEBUG_STAGE >= 4
-  g_battery.beginThreaded(1024, 1, 2000);  // 0.5 Hz
-  g_sensor.beginThreaded(1024, 1, 500);    // 2 Hz TOF
-  g_dip.beginThreaded(1024, 1, 2000);      // 0.5 Hz
-  g_btn.beginThreaded(1024, 1, 100);       // 10 Hz
+  g_battery.beginThreaded(2048, 2, 2000);  // 0.5 Hz
+  g_sensor.beginThreaded(2048, 2, 500);    // 2 Hz TOF
+  g_dip.beginThreaded(2048, 2, 2000);      // 0.5 Hz
+  g_btn.beginThreaded(2048, 2, 100);       // 10 Hz
 #endif
 
 #if DEBUG_STAGE >= 5
-  g_led.beginThreaded(1024, 1, 200);       // 5 Hz
-  g_oled.beginThreaded(2048, 1, 100);      // 10 Hz display
-  g_deploy.beginThreaded(1024, 1, 100);    // 10 Hz deploy button
-  g_crank.beginThreaded(1024, 1, 200);     // 5 Hz crank
-  g_keypad.beginThreaded(1024, 1, 200);    // 5 Hz keypad
+  g_led.beginThreaded(2048, 2, 200);       // 5 Hz
+  g_oled.beginThreaded(2048, 2, 100);      // 10 Hz display
+  g_deploy.beginThreaded(2048, 2, 100);    // 10 Hz deploy button
+  g_crank.beginThreaded(2048, 2, 200);     // 5 Hz crank
+  g_keypad.beginThreaded(2048, 2, 200);    // 5 Hz keypad
 #endif
 
 #if DEBUG_STAGE >= 6
-  g_drive.beginThreaded(4096, 4, 20);      // 50 Hz drive control — highest priority
+  g_drive.beginThreaded(4096, 4, 20);      // 50 Hz drive control
+  xTaskCreate(reinterpret_cast<TaskFunction_t>(rc_drive_task),
+              "rc_drive", 2048 / 4, nullptr, 2, nullptr);  // RC polling + manual drive
 #endif
 
 #if DEBUG_STAGE >= 7
-  if (s_uwb_enabled) g_uwb.beginThreaded(2048, 2, 200);  // 5 Hz UWB ranging
+  if (s_uwb_enabled) g_uwb.beginThreaded(2048, 3, 200);  // 5 Hz UWB ranging
 #endif
 
-  DEBUG_PRINTLN("[INIT] All threads started — entering main loop");
+  DEBUG_PRINTLN("[INIT] All tasks created — starting scheduler");
+
+  // FreeRTOS scheduler must be started explicitly — vTaskStartScheduler()
+  // never returns.  The debug monitor runs as its own task (created above
+  // would need a task, so we create one here for the periodic status).
+  xTaskCreate(debugMonitorTask, "debug_monitor", 4096 / 4, nullptr, 1, nullptr);
+
+  DEBUG_PRINTLN("[INIT] Starting FreeRTOS scheduler...");
+  vTaskStartScheduler();
+
+  // Should never reach here
+  DEBUG_PRINTLN("[FATAL] Scheduler exited!");
+  while (true) {}
 }
 
-static uint32_t s_last_debug_ms = 0;
-static constexpr uint32_t DEBUG_INTERVAL_MS = 200;
+// ═══════════════════════════════════════════════════════════════════════════
+//  Debug monitor task — periodic status (replaces loop())
+// ═══════════════════════════════════════════════════════════════════════════
+static void debugMonitorTask(void*) {
+  static constexpr uint32_t DEBUG_INTERVAL_MS = 200;
 
-void loop() {
-  // RC polling — must be in main loop (IBusBM NOTIMER mode)
-#if DEBUG_STAGE >= 6
-  g_rc.update();
-
-  // DIP 1 ON = ROS2 control (drive_base/command), DIP 1 OFF = MCU/RC control
-  if (!g_dip.isSwitchOn(DipSwitchSubsystem::DIP_ROS2_ENABLE)) {
-    // MCU/RC mode — RC stick drives motors
-    const auto& rc = g_rc.getData();
-    bool swa_high = rc.channels[6] > 0;  // SWA = motor enable
-
-    if (swa_high) {
-      float throttle = static_cast<float>(rc.channels[1]) / 255.0f;
-      float steering = static_cast<float>(rc.channels[3]) / 255.0f;
-      g_drive.rcDrive(throttle, steering);
-    } else {
-      if (g_drive.getMode() == Subsystem::DriveMode::MANUAL) {
-        g_drive.stop();
-      }
-    }
-  }
-  // DIP 1 ON — ROS2 controls drive via drive_base/command subscription
-
-  // RC knob motor control — knob 1 (left) → motor 2 (linear extension),
-  //                         knob 2 (right) → motor 3 (intake)
-  {
-    const auto& rc = g_rc.getData();
-    float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;  // left knob
-    float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;  // right knob
-    g_motor.setSpeed(2, knob1);
-    g_motor.setSpeed(3, knob2);
-  }
-#endif
-
-  // Periodic debug output
-  uint32_t now = millis();
-  if (now - s_last_debug_ms >= DEBUG_INTERVAL_MS) {
-    s_last_debug_ms = now;
+  for (;;) {
+    uint32_t now = millis();
 
     DEBUG_PRINTF("[%lu] === Periodic Status (Stage %d) ===\n", now, DEBUG_STAGE);
     DEBUG_PRINTF("  uROS state : %s\n", g_mr.isConnected() ? "CONNECTED" : "WAITING");
@@ -602,6 +646,26 @@ void loop() {
                    imu_data.yaw);
       DEBUG_PRINTF("  IMU diag   : updates=%lu pubs=%lu\n",
                    g_imu.diag_update_count_, g_imu.diag_pub_count_);
+    }
+#endif
+
+#if DEBUG_STAGE >= 3
+    {
+      static uint32_t prev_flush = 0;
+      static uint32_t prev_skip = 0;
+      static uint32_t prev_ms = 0;
+      uint32_t f = pca_flush_count_;
+      uint32_t s = pca_skip_count_;
+      uint32_t dt_ms = now - prev_ms;
+      float flush_hz = dt_ms > 0 ? (float)(f - prev_flush) * 1000.0f / dt_ms : 0;
+      float skip_hz = dt_ms > 0 ? (float)(s - prev_skip) * 1000.0f / dt_ms : 0;
+      DEBUG_PRINTF("  PCA DMA    : %.0f Hz flush, %.0f Hz skip, last=%luus max=%luus\n",
+                   flush_hz, skip_hz,
+                   (unsigned long)pca_last_flush_us_,
+                   (unsigned long)pca_max_flush_us_);
+      prev_flush = f;
+      prev_skip = s;
+      prev_ms = now;
     }
 #endif
 
@@ -652,7 +716,10 @@ void loop() {
 #endif
 
     DEBUG_PRINTF("  Uptime     : %lus\n", now / 1000);
-  }
 
-  delay(5);
+    vTaskDelay(pdMS_TO_TICKS(DEBUG_INTERVAL_MS));
+  }
 }
+
+// loop() should never be reached — scheduler takes over
+void loop() {}

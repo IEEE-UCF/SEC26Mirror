@@ -13,7 +13,7 @@ pio device monitor -e <ENV>               # Monitor serial output
 For tests that use **micro-ROS** (serial transport), start the agent on the host machine:
 
 ```bash
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600
 ```
 
 ---
@@ -359,12 +359,12 @@ See the dedicated [teensy-test-all-subsystems/README.md](teensy-test-all-subsyst
 
 ### micro-ROS agent not connecting
 
-1. Check the USB cable is connected and recognized: `ls /dev/ttyACM*`
+1. Check the USB cable is connected and recognized: `ls /dev/ttyTeensyROS /dev/ttyTeensyDebug`
 2. Start the agent with the correct baud rate:
    ```bash
-   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600
    ```
-3. If the Teensy appears as a different device (e.g., `/dev/ttyACM1`), update the device path
+3. If the symlink doesn't exist, check udev rules are installed
 4. Power-cycle the Teensy after starting the agent
 
 ### I2C device not found

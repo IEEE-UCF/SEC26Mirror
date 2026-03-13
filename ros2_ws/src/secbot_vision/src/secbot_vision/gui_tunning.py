@@ -99,6 +99,30 @@ HTML = """
       color: #88cc88; white-space: pre; margin-top: 12px; display: none;
       max-width: 100%; overflow-x: auto;
     }
+
+    .rgb-input-group { display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 12px; }
+    .rgb-input-group label { font-size: 0.75rem; font-weight: 700; letter-spacing: 1px; }
+    .rgb-input-group input[type=number] {
+      width: 64px; padding: 6px 8px; border-radius: 6px; border: 2px solid #334;
+      background: #0d1117; color: #eee; font-size: 0.85rem; text-align: center;
+      font-family: monospace;
+    }
+    .rgb-input-group input[type=number]:focus { border-color: #a0c4ff; outline: none; }
+    .rgb-result {
+      text-align: center; font-size: 0.8rem; font-family: monospace;
+      color: #a0c4ff; margin-bottom: 10px;
+    }
+    .rgb-preview-row { display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 12px; }
+    .rgb-preview-swatch {
+      width: 60px; height: 40px; border-radius: 8px; border: 2px solid #334;
+    }
+    .apply-rgb-btn {
+      padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+      background: #a0c4ff; color: #111;
+    }
+    .apply-rgb-btn:hover { background: #80b0ff; }
+    .range-label { display: flex; gap: 16px; justify-content: center; font-size: 0.7rem; color: #888; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -107,6 +131,28 @@ HTML = """
   <div class="card wide">
     <h1>COLOR PRESET</h1>
     <div class="preset-bar" id="presetBar"></div>
+  </div>
+
+  <!-- RGB to HSV converter -->
+  <div class="card wide">
+    <h1>RGB TO HSV LOOKUP</h1>
+    <div class="rgb-input-group">
+      <label>R</label><input type="number" id="rgbR" min="0" max="255" value="0">
+      <label>G</label><input type="number" id="rgbG" min="0" max="255" value="0">
+      <label>B</label><input type="number" id="rgbB" min="0" max="255" value="0">
+    </div>
+    <div class="rgb-preview-row">
+      <div class="rgb-preview-swatch" id="rgbSwatch" style="background:#000"></div>
+      <div>
+        <div class="rgb-result" id="rgbHsvResult">HSV: H=0  S=0  V=0</div>
+        <div class="range-label">Enter RGB from the image debug tool</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button class="apply-rgb-btn" onclick="applyRgbToLow()">Set as LOW</button>
+      <button class="apply-rgb-btn" onclick="applyRgbToHigh()">Set as HIGH</button>
+      <button class="apply-rgb-btn" onclick="applyRgbCenter()">Center Range</button>
+    </div>
   </div>
 
   <div class="row">
@@ -344,6 +390,60 @@ HTML = """
         statusEl.textContent = 'YAML copied to clipboard!';
         statusEl.className = 'global-status info';
       });
+    }
+
+    // --- RGB to HSV converter ---
+    function rgbToHsvOcv(r, g, b) {
+      // Convert RGB (0-255) to OpenCV HSV (H: 0-179, S: 0-255, V: 0-255)
+      const rf = r / 255, gf = g / 255, bf = b / 255;
+      const mx = Math.max(rf, gf, bf), mn = Math.min(rf, gf, bf);
+      const d = mx - mn;
+      let h = 0;
+      if (d !== 0) {
+        if (mx === rf)      h = 60 * (((gf - bf) / d) % 6);
+        else if (mx === gf) h = 60 * ((bf - rf) / d + 2);
+        else                h = 60 * ((rf - gf) / d + 4);
+      }
+      if (h < 0) h += 360;
+      const s = mx === 0 ? 0 : d / mx;
+      return { h: Math.round(h / 2), s: Math.round(s * 255), v: Math.round(mx * 255) };
+    }
+
+    const rgbR = document.getElementById('rgbR');
+    const rgbG = document.getElementById('rgbG');
+    const rgbB = document.getElementById('rgbB');
+
+    function updateRgbPreview() {
+      const r = parseInt(rgbR.value) || 0, g = parseInt(rgbG.value) || 0, b = parseInt(rgbB.value) || 0;
+      const hsv = rgbToHsvOcv(r, g, b);
+      document.getElementById('rgbHsvResult').textContent = `HSV: H=${hsv.h}  S=${hsv.s}  V=${hsv.v}`;
+      document.getElementById('rgbSwatch').style.backgroundColor = `rgb(${r},${g},${b})`;
+    }
+
+    [rgbR, rgbG, rgbB].forEach(el => el.addEventListener('input', updateRgbPreview));
+
+    function applyRgbToLow() {
+      const r = parseInt(rgbR.value) || 0, g = parseInt(rgbG.value) || 0, b = parseInt(rgbB.value) || 0;
+      const hsv = rgbToHsvOcv(r, g, b);
+      S.h1.value = hsv.h; S.s1.value = hsv.s; S.v1.value = hsv.v;
+      updateUI(); schedulePublish();
+    }
+
+    function applyRgbToHigh() {
+      const r = parseInt(rgbR.value) || 0, g = parseInt(rgbG.value) || 0, b = parseInt(rgbB.value) || 0;
+      const hsv = rgbToHsvOcv(r, g, b);
+      S.h2.value = hsv.h; S.s2.value = hsv.s; S.v2.value = hsv.v;
+      updateUI(); schedulePublish();
+    }
+
+    function applyRgbCenter() {
+      const r = parseInt(rgbR.value) || 0, g = parseInt(rgbG.value) || 0, b = parseInt(rgbB.value) || 0;
+      const hsv = rgbToHsvOcv(r, g, b);
+      // Set a range around the center: +/- 10 H, +/- 50 S, +/- 50 V
+      S.h1.value = Math.max(0, hsv.h - 10);   S.h2.value = Math.min(179, hsv.h + 10);
+      S.s1.value = Math.max(0, hsv.s - 50);   S.s2.value = Math.min(255, hsv.s + 50);
+      S.v1.value = Math.max(0, hsv.v - 50);   S.v2.value = Math.min(255, hsv.v + 50);
+      updateUI(); schedulePublish();
     }
 
     // Wire up slider events

@@ -27,7 +27,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2, os, yaml, numpy as np
 from ament_index_python.packages import get_package_share_directory
-from secbot_msgs.msg import DuckDetection, DuckDetections, AntennaDetection, AntennaDetections
+from secbot_msgs.msg import DuckDetection, DuckDetections, AntennaDetection, AntennaDetections, ColorTunning
 
 class DetectorNode(Node):
     """DetectorNode class"""
@@ -56,6 +56,10 @@ class DetectorNode(Node):
         self.declare_parameter('pub_topic', '/detected_objects')
         self.declare_parameter('pub_debug_image', '/vision/debug_image')
         self.declare_parameter('pub_mask_image', '/vision/mask')
+        
+        self.declare_parameter('debug_filter', '')   # default = off
+
+        
         self.declare_parameter('debug_viz', True)
         self.declare_parameter('yellow_detection_duck', 'yellow')
         self.declare_parameter('red_antenna', 'red')
@@ -63,7 +67,7 @@ class DetectorNode(Node):
         self.declare_parameter('blue_antenna', 'blue')
         self.declare_parameter('purple_antenna', 'purple')
         self.declare_parameter('min_area_ratio', 0.0002)
-
+    
         # read parameters
         self.class_name = self.get_parameter('class_name').value
         image_topic     = self.get_parameter('image_topic').value
@@ -109,6 +113,13 @@ class DetectorNode(Node):
         # DUCK STATE IS 1, ANTENNA STATE IS 0
         self._isDuck() if duck_or_antenna else self._isAntenna()
         
+        self.debug_filter = self.get_parameter('debug_filter').value
+        if self.debug_filter:
+            self.get_logger().warn(f"[DEBUG FILTER] Active — only running filter: '{self.debug_filter}' | DRIVEN BY /color_tunning")
+
+        if self.debug_filter:
+            self._color_tunner = self.create_subscription(ColorTunning, '/color_tunning', self._on_color_tunning, 10)
+            self.get_logger().info("[DEBUG FILTER] Subscribed to /color_tunning")
         
         self.color_configs_for_objects = []
         for filter_name in self.filters_array:
@@ -119,6 +130,45 @@ class DetectorNode(Node):
                                                    'hsv_value': np.array(color_cfg['hsv_values'], dtype=np.uint8)})
         
         self.min_area_ratio = float(self.get_parameter('min_area_ratio').value)
+
+    def _on_color_tunning(self, msg: ColorTunning):
+        """Live-update the single debug filter's color ranges from the slider GUI.
+
+        color_low  = [hue - tolerance, saturation_low, value_low]
+        color_high = [hue + tolerance, 255,            255      ]
+        hsv_value  = [hue, saturation, value]   (used by process_frame scoring)
+
+        The HSV tolerance is derived from the saturation slider:
+        a lower saturation value means a tighter hue window.
+        """
+        h, s, v = msg.hue, msg.saturation, msg.value
+
+        # Map 0-100 saturation → hue tolerance (10°–40° range feels natural)
+        hue_tolerance = max(10, int(s * 0.4))
+
+        color_low  = np.array([max(0,   h - hue_tolerance), 50,  50 ], dtype=np.uint8)
+        color_high = np.array([min(179, h + hue_tolerance), 255, 255], dtype=np.uint8)
+        hsv_value  = np.array([h, s, v],                                dtype=np.uint8)
+
+        for cfg in self.color_configs_for_objects:
+            if cfg['filter'] == 'debug':
+                cfg['color_low'] = color_low
+                cfg['color_high'] = color_high
+                cfg['hsv_value'] = hsv_value
+                break
+        else:
+            self.color_configs_for_objects.append({
+                'filter': 'debug',
+                'color_low':  color_low,
+                'color_high': color_high,
+                'hsv_value':  hsv_value,
+            })
+                
+
+        self.get_logger().info(
+            f"[COLOR TUNNING] H={h} S={s} V={v} "
+            f"| low={color_low.tolist()} high={color_high.tolist()}"
+        )
 
 
     def on_image(self, msg: Image):

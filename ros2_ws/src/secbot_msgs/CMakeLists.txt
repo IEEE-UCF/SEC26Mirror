@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DuckDetections.msg"
   "msg/AntennaDetection.msg"
   "msg/AntennaDetections.msg"
+  "msg/ColorTunning.msg"
   "msg/TaskStatus.msg"
   # Actions
   "action/ReadBeaconColor.action"

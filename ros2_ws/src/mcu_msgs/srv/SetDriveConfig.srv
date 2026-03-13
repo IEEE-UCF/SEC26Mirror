@@ -4,25 +4,53 @@
 # update a single gain without touching the others.
 #
 # Example:
-#   ros2 service call /mcu_robot/drive/config mcu_msgs/srv/SetDriveConfig
+#   ros2 service call /mcu_robot/drive/config mcu_msgs/srv/SetDriveConfig \
 #   "{wheel_kp: 0.5, wheel_ki: 0.05}"
 
-# Wheel velocity PID gains
-float32 wheel_kp         # Proportional gain (default 0.4)
-float32 wheel_ki         # Integral gain (default 0.05)
-float32 wheel_kd         # Derivative gain (default 0.025)
-float32 wheel_i_min      # Integral clamp min (default -0.3)
-float32 wheel_i_max      # Integral clamp max (default 0.3)
+# ── Wheel velocity PID gains ──
+float32 wheel_kp              # Proportional (default 0.4)
+float32 wheel_ki              # Integral (default 0.05)
+float32 wheel_kd              # Derivative (default 0.025)
+float32 wheel_i_min           # Integral clamp min (default -0.3)
+float32 wheel_i_max           # Integral clamp max (default 0.3)
+float32 wheel_d_filter        # Derivative filter alpha (default 0.1)
 
-# Pose drive gains (GOAL mode)
-float32 pose_k_linear    # P gain for distance error (default 1.0)
-float32 pose_k_angular   # P gain for heading error (default 2.0)
+# ── Velocity / acceleration limits ──
+float32 max_linear_vel        # Max chassis speed m/s (default 0.7)
+float32 max_angular_vel       # Max turn rate rad/s (default 6.0)
+float32 max_linear_accel      # Max linear accel m/s^2 (default 0.7)
+float32 max_angular_accel     # Max angular accel rad/s^2 (default 15.0)
+float32 max_linear_jerk       # Max linear jerk m/s^3 (default ~3.05)
+float32 max_angular_jerk      # Max angular jerk rad/s^3 (default 60.0)
 
-# Velocity/accel limits
-float32 max_linear_vel   # Max chassis speed m/s (default 0.7)
-float32 max_angular_vel  # Max turn rate rad/s (default 6.0)
-float32 max_linear_accel # Max linear accel m/s^2 (default 0.7)
-float32 max_angular_accel # Max angular accel rad/s^2 (default 15.0)
+# ── Pose drive gains (GOAL mode) ──
+float32 pose_k_linear         # P gain for distance error (default 1.0)
+float32 pose_k_angular        # P gain for heading error (default 2.0)
+float32 pose_dist_tol         # Goal distance tolerance m (default 0.015)
+float32 pose_heading_tol      # Goal heading tolerance rad (default 0.05)
+
+# ── Gyro heading hold (VELOCITY mode straight-line correction) ──
+float32 gyro_hold_kp          # P gain for heading correction (default 2.0)
+float32 gyro_hold_threshold   # Below this omega, hold heading rad/s (default 0.05)
+
+# ── Trajectory controller (pure pursuit) ──
+float32 traj_lookahead        # Lookahead distance m (default ~0.15)
+float32 traj_cruise_v         # Default cruise speed m/s (default ~0.30)
+float32 traj_max_v            # Max linear vel m/s (default 1.0)
+float32 traj_max_w            # Max angular vel rad/s (default 3.0)
+float32 traj_slowdown_dist    # Slowdown distance m (default ~0.20)
+float32 traj_min_v            # Min creep speed near goal m/s (default 0.0)
+float32 traj_pos_tol          # Position tolerance m (default ~0.013)
+float32 traj_heading_tol      # Heading tolerance rad (default 0.1)
+float32 traj_k_heading        # P gain for final heading (default 3.0)
+float32 traj_advance_tol      # Advance to next waypoint distance m (default ~0.076)
+
+# ── Input filter time constants (seconds) ──
+float32 cmd_vel_filter_tau    # cmd_vel input filter tau (default 0.15)
+float32 motor_filter_tau      # Motor output filter tau (default 0.05)
+
+# ── Safety ──
+uint32 command_timeout_ms     # Stop if no command for this long (default 500)
 
 ---
 bool success

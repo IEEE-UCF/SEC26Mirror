@@ -380,8 +380,6 @@ class DriveSubsystem : public IMicroRosParticipant,
     DEBUG_PRINTLN("[DRIVE] onCreate: pose sub OK");
 
     // Service: drive config tuning
-    // TODO: re-enable after confirming micro-ROS has SetDriveConfig type support
-#if 0
     if (rclc_service_init_default(
             &config_srv_, node_,
             ROSIDL_GET_SRV_TYPE_SUPPORT(mcu_msgs, srv, SetDriveConfig),
@@ -396,7 +394,6 @@ class DriveSubsystem : public IMicroRosParticipant,
       return false;
     }
     DEBUG_PRINTLN("[DRIVE] onCreate: config srv OK");
-#endif
 
     DEBUG_PRINTLN("[DRIVE] onCreate OK");
     return true;
@@ -1131,67 +1128,103 @@ class DriveSubsystem : public IMicroRosParticipant,
     auto* self = static_cast<DriveSubsystem*>(ctx);
     auto* r = static_cast<const mcu_msgs__srv__SetDriveConfig_Request*>(req);
     auto* rsp = static_cast<mcu_msgs__srv__SetDriveConfig_Response*>(res);
+    auto& s = const_cast<DriveSubsystemSetup&>(self->setup_);
 
-    // Apply only non-zero fields (zero = "don't change")
+    // Helper: apply non-zero PID fields
     auto applyPID = [](PIDController& pid, float kp, float ki, float kd,
-                        float i_min, float i_max) {
+                        float i_min, float i_max, float d_filter) {
       PIDController::Config cfg = pid.config();
       if (kp != 0.0f) cfg.gains.kp = kp;
       if (ki != 0.0f) cfg.gains.ki = ki;
       if (kd != 0.0f) cfg.gains.kd = kd;
       if (i_min != 0.0f) cfg.limits.i_min = i_min;
       if (i_max != 0.0f) cfg.limits.i_max = i_max;
+      if (d_filter != 0.0f) cfg.gains.d_filter_alpha = d_filter;
       pid.configure(cfg);
     };
 
-    // Wheel velocity PID (both wheels get same gains)
+    // ── Wheel velocity PID (both wheels get same gains) ──
     if (r->wheel_kp != 0.0f || r->wheel_ki != 0.0f || r->wheel_kd != 0.0f ||
-        r->wheel_i_min != 0.0f || r->wheel_i_max != 0.0f) {
+        r->wheel_i_min != 0.0f || r->wheel_i_max != 0.0f ||
+        r->wheel_d_filter != 0.0f) {
       applyPID(self->leftPID_, r->wheel_kp, r->wheel_ki, r->wheel_kd,
-               r->wheel_i_min, r->wheel_i_max);
+               r->wheel_i_min, r->wheel_i_max, r->wheel_d_filter);
       applyPID(self->rightPID_, r->wheel_kp, r->wheel_ki, r->wheel_kd,
-               r->wheel_i_min, r->wheel_i_max);
+               r->wheel_i_min, r->wheel_i_max, r->wheel_d_filter);
     }
 
-    // Pose drive gains
-    if (r->pose_k_linear != 0.0f)
-      const_cast<DriveSubsystemSetup&>(self->setup_).poseKLinear = r->pose_k_linear;
-    if (r->pose_k_angular != 0.0f)
-      const_cast<DriveSubsystemSetup&>(self->setup_).poseKAngular = r->pose_k_angular;
+    // ── Velocity limits ──
+    if (r->max_linear_vel != 0.0f) s.maxLinearVel = r->max_linear_vel;
+    if (r->max_angular_vel != 0.0f) s.maxAngularVel = r->max_angular_vel;
 
-    // Velocity limits
-    if (r->max_linear_vel != 0.0f)
-      const_cast<DriveSubsystemSetup&>(self->setup_).maxLinearVel = r->max_linear_vel;
-    if (r->max_angular_vel != 0.0f)
-      const_cast<DriveSubsystemSetup&>(self->setup_).maxAngularVel = r->max_angular_vel;
-
-    // Acceleration limits (rampVelocity reads from setup_.xxxProfile.limits)
+    // ── Acceleration limits ──
     if (r->max_linear_accel != 0.0f) {
-      auto& ll = const_cast<DriveSubsystemSetup&>(self->setup_).linearProfile.limits;
-      ll.a_max = r->max_linear_accel;
-      ll.d_max = r->max_linear_accel;
+      s.linearProfile.limits.a_max = r->max_linear_accel;
+      s.linearProfile.limits.d_max = r->max_linear_accel;
     }
     if (r->max_angular_accel != 0.0f) {
-      auto& al = const_cast<DriveSubsystemSetup&>(self->setup_).angularProfile.limits;
-      al.a_max = r->max_angular_accel;
-      al.d_max = r->max_angular_accel;
+      s.angularProfile.limits.a_max = r->max_angular_accel;
+      s.angularProfile.limits.d_max = r->max_angular_accel;
     }
 
+    // ── Jerk limits ──
+    if (r->max_linear_jerk != 0.0f) s.linearProfile.limits.j_max = r->max_linear_jerk;
+    if (r->max_angular_jerk != 0.0f) s.angularProfile.limits.j_max = r->max_angular_jerk;
+
+    // ── Pose drive gains ──
+    if (r->pose_k_linear != 0.0f) s.poseKLinear = r->pose_k_linear;
+    if (r->pose_k_angular != 0.0f) s.poseKAngular = r->pose_k_angular;
+    if (r->pose_dist_tol != 0.0f) s.poseDistTol = r->pose_dist_tol;
+    if (r->pose_heading_tol != 0.0f) s.poseHeadingTol = r->pose_heading_tol;
+
+    // ── Gyro heading hold ──
+    if (r->gyro_hold_kp != 0.0f) s.gyroHoldKp = r->gyro_hold_kp;
+    if (r->gyro_hold_threshold != 0.0f) s.gyroHoldThreshold = r->gyro_hold_threshold;
+
+    // ── Trajectory controller ──
+    {
+      auto cfg = self->trajController_.config();
+      if (r->traj_lookahead != 0.0f) cfg.lookahead_dist = r->traj_lookahead;
+      if (r->traj_cruise_v != 0.0f) cfg.cruise_v = r->traj_cruise_v;
+      if (r->traj_max_v != 0.0f) cfg.max_v = r->traj_max_v;
+      if (r->traj_max_w != 0.0f) cfg.max_w = r->traj_max_w;
+      if (r->traj_slowdown_dist != 0.0f) cfg.slowdown_dist = r->traj_slowdown_dist;
+      if (r->traj_min_v != 0.0f) cfg.min_v_near_goal = r->traj_min_v;
+      if (r->traj_pos_tol != 0.0f) cfg.pos_tol = r->traj_pos_tol;
+      if (r->traj_heading_tol != 0.0f) cfg.heading_tol = r->traj_heading_tol;
+      if (r->traj_k_heading != 0.0f) cfg.k_heading = r->traj_k_heading;
+      if (r->traj_advance_tol != 0.0f) cfg.advance_tol = r->traj_advance_tol;
+      self->trajController_.configure(cfg);
+    }
+
+    // ── Input filter time constants ──
+    if (r->cmd_vel_filter_tau != 0.0f) {
+      self->cmdVelLinearFilter_.configureTauDtFast(r->cmd_vel_filter_tau, 0.005f);
+      self->cmdVelAngularFilter_.configureTauDtFast(r->cmd_vel_filter_tau, 0.005f);
+      self->rcThrottleFilter_.configureTauDtFast(r->cmd_vel_filter_tau, 0.005f);
+      self->rcSteeringFilter_.configureTauDtFast(r->cmd_vel_filter_tau, 0.005f);
+    }
+    if (r->motor_filter_tau != 0.0f) {
+      self->motorLeftFilter_.configureTauDtFast(r->motor_filter_tau, 0.02f);
+      self->motorRightFilter_.configureTauDtFast(r->motor_filter_tau, 0.02f);
+    }
+
+    // ── Command timeout ──
+    if (r->command_timeout_ms != 0) s.commandTimeoutMs = r->command_timeout_ms;
+
     rsp->success = true;
-    // Build response message with current values.
-    // Point the rosidl string at a static buffer (no dynamic alloc needed
-    // since the response is consumed before the next service call).
-    static char buf[128];
+    static char buf[256];
     int len = snprintf(buf, sizeof(buf),
-             "PID kp=%.3f ki=%.3f kd=%.3f | pose kL=%.2f kA=%.2f | "
-             "vmax=%.2f wmax=%.1f",
+             "PID kp=%.3f ki=%.3f kd=%.3f | vel=%.2f/%.1f | "
+             "accel=%.2f/%.1f | jerk=%.2f/%.1f | traj la=%.3f cv=%.2f",
              self->leftPID_.config().gains.kp,
              self->leftPID_.config().gains.ki,
              self->leftPID_.config().gains.kd,
-             self->setup_.poseKLinear,
-             self->setup_.poseKAngular,
-             self->setup_.maxLinearVel,
-             self->setup_.maxAngularVel);
+             s.maxLinearVel, s.maxAngularVel,
+             s.linearProfile.limits.a_max, s.angularProfile.limits.a_max,
+             s.linearProfile.limits.j_max, s.angularProfile.limits.j_max,
+             self->trajController_.config().lookahead_dist,
+             self->trajController_.config().cruise_v);
     rsp->message.data = buf;
     rsp->message.size = static_cast<size_t>(len);
     rsp->message.capacity = sizeof(buf);

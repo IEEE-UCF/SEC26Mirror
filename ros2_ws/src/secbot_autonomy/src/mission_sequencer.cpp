@@ -70,6 +70,10 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   imu_tare_client_ =
       this->create_client<mcu_msgs::srv::Reset>("/mcu_robot/imu/tare");
 
+  // Drive config service client
+  drive_config_client_ =
+      this->create_client<mcu_msgs::srv::SetDriveConfig>("/mcu_robot/drive/config");
+
   // ReadBeaconColor action client
   beacon_color_client_ =
       rclcpp_action::create_client<ReadBeaconColor>(this, "read_beacon_color");
@@ -160,6 +164,39 @@ void MissionSequencer::loadMission() {
   drive_timeout_s_ = this->get_parameter("drive_timeout").as_double();
   default_step_timeout_s_ = this->get_parameter("default_step_timeout").as_double();
 
+  // Drive config parameters (sent to MCU at mission start; 0 = don't change)
+  this->declare_parameter<double>("drive_config.wheel_kp", 0.0);
+  this->declare_parameter<double>("drive_config.wheel_ki", 0.0);
+  this->declare_parameter<double>("drive_config.wheel_kd", 0.0);
+  this->declare_parameter<double>("drive_config.wheel_i_min", 0.0);
+  this->declare_parameter<double>("drive_config.wheel_i_max", 0.0);
+  this->declare_parameter<double>("drive_config.wheel_d_filter", 0.0);
+  this->declare_parameter<double>("drive_config.max_linear_vel", 0.0);
+  this->declare_parameter<double>("drive_config.max_angular_vel", 0.0);
+  this->declare_parameter<double>("drive_config.max_linear_accel", 0.0);
+  this->declare_parameter<double>("drive_config.max_angular_accel", 0.0);
+  this->declare_parameter<double>("drive_config.max_linear_jerk", 0.0);
+  this->declare_parameter<double>("drive_config.max_angular_jerk", 0.0);
+  this->declare_parameter<double>("drive_config.pose_k_linear", 0.0);
+  this->declare_parameter<double>("drive_config.pose_k_angular", 0.0);
+  this->declare_parameter<double>("drive_config.pose_dist_tol", 0.0);
+  this->declare_parameter<double>("drive_config.pose_heading_tol", 0.0);
+  this->declare_parameter<double>("drive_config.gyro_hold_kp", 0.0);
+  this->declare_parameter<double>("drive_config.gyro_hold_threshold", 0.0);
+  this->declare_parameter<double>("drive_config.traj_lookahead", 0.0);
+  this->declare_parameter<double>("drive_config.traj_cruise_v", 0.0);
+  this->declare_parameter<double>("drive_config.traj_max_v", 0.0);
+  this->declare_parameter<double>("drive_config.traj_max_w", 0.0);
+  this->declare_parameter<double>("drive_config.traj_slowdown_dist", 0.0);
+  this->declare_parameter<double>("drive_config.traj_min_v", 0.0);
+  this->declare_parameter<double>("drive_config.traj_pos_tol", 0.0);
+  this->declare_parameter<double>("drive_config.traj_heading_tol", 0.0);
+  this->declare_parameter<double>("drive_config.traj_k_heading", 0.0);
+  this->declare_parameter<double>("drive_config.traj_advance_tol", 0.0);
+  this->declare_parameter<double>("drive_config.cmd_vel_filter_tau", 0.0);
+  this->declare_parameter<double>("drive_config.motor_filter_tau", 0.0);
+  this->declare_parameter<int>("drive_config.command_timeout_ms", 0);
+
   // Phase commands
   this->declare_parameter<std::vector<std::string>>("phase_button", std::vector<std::string>{});
   this->declare_parameter<std::vector<std::string>>("phase_keypad", std::vector<std::string>{});
@@ -180,7 +217,7 @@ void MissionSequencer::loadMission() {
 }
 
 // ============================================================================
-// Setup state machine (IMU tare → pose reset → settle)
+// Setup state machine (IMU tare → drive config → pose reset → settle)
 // ============================================================================
 
 void MissionSequencer::startSetup(double start_x_cm, double start_y_cm,
@@ -188,7 +225,7 @@ void MissionSequencer::startSetup(double start_x_cm, double start_y_cm,
   setup_pose_ = rafeedToMcu(start_x_cm, start_y_cm, start_yaw_deg);
   setup_state_ = SetupState::TARE_WAIT;
   tare_sent_ = false;
-  RCLCPP_INFO(this->get_logger(), "[SETUP] Starting: tare → reset → settle");
+  RCLCPP_INFO(this->get_logger(), "[SETUP] Starting: tare → drive config → reset → settle");
 }
 
 bool MissionSequencer::tickSetup() {
@@ -215,6 +252,31 @@ bool MissionSequencer::tickSetup() {
           RCLCPP_INFO(this->get_logger(), "[SETUP] IMU tare SUCCESS");
         } else {
           RCLCPP_WARN(this->get_logger(), "[SETUP] IMU tare returned false");
+        }
+        setup_state_ = SetupState::DRIVE_CONFIG;
+        drive_config_sent_ = false;
+      }
+      return false;
+    }
+
+    case SetupState::DRIVE_CONFIG: {
+      if (!drive_config_sent_) {
+        if (!drive_config_client_->wait_for_service(0s)) {
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                               "[SETUP] Waiting for /mcu_robot/drive/config...");
+          return false;
+        }
+        sendDriveConfig();
+        drive_config_sent_ = true;
+      }
+
+      if (drive_config_future_.wait_for(0s) == std::future_status::ready) {
+        auto result = drive_config_future_.get();
+        if (result->success) {
+          RCLCPP_INFO(this->get_logger(), "[SETUP] Drive config applied: %s",
+                      result->message.c_str());
+        } else {
+          RCLCPP_WARN(this->get_logger(), "[SETUP] Drive config failed");
         }
         setup_state_ = SetupState::POSE_RESET;
       }
@@ -537,6 +599,67 @@ void MissionSequencer::resetPoseMcu(double x_m, double y_m,
   msg.orientation.w = std::cos(half);
 
   pose_reset_pub_->publish(msg);
+}
+
+// ============================================================================
+// Drive config — read YAML params and send to MCU via SetDriveConfig service
+// ============================================================================
+
+void MissionSequencer::sendDriveConfig() {
+  auto req = std::make_shared<mcu_msgs::srv::SetDriveConfig::Request>();
+
+  auto p = [this](const std::string& name) -> float {
+    return static_cast<float>(this->get_parameter("drive_config." + name).as_double());
+  };
+
+  // Wheel PID
+  req->wheel_kp = p("wheel_kp");
+  req->wheel_ki = p("wheel_ki");
+  req->wheel_kd = p("wheel_kd");
+  req->wheel_i_min = p("wheel_i_min");
+  req->wheel_i_max = p("wheel_i_max");
+  req->wheel_d_filter = p("wheel_d_filter");
+
+  // Velocity / acceleration limits
+  req->max_linear_vel = p("max_linear_vel");
+  req->max_angular_vel = p("max_angular_vel");
+  req->max_linear_accel = p("max_linear_accel");
+  req->max_angular_accel = p("max_angular_accel");
+  req->max_linear_jerk = p("max_linear_jerk");
+  req->max_angular_jerk = p("max_angular_jerk");
+
+  // Pose drive gains
+  req->pose_k_linear = p("pose_k_linear");
+  req->pose_k_angular = p("pose_k_angular");
+  req->pose_dist_tol = p("pose_dist_tol");
+  req->pose_heading_tol = p("pose_heading_tol");
+
+  // Gyro heading hold
+  req->gyro_hold_kp = p("gyro_hold_kp");
+  req->gyro_hold_threshold = p("gyro_hold_threshold");
+
+  // Trajectory controller
+  req->traj_lookahead = p("traj_lookahead");
+  req->traj_cruise_v = p("traj_cruise_v");
+  req->traj_max_v = p("traj_max_v");
+  req->traj_max_w = p("traj_max_w");
+  req->traj_slowdown_dist = p("traj_slowdown_dist");
+  req->traj_min_v = p("traj_min_v");
+  req->traj_pos_tol = p("traj_pos_tol");
+  req->traj_heading_tol = p("traj_heading_tol");
+  req->traj_k_heading = p("traj_k_heading");
+  req->traj_advance_tol = p("traj_advance_tol");
+
+  // Filters
+  req->cmd_vel_filter_tau = p("cmd_vel_filter_tau");
+  req->motor_filter_tau = p("motor_filter_tau");
+
+  // Safety
+  req->command_timeout_ms = static_cast<uint32_t>(
+      this->get_parameter("drive_config.command_timeout_ms").as_int());
+
+  drive_config_future_ = drive_config_client_->async_send_request(req);
+  RCLCPP_INFO(this->get_logger(), "[SETUP] Drive config request sent");
 }
 
 // ============================================================================

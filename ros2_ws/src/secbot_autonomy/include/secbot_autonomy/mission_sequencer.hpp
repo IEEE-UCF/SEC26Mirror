@@ -29,6 +29,7 @@
 #include <mcu_msgs/msg/intake_state.hpp>
 #include <mcu_msgs/msg/robot_inputs.hpp>
 #include <mcu_msgs/srv/reset.hpp>
+#include <mcu_msgs/srv/set_drive_config.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <secbot_msgs/action/read_beacon_color.hpp>
@@ -47,10 +48,11 @@ enum class MissionPhase : uint8_t {
   MISSION_COMPLETE = 4,
 };
 
-// ── Setup state machine (IMU tare → pose reset → settle) ──
+// ── Setup state machine (IMU tare → drive config → pose reset → settle) ──
 enum class SetupState : uint8_t {
   IDLE = 0,
   TARE_WAIT,
+  DRIVE_CONFIG,
   POSE_RESET,
   SETTLE,
   DONE,
@@ -157,10 +159,13 @@ class MissionSequencer : public rclcpp::Node {
   // ── Setup state machine ──
   void startSetup(double start_x_cm, double start_y_cm, double start_yaw_deg);
   bool tickSetup();  // returns true when done
+  void sendDriveConfig();  // send YAML-loaded config to MCU
 
   SetupState setup_state_ = SetupState::IDLE;
   bool tare_sent_ = false;
   std::shared_future<mcu_msgs::srv::Reset::Response::SharedPtr> tare_future_;
+  bool drive_config_sent_ = false;
+  std::shared_future<mcu_msgs::srv::SetDriveConfig::Response::SharedPtr> drive_config_future_;
   McuPose setup_pose_{};
   std::chrono::steady_clock::time_point settle_start_;
 
@@ -276,6 +281,7 @@ class MissionSequencer : public rclcpp::Node {
 
   // Service clients
   rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr imu_tare_client_;
+  rclcpp::Client<mcu_msgs::srv::SetDriveConfig>::SharedPtr drive_config_client_;
 
   // Action clients
   rclcpp_action::Client<ReadBeaconColor>::SharedPtr beacon_color_client_;

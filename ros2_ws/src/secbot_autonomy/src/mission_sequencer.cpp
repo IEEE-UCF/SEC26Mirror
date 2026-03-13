@@ -15,6 +15,7 @@
 #include "secbot_autonomy/mission_sequencer.hpp"
 
 #include <cmath>
+#include <sstream>
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -73,8 +74,8 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   beacon_color_client_ =
       rclcpp_action::create_client<ReadBeaconColor>(this, "read_beacon_color");
 
-  // Load waypoints from YAML parameters
-  loadWaypoints();
+  // Load mission commands from YAML parameters
+  loadMission();
 
   // Main tick timer at 10 Hz
   tick_timer_ = this->create_wall_timer(100ms, [this]() { stepMission(); });
@@ -84,62 +85,86 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
 }
 
 // ============================================================================
-// Waypoint loading from YAML parameters
+// Mission loading from YAML — each line is a command
 // ============================================================================
 
-void MissionSequencer::loadWaypoints() {
-  // Declare all waypoint parameters with defaults
-  const std::vector<std::pair<std::string, std::vector<double>>> defaults = {
-      {"start_pose",    {15.0, 15.0, 0.0}},
-      {"button_step2",  {108.0, 38.0, 0.0}},
-      {"button_step3",  {38.0, 38.0, 0.0}},
-      {"button_step4",  {38.0, 38.0, -45.0}},
-      {"button_step5",  {54.0, 27.0, -45.0}},
-      {"button_step6",  {54.0, 27.0, 0.0}},
-      {"button_step7",  {78.0, 27.0, 0.0}},
-      {"button_step9",  {78.0, 27.0, 0.0}},
-      {"button_step11", {78.0, 28.0, 0.0}},
-      {"button_step13", {30.0, 27.0, 0.0}},
-      {"keypad_step1",  {30.0, 27.0, 45.0}},
-      {"keypad_step2",  {81.0, 95.0, 45.0}},
-      {"keypad_step3",  {81.0, 95.0, 0.0}},
-      {"keypad_step4",  {38.0, 95.0, 0.0}},
-      {"keypad_step6",  {55.0, 95.0, 0.0}},
-      {"keypad_step7",  {55.0, 95.0, 90.0}},
-      {"keypad_step11", {55.0, 95.0, 180.0}},
-      {"keypad_step12", {91.0, 95.0, 180.0}},
-      {"keypad_step14", {91.0, 95.0, 115.0}},
-      {"keypad_step16", {90.0, 110.0, 45.0}},
-      {"keypad_step17", {100.0, 190.0, 90.0}},
-      {"keypad_step18", {53.0, 225.0, 180.0}},
-      {"keypad_step19", {53.0, 225.0, 150.0}},
-      {"keypad_step20", {53.0, 228.0, 180.0}},
-      {"keypad_step21", {53.0, 228.0, 0.0}},
-  };
+MissionSequencer::MissionCmd MissionSequencer::parseCommand(
+    const std::string& line) {
+  MissionCmd cmd;
+  std::istringstream ss(line);
+  std::string token;
+  ss >> token;
 
-  for (const auto& [name, def] : defaults) {
-    this->declare_parameter<std::vector<double>>(name, def);
-    waypoints_[name] = this->get_parameter(name).as_double_array();
+  if (token == "nav" || token == "nav_rev") {
+    cmd.type = (token == "nav") ? CmdType::NAV : CmdType::NAV_REV;
+    ss >> cmd.x >> cmd.y >> cmd.heading;
+    // Optional timeout as 4th number
+    if (ss >> cmd.timeout) { /* got it */ } else { cmd.timeout = 0; }
+  } else if (token == "nudge") {
+    cmd.type = CmdType::NUDGE;
+    if (!(ss >> cmd.duration)) cmd.duration = 1.0;
+  } else if (token == "stop") {
+    cmd.type = CmdType::STOP;
+  } else if (token == "wait") {
+    cmd.type = CmdType::WAIT;
+    ss >> cmd.duration;
+  } else if (token == "task") {
+    cmd.type = CmdType::TASK;
+    int id; ss >> id; cmd.task_id = static_cast<uint8_t>(id);
+    if (!(ss >> cmd.timeout)) cmd.timeout = 30.0;
+  } else if (token == "read_antenna") {
+    cmd.type = CmdType::READ_ANTENNA;
+    ss >> cmd.label >> cmd.camera_angle;
+    if (!(ss >> cmd.antenna_slot)) cmd.antenna_slot = -1;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 10.0;
+  } else if (token == "arm") {
+    cmd.type = CmdType::ARM;
+    int j, p, s;
+    ss >> j >> p >> s;
+    cmd.joint = static_cast<uint8_t>(j);
+    cmd.position = static_cast<int16_t>(p);
+    cmd.speed = static_cast<uint8_t>(s);
+    if (!(ss >> cmd.duration)) cmd.duration = 1.0;
+  } else if (token == "intake") {
+    cmd.type = CmdType::INTAKE;
+    std::string action; ss >> action;
+    cmd.intake_cmd = (action == "extend")
+        ? mcu_msgs::msg::IntakeCommand::CMD_EXTEND
+        : mcu_msgs::msg::IntakeCommand::CMD_RETRACT;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 10.0;
   }
 
+  return cmd;
+}
+
+void MissionSequencer::loadMission() {
+  // Start pose
+  this->declare_parameter<std::vector<double>>("start_pose", {15.0, 15.0, 0.0});
+  auto sp = this->get_parameter("start_pose").as_double_array();
+  // Store for use in ROBOT_START phase
+  setup_pose_ = rafeedToMcu(sp[0], sp[1], sp[2]);
+
+  // Nudge speed
   this->declare_parameter<double>("nudge_speed", 0.25);
   nudge_speed_mps_ = this->get_parameter("nudge_speed").as_double();
 
-  this->declare_parameter<double>("camera_angle_beacon", 90.0);
-  this->declare_parameter<double>("camera_angle_keypad", 90.0);
-  this->declare_parameter<double>("camera_angle_crater", 90.0);
-  this->declare_parameter<double>("camera_angle_crank", 90.0);
-  camera_angle_beacon_ = static_cast<float>(this->get_parameter("camera_angle_beacon").as_double());
-  camera_angle_keypad_ = static_cast<float>(this->get_parameter("camera_angle_keypad").as_double());
-  camera_angle_crater_ = static_cast<float>(this->get_parameter("camera_angle_crater").as_double());
-  camera_angle_crank_ = static_cast<float>(this->get_parameter("camera_angle_crank").as_double());
+  // Phase commands
+  this->declare_parameter<std::vector<std::string>>("phase_button", std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("phase_keypad", std::vector<std::string>{});
 
-  RCLCPP_INFO(this->get_logger(), "Loaded %zu waypoints from parameters",
-              waypoints_.size());
-}
+  auto button_strs = this->get_parameter("phase_button").as_string_array();
+  auto keypad_strs = this->get_parameter("phase_keypad").as_string_array();
 
-std::vector<double> MissionSequencer::wp(const std::string& name) const {
-  return waypoints_.at(name);
+  for (const auto& s : button_strs) {
+    button_cmds_.push_back(parseCommand(s));
+  }
+  for (const auto& s : keypad_strs) {
+    keypad_cmds_.push_back(parseCommand(s));
+  }
+
+  RCLCPP_INFO(this->get_logger(),
+              "Loaded mission: %zu button cmds, %zu keypad cmds",
+              button_cmds_.size(), keypad_cmds_.size());
 }
 
 // ============================================================================
@@ -606,12 +631,147 @@ void MissionSequencer::startAntennaRead(const char* label,
 // State machine tick
 // ============================================================================
 
+// ============================================================================
+// Generic phase command executor
+// ============================================================================
+
+void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
+                                            int& idx,
+                                            MissionPhase next_phase,
+                                            const char* phase_name) {
+  if (idx >= static_cast<int>(cmds.size())) {
+    RCLCPP_INFO(this->get_logger(), "=== %s COMPLETE ===", phase_name);
+    transitionTo(next_phase);
+    return;
+  }
+
+  auto& cmd = cmds[idx];
+
+  switch (cmd.type) {
+    case CmdType::NAV:
+    case CmdType::NAV_REV: {
+      if (step_entry_) {
+        step_entry_ = false;
+        bool rev = (cmd.type == CmdType::NAV_REV);
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: %s %.0f %.0f %.0f",
+                    phase_name, idx + 1, cmds.size(),
+                    rev ? "nav_rev" : "nav", cmd.x, cmd.y, cmd.heading);
+        startNavMove(cmd.x, cmd.y, cmd.heading, rev);
+      }
+      tickNavMove();
+      double t = (cmd.timeout > 0) ? cmd.timeout : DEFAULT_STEP_TIMEOUT_S;
+      if (navMoveComplete() || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::NUDGE: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: nudge (%.1fs)",
+                    phase_name, idx + 1, cmds.size(), cmd.duration);
+        sendNudge(nudge_speed_mps_);
+      }
+      if (stepElapsed() > cmd.duration) {
+        stopRobot();
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::STOP: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: stop",
+                    phase_name, idx + 1, cmds.size());
+        stopRobot();
+      }
+      setStep(++idx);
+      break;
+    }
+
+    case CmdType::WAIT: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: wait %.1fs",
+                    phase_name, idx + 1, cmds.size(), cmd.duration);
+      }
+      if (stepElapsed() > cmd.duration) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::TASK: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: task %d",
+                    phase_name, idx + 1, cmds.size(), cmd.task_id);
+        sendTaskCommand(cmd.task_id);
+      }
+      double t = (cmd.timeout > 0) ? cmd.timeout : 30.0;
+      if (task_idle_ || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::READ_ANTENNA: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: read_antenna %s %.1f",
+                    phase_name, idx + 1, cmds.size(),
+                    cmd.label.c_str(), cmd.camera_angle);
+        startAntennaRead(cmd.label.c_str(), cmd.camera_angle);
+      }
+      double t = (cmd.timeout > 0) ? cmd.timeout : 10.0;
+      if (antennaReadComplete() || checkStepTimeout(t)) {
+        if (cmd.antenna_slot >= 0 &&
+            cmd.antenna_slot < static_cast<int>(antenna_colors_.size())) {
+          antenna_colors_[cmd.antenna_slot] = last_antenna_color_;
+        }
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::ARM: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: arm %d %d %d",
+                    phase_name, idx + 1, cmds.size(),
+                    cmd.joint, cmd.position, cmd.speed);
+        sendArmCommand(cmd.joint, cmd.position, cmd.speed);
+      }
+      if (stepElapsed() > cmd.duration) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::INTAKE: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: intake %d",
+                    phase_name, idx + 1, cmds.size(), cmd.intake_cmd);
+        sendIntakeCommand(cmd.intake_cmd);
+      }
+      double t = (cmd.timeout > 0) ? cmd.timeout : 10.0;
+      if (intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE ||
+          checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+  }
+}
+
 void MissionSequencer::stepMission() {
   // Refresh last drive command every tick to prevent MCU 500ms timeout
   refreshDriveCommand();
 
   switch (phase_) {
-    // ── WAIT_FOR_START ───────────────────────────────────────────────
     case MissionPhase::WAIT_FOR_START: {
       if (phase_entry_) {
         phase_entry_ = false;
@@ -623,14 +783,13 @@ void MissionSequencer::stepMission() {
       break;
     }
 
-    // ── ROBOT_START: IMU tare → pose reset → settle ─────────────────
     case MissionPhase::ROBOT_START: {
       if (phase_entry_) {
         phase_entry_ = false;
         RCLCPP_INFO(this->get_logger(), "=== ROBOT START ===");
         match_start_ = std::chrono::steady_clock::now();
-        // Start setup: tare IMU, reset pose to start_pose in Rafeed coords
-        { auto s = wp("start_pose"); startSetup(s[0], s[1], s[2]); }
+        auto sp = this->get_parameter("start_pose").as_double_array();
+        startSetup(sp[0], sp[1], sp[2]);
       }
       if (tickSetup()) {
         transitionTo(MissionPhase::PHASE_BUTTON);
@@ -638,578 +797,31 @@ void MissionSequencer::stepMission() {
       break;
     }
 
-    // ── PHASE_BUTTON: 14 steps ───────────────────────────────────────
     case MissionPhase::PHASE_BUTTON: {
       if (phase_entry_) {
         phase_entry_ = false;
-        setStep(1);
-        RCLCPP_INFO(this->get_logger(), "=== PHASE 1: BUTTON TASK ===");
+        button_cmd_idx_ = 0;
+        setStep(0);
+        RCLCPP_INFO(this->get_logger(), "=== PHASE 1: BUTTON ===");
       }
-
-      switch (step_) {
-        // Step 1: Start position (15, 15, 0) — already here
-        case 1: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 1: Start at (15, 15, 0)");
-          }
-          setStep(2);
-          break;
-        }
-
-        // Step 2: Drive to UWB placement (108, 38, 0)
-        case 2: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 2: Drive to UWB placement (108, 38, 0)");
-            { auto w = wp("button_step2"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(3);
-          }
-          break;
-        }
-
-        // Step 3: Back up [rev] to (38, 38, 0)
-        case 3: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 3: Reverse to (38, 38, 0)");
-            { auto w = wp("button_step3"); startNavMove(w[0], w[1], w[2], true); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(4);
-          }
-          break;
-        }
-
-        // Step 4: Turn -45 degrees at (38, 38, -45)
-        case 4: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 4: Turn to -45 deg at (38, 38, -45)");
-            { auto w = wp("button_step4"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(5);
-          }
-          break;
-        }
-
-        // Step 5: Drive forward to (54, 27, -45)
-        case 5: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 5: Drive to (54, 27, -45)");
-            { auto w = wp("button_step5"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(6);
-          }
-          break;
-        }
-
-        // Step 6: Turn +45 at (54, 27, 0)
-        case 6: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 6: Turn to 0 deg at (54, 27, 0)");
-            { auto w = wp("button_step6"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(7);
-          }
-          break;
-        }
-
-        // Step 7: Drive to button (78, 27, 0)
-        case 7: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 7: Drive to button (78, 27, 0)");
-            { auto w = wp("button_step7"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(8);
-          }
-          break;
-        }
-
-        // Step 8: Nudge forward (tap button #1)
-        case 8: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 8: Nudge forward (tap #1)");
-            sendNudge(nudge_speed_mps_);
-          }
-          if (stepElapsed() > 1.0) {
-            stopRobot();
-            setStep(9);
-          }
-          break;
-        }
-
-        // Step 9: Back up [rev] to (78, 27, 0)
-        case 9: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 9: Reverse to (78, 27, 0)");
-            { auto w = wp("button_step9"); startNavMove(w[0], w[1], w[2], true); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(10);
-          }
-          break;
-        }
-
-        // Step 10: Nudge forward (tap button #2)
-        case 10: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 10: Nudge forward (tap #2)");
-            sendNudge(nudge_speed_mps_);
-          }
-          if (stepElapsed() > 1.0) {
-            stopRobot();
-            setStep(11);
-          }
-          break;
-        }
-
-        // Step 11: Back up [rev] to (78, 28, 0)
-        case 11: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 11: Reverse to (78, 28, 0)");
-            { auto w = wp("button_step11"); startNavMove(w[0], w[1], w[2], true); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(12);
-          }
-          break;
-        }
-
-        // Step 12: Nudge forward (tap button #3)
-        case 12: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 12: Nudge forward (tap #3)");
-            sendNudge(nudge_speed_mps_);
-          }
-          if (stepElapsed() > 1.0) {
-            stopRobot();
-            setStep(13);
-          }
-          break;
-        }
-
-        // Step 13: Back up [rev] to (30, 27, 0)
-        case 13: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 13: Reverse to (30, 27, 0)");
-            { auto w = wp("button_step13"); startNavMove(w[0], w[1], w[2], true); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(14);
-          }
-          break;
-        }
-
-        // Step 14: Read beacon antenna
-        case 14: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 14: Read beacon antenna");
-            startAntennaRead("beacon", camera_angle_beacon_);
-          }
-          if (antennaReadComplete() || checkStepTimeout(10.0)) {
-            antenna_colors_[0] = last_antenna_color_;
-            RCLCPP_INFO(this->get_logger(),
-                        "=== PHASE 1 COMPLETE: Button task done ===");
-            transitionTo(MissionPhase::PHASE_KEYPAD_CRATER);
-          }
-          break;
-        }
-
-        default:
-          RCLCPP_WARN(this->get_logger(), "BUTTON: Unknown step %d", step_);
-          transitionTo(MissionPhase::PHASE_KEYPAD_CRATER);
-          break;
-      }
+      executePhaseCommands(button_cmds_, button_cmd_idx_,
+                           MissionPhase::PHASE_KEYPAD_CRATER, "BUTTON");
       break;
     }
 
-    // ── PHASE_KEYPAD_CRATER: 22 steps ────────────────────────────────
     case MissionPhase::PHASE_KEYPAD_CRATER: {
       if (phase_entry_) {
         phase_entry_ = false;
-        setStep(1);
+        keypad_cmd_idx_ = 0;
+        setStep(0);
         RCLCPP_INFO(this->get_logger(),
                     "=== PHASE 2: KEYPAD + CRATER + CRANK ===");
       }
-
-      switch (step_) {
-        // Step 1: Turn +45 at (30, 27, 45)
-        case 1: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 1: Turn to 45 deg at (30, 27, 45)");
-            { auto w = wp("keypad_step1"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(2);
-          }
-          break;
-        }
-
-        // Step 2: Drive to keypad area (81, 95, 45)
-        case 2: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 2: Drive to (81, 95, 45)");
-            { auto w = wp("keypad_step2"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(3);
-          }
-          break;
-        }
-
-        // Step 3: Turn to 0 at (81, 95, 0)
-        case 3: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 3: Turn to 0 deg at (81, 95, 0)");
-            { auto w = wp("keypad_step3"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(4);
-          }
-          break;
-        }
-
-        // Step 4: Reverse to keypad [rev] (38, 95, 0)
-        case 4: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 4: Reverse to keypad (38, 95, 0)");
-            { auto w = wp("keypad_step4"); startNavMove(w[0], w[1], w[2], true); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(5);
-          }
-          break;
-        }
-
-        // Step 5: Call keypad action
-        case 5: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 5: Execute keypad task");
-            sendTaskCommand(TASK_KEYPAD_ENTER);
-          }
-          if (task_idle_ || checkStepTimeout(30.0)) {
-            setStep(6);
-          }
-          break;
-        }
-
-        // Step 6: Drive forward to (55, 95, 0)
-        case 6: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 6: Drive forward to (55, 95, 0)");
-            { auto w = wp("keypad_step6"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(7);
-          }
-          break;
-        }
-
-        // Step 7: Turn to 90 deg at (55, 95, 90)
-        case 7: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 7: Turn to 90 deg at (55, 95, 90)");
-            { auto w = wp("keypad_step7"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(8);
-          }
-          break;
-        }
-
-        // Step 8: Launch minibot
-        case 8: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(), "KEYPAD Step 8: Launch minibot");
-            sendArmCommand(JOINT_MINIBOT_LATCH, SERVO_EXTENDED, SERVO_SPEED);
-          }
-          if (stepElapsed() > 1.0) {
-            setStep(9);
-          }
-          break;
-        }
-
-        // Step 9: Wait for minibot deploy
-        case 9: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 9: Waiting for minibot deploy");
-          }
-          if (stepElapsed() > 1.0) {
-            setStep(10);
-          }
-          break;
-        }
-
-        // Step 10: Deploy intake extender
-        case 10: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 10: Deploy intake extender");
-            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_EXTEND);
-          }
-          if (intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE ||
-              checkStepTimeout(10.0)) {
-            setStep(11);
-          }
-          break;
-        }
-
-        // Step 11: Turn to 180 deg at (55, 95, 180)
-        case 11: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 11: Turn to 180 deg at (55, 95, 180)");
-            { auto w = wp("keypad_step11"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(12);
-          }
-          break;
-        }
-
-        // Step 12: Reverse [rev] to (91, 95, 180)
-        case 12: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 12: Reverse to (91, 95, 180)");
-            { auto w = wp("keypad_step12"); startNavMove(w[0], w[1], w[2], true); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(13);
-          }
-          break;
-        }
-
-        // Step 13: Read keypad antenna
-        case 13: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 13: Read keypad antenna");
-            startAntennaRead("keypad", camera_angle_keypad_);
-          }
-          if (antennaReadComplete() || checkStepTimeout(10.0)) {
-            antenna_colors_[1] = last_antenna_color_;
-            setStep(14);
-          }
-          break;
-        }
-
-        // Step 14: Turn to 115 deg at (91, 95, 115)
-        case 14: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 14: Turn to 115 deg at (91, 95, 115)");
-            { auto w = wp("keypad_step14"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(15);
-          }
-          break;
-        }
-
-        // Step 15: Read crater antenna
-        case 15: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 15: Read crater antenna");
-            startAntennaRead("crater", camera_angle_crater_);
-          }
-          if (antennaReadComplete() || checkStepTimeout(10.0)) {
-            antenna_colors_[2] = last_antenna_color_;
-            setStep(16);
-          }
-          break;
-        }
-
-        // Step 16: Drive to wall alignment (90, 110, 45)
-        case 16: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 16: Wall alignment (90, 110, 45)");
-            { auto w = wp("keypad_step16"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(17);
-          }
-          break;
-        }
-
-        // Step 17: Safe path up (100, 190, 90)
-        case 17: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 17: Safe path to (100, 190, 90)");
-            { auto w = wp("keypad_step17"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(20.0)) {
-            setStep(18);
-          }
-          break;
-        }
-
-        // Step 18: Align with crank (53, 225, 180)
-        case 18: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 18: Align with crank (53, 225, 180)");
-            { auto w = wp("keypad_step18"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(19);
-          }
-          break;
-        }
-
-        // Step 19: Reverse to crank [rev] (53, 225, 150)
-        case 19: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 19: Reverse to crank (53, 225, 150)");
-            { auto w = wp("keypad_step19"); startNavMove(w[0], w[1], w[2], true); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(20);
-          }
-          break;
-        }
-
-        // Step 20: Adjust position (53, 228, 180)
-        case 20: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 20: Fine adjust (53, 228, 180)");
-            { auto w = wp("keypad_step20"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(21);
-          }
-          break;
-        }
-
-        // Step 21: Turn to 0 deg (53, 228, 0) — spin 180
-        case 21: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 21: Turn to 0 deg at (53, 228, 0)");
-            { auto w = wp("keypad_step21"); startNavMove(w[0], w[1], w[2]); }
-          }
-          tickNavMove();
-          if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(22);
-          }
-          break;
-        }
-
-        // Step 22: Read crank antenna
-        case 22: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 22: Read crank antenna");
-            startAntennaRead("crank", camera_angle_crank_);
-          }
-          if (antennaReadComplete() || checkStepTimeout(10.0)) {
-            antenna_colors_[3] = last_antenna_color_;
-            RCLCPP_INFO(
-                this->get_logger(),
-                "=== PHASE 2 COMPLETE: Keypad + Crater + Crank done ===");
-            transitionTo(MissionPhase::MISSION_COMPLETE);
-          }
-          break;
-        }
-
-        default:
-          RCLCPP_WARN(this->get_logger(), "KEYPAD: Unknown step %d", step_);
-          transitionTo(MissionPhase::MISSION_COMPLETE);
-          break;
-      }
+      executePhaseCommands(keypad_cmds_, keypad_cmd_idx_,
+                           MissionPhase::MISSION_COMPLETE, "KEYPAD");
       break;
     }
 
-    // ── MISSION_COMPLETE ─────────────────────────────────────────────
     case MissionPhase::MISSION_COMPLETE: {
       if (phase_entry_) {
         phase_entry_ = false;

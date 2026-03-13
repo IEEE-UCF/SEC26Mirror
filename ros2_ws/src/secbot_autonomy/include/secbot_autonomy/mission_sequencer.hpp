@@ -19,7 +19,6 @@
 #include <chrono>
 #include <cmath>
 #include <future>
-#include <map>
 #include <string>
 #include <vector>
 #include <geometry_msgs/msg/pose.hpp>
@@ -120,15 +119,36 @@ class MissionSequencer : public rclcpp::Node {
   static constexpr double TURN_MAX_OMEGA = 3.0;       // rad/s cap (conservative)
   static constexpr double TURN_MIN_OMEGA = 0.3;       // rad/s floor to overcome friction
 
-  // ── Task IDs ──
-  static constexpr uint8_t TASK_NONE = 0;
-  static constexpr uint8_t TASK_KEYPAD_ENTER = 6;
+  // ── Parsed mission command ──
+  enum class CmdType : uint8_t {
+    NAV, NAV_REV, NUDGE, STOP, WAIT, TASK,
+    READ_ANTENNA, ARM, INTAKE,
+  };
 
-  // ── Servo constants ──
-  static constexpr uint8_t JOINT_MINIBOT_LATCH = 6;
-  static constexpr int16_t SERVO_RETRACTED = 0;
-  static constexpr int16_t SERVO_EXTENDED = 90;
-  static constexpr uint8_t SERVO_SPEED = 200;
+  struct MissionCmd {
+    CmdType type;
+    double x = 0, y = 0, heading = 0;  // NAV/NAV_REV
+    double timeout = 0;                 // 0 = use default
+    double duration = 1.0;              // WAIT/NUDGE
+    uint8_t task_id = 0;                // TASK
+    std::string label;                  // READ_ANTENNA
+    float camera_angle = 90.0f;         // READ_ANTENNA
+    int antenna_slot = -1;              // READ_ANTENNA storage index
+    uint8_t joint = 0;                  // ARM
+    int16_t position = 0;               // ARM
+    uint8_t speed = 0;                  // ARM
+    uint8_t intake_cmd = 0;             // INTAKE
+  };
+
+  static MissionCmd parseCommand(const std::string& line);
+  void loadMission();
+  void executePhaseCommands(std::vector<MissionCmd>& cmds, int& idx,
+                            MissionPhase next_phase, const char* phase_name);
+
+  std::vector<MissionCmd> button_cmds_;
+  std::vector<MissionCmd> keypad_cmds_;
+  int button_cmd_idx_ = 0;
+  int keypad_cmd_idx_ = 0;
 
   // ── Setup state machine ──
   void startSetup(double start_x_cm, double start_y_cm, double start_yaw_deg);
@@ -242,17 +262,8 @@ class MissionSequencer : public rclcpp::Node {
   std::string last_antenna_color_;
   std::array<std::string, 5> antenna_colors_;  // indexed by antenna (0-3: beacon, keypad, crater, crank)
 
-  // ── Waypoints loaded from YAML (Rafeed coords: cm, deg) ──
-  void loadWaypoints();
-  std::vector<double> wp(const std::string& name) const;
-  std::map<std::string, std::vector<double>> waypoints_;
-
   // ── Tunable parameters from YAML ──
   double nudge_speed_mps_ = 0.25;
-  float camera_angle_beacon_ = 90.0f;
-  float camera_angle_keypad_ = 90.0f;
-  float camera_angle_crater_ = 90.0f;
-  float camera_angle_crank_ = 90.0f;
 
   // ── ROS interfaces ──
   rclcpp::TimerBase::SharedPtr tick_timer_;

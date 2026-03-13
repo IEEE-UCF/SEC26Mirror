@@ -1,0 +1,8 @@
+# Request
+float32 camera_angle_goal
+---
+# Result
+string color
+---
+# Feedback
+string status

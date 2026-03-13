@@ -3,8 +3,8 @@
  * @brief Corrected mission sequencer — turn-before-drive + coord frame fix.
  *
  * Preserves all of Rafeed's waypoints and mission logic from mission_node.cpp.
- * Every navigation step is decomposed into: TURN_TO_FACE → DRIVE →
- * TURN_TO_HEADING with pauses between each sub-step.
+ * Every navigation step is decomposed into: DRIVE → TURN_TO_HEADING
+ * (assumes robot is already facing the right direction).
  *
  * Coordinate conversion:
  *   Rafeed (cm, deg): +X=north, +Y=east, +angle=CW
@@ -250,7 +250,7 @@ bool MissionSequencer::tickSetup() {
 }
 
 // ============================================================================
-// NavMove executor — decompose every goal into TURN → DRIVE → TURN
+// NavMove executor — decompose every goal into DRIVE → TURN_TO_HEADING
 // ============================================================================
 
 void MissionSequencer::startNavMove(double x_cm, double y_cm,
@@ -286,7 +286,10 @@ void MissionSequencer::startNavMove(double x_cm, double y_cm,
                 nav_target_.x_m, nav_target_.y_m,
                 rad2deg(nav_travel_heading_), rad2deg(nav_final_heading_),
                 dist);
-    advanceNavSubStep(NavSubStep::TURN_TO_FACE);
+    // Skip TURN_TO_FACE — assume robot is already facing the right direction.
+    // Go directly to DRIVE phase (via PAUSE to settle).
+    advanceNavSubStep(NavSubStep::PAUSE);
+    nav_pause_next_ = NavSubStep::DRIVE;
   }
 }
 
@@ -296,25 +299,11 @@ void MissionSequencer::tickNavMove() {
     case NavSubStep::DONE:
       return;
 
-    case NavSubStep::TURN_TO_FACE: {
-      // P-controller turn via DRIVE_VECTOR — no GOAL mode position correction
-      if (turnReachedHeading(nav_travel_heading_)) {
-        RCLCPP_INFO(this->get_logger(), "  NavMove: TURN_TO_FACE complete");
-        advanceNavSubStep(NavSubStep::PAUSE);  // stopRobot() called inside
-      } else {
-        sendTurnInPlace(nav_travel_heading_);
-        double elapsed =
-            std::chrono::duration<double>(std::chrono::steady_clock::now() -
-                                          nav_substep_timer_)
-                .count();
-        if (elapsed > turn_timeout_s_) {
-          RCLCPP_WARN(this->get_logger(),
-                      "  NavMove: TURN_TO_FACE timed out (%.1f s)", elapsed);
-          advanceNavSubStep(NavSubStep::PAUSE);  // stopRobot() called inside
-        }
-      }
+    case NavSubStep::TURN_TO_FACE:
+      // Unreachable — TURN_TO_FACE is skipped (assume already facing goal)
+      advanceNavSubStep(NavSubStep::PAUSE);
+      nav_pause_next_ = NavSubStep::DRIVE;
       break;
-    }
 
     case NavSubStep::DRIVE: {
       if (!goal_reached_) {
@@ -374,14 +363,7 @@ void MissionSequencer::tickNavMove() {
               .count();
       if (elapsed >= INTER_MOVE_PAUSE_S) {
         // Determine what comes after this pause
-        // We track where we were before PAUSE using a simple progression:
-        // TURN_TO_FACE → (pause) → DRIVE
         // DRIVE → (pause) → TURN_TO_HEADING
-        // TURN_TO_HEADING → (pause) → DONE  (shouldn't happen, but safe)
-        //
-        // We detect which transition based on what hasn't been done yet.
-        // After TURN_TO_FACE pause, send DRIVE command.
-        // After DRIVE pause, send TURN_TO_HEADING command.
         if (!nav_is_pure_turn_ && nav_pause_next_ == NavSubStep::DRIVE) {
           // Start drive
           goal_reached_ = false;
@@ -421,29 +403,9 @@ void MissionSequencer::tickNavMove() {
 void MissionSequencer::advanceNavSubStep(NavSubStep next) {
   stopRobot();
 
-  if (next == NavSubStep::TURN_TO_FACE) {
-    // Check if we even need to turn — if already facing travel heading
-    double hdg_err =
-        std::abs(normalizeAngle(nav_travel_heading_ - robot_theta_rad_));
-    if (hdg_err < HEADING_TOL_RAD) {
-      RCLCPP_INFO(this->get_logger(),
-                  "  NavMove: skip TURN_TO_FACE (err=%.1f deg < tol)",
-                  rad2deg(hdg_err));
-      nav_pause_next_ = NavSubStep::DRIVE;
-      nav_sub_step_ = NavSubStep::PAUSE;
-      nav_substep_timer_ = std::chrono::steady_clock::now();
-      return;
-    }
-    // Enter turn sub-step — tickNavMove() runs P-controller via DRIVE_VECTOR
-    nav_sub_step_ = NavSubStep::TURN_TO_FACE;
-    nav_substep_timer_ = std::chrono::steady_clock::now();
-    RCLCPP_INFO(this->get_logger(), "  NavMove: → TURN_TO_FACE (%.1f deg)",
-                rad2deg(nav_travel_heading_));
-  } else if (next == NavSubStep::PAUSE) {
+  if (next == NavSubStep::PAUSE) {
     // Figure out what comes after this pause
-    if (nav_sub_step_ == NavSubStep::TURN_TO_FACE) {
-      nav_pause_next_ = NavSubStep::DRIVE;
-    } else if (nav_sub_step_ == NavSubStep::DRIVE) {
+    if (nav_sub_step_ == NavSubStep::DRIVE) {
       nav_pause_next_ = NavSubStep::TURN_TO_HEADING;
     } else {
       nav_pause_next_ = NavSubStep::DONE;

@@ -7,7 +7,7 @@
  * Fixes three issues in the original mission_node:
  *   1. Coordinate frame mismatch: Rafeed uses +Y=east, +angle=CW.
  *      MCU uses +Y=west, +angle=CCW. Every Y and angle is negated.
- *   2. No turn-before-drive: simultaneous translation+rotation causes arcing.
+ *   2. Navigation: DRIVE → TURN_TO_HEADING (assumes already facing goal).
  *   3. No IMU tare or inter-move pause.
  *
  * All waypoints are preserved from Rafeed's original mission_node in his

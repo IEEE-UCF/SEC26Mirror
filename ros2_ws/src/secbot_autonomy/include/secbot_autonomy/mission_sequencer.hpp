@@ -19,6 +19,9 @@
 #include <chrono>
 #include <cmath>
 #include <future>
+#include <map>
+#include <string>
+#include <vector>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <mcu_msgs/msg/arm_command.hpp>
@@ -108,7 +111,6 @@ class MissionSequencer : public rclcpp::Node {
   static constexpr double MIN_DRIVE_DIST_M = 0.02;     // below = pure turn
   static constexpr double HEADING_MATCH_RAD = 0.1;     // ~6 deg, skip final turn
   static constexpr double DEFAULT_STEP_TIMEOUT_S = 15.0;
-  static constexpr double NUDGE_SPEED_MPS = 0.25;
   static constexpr double SETUP_SETTLE_S = 0.5;
 
   // ── Turn-in-place P-controller ──
@@ -240,8 +242,17 @@ class MissionSequencer : public rclcpp::Node {
   std::string last_antenna_color_;
   std::array<std::string, 5> antenna_colors_;  // indexed by antenna (0-3: beacon, keypad, crater, crank)
 
-  // Camera angles for each antenna (degrees, configurable)
-  static constexpr float CAMERA_ANGLE_DEFAULT = 90.0f;
+  // ── Waypoints loaded from YAML (Rafeed coords: cm, deg) ──
+  void loadWaypoints();
+  std::vector<double> wp(const std::string& name) const;
+  std::map<std::string, std::vector<double>> waypoints_;
+
+  // ── Tunable parameters from YAML ──
+  double nudge_speed_mps_ = 0.25;
+  float camera_angle_beacon_ = 90.0f;
+  float camera_angle_keypad_ = 90.0f;
+  float camera_angle_crater_ = 90.0f;
+  float camera_angle_crank_ = 90.0f;
 
   // ── ROS interfaces ──
   rclcpp::TimerBase::SharedPtr tick_timer_;

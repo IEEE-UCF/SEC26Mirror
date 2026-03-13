@@ -1,0 +1,44 @@
+mission_sequencer:
+  ros__parameters:
+    # All coordinates in Rafeed frame: [x_cm, y_cm, heading_deg]
+    # Conversion to MCU frame happens automatically in code.
+
+    # Start pose
+    start_pose: [15.0, 15.0, 0.0]
+
+    # ── Phase 1: Button ──
+    button_step2:  [108.0, 38.0, 0.0]      # UWB placement
+    button_step3:  [38.0, 38.0, 0.0]       # reverse back
+    button_step4:  [38.0, 38.0, -45.0]     # turn -45
+    button_step5:  [54.0, 27.0, -45.0]     # drive diagonal
+    button_step6:  [54.0, 27.0, 0.0]       # turn to 0
+    button_step7:  [78.0, 27.0, 0.0]       # approach button
+    button_step9:  [78.0, 27.0, 0.0]       # reverse after tap 1
+    button_step11: [78.0, 28.0, 0.0]       # reverse after tap 2
+    button_step13: [30.0, 27.0, 0.0]       # reverse away from button
+
+    # ── Phase 2: Keypad + Crater + Crank ──
+    keypad_step1:  [30.0, 27.0, 45.0]      # turn +45
+    keypad_step2:  [81.0, 95.0, 45.0]      # drive to keypad area
+    keypad_step3:  [81.0, 95.0, 0.0]       # turn to 0
+    keypad_step4:  [38.0, 95.0, 0.0]       # reverse to keypad
+    keypad_step6:  [55.0, 95.0, 0.0]       # drive forward
+    keypad_step7:  [55.0, 95.0, 90.0]      # turn to 90
+    keypad_step11: [55.0, 95.0, 180.0]     # turn to 180
+    keypad_step12: [91.0, 95.0, 180.0]     # reverse
+    keypad_step14: [91.0, 95.0, 115.0]     # turn to 115
+    keypad_step16: [90.0, 110.0, 45.0]     # wall alignment
+    keypad_step17: [100.0, 190.0, 90.0]    # safe path up
+    keypad_step18: [53.0, 225.0, 180.0]    # align with crank
+    keypad_step19: [53.0, 225.0, 150.0]    # reverse to crank
+    keypad_step20: [53.0, 228.0, 180.0]    # fine adjust
+    keypad_step21: [53.0, 228.0, 0.0]      # spin 180
+
+    # ── Nudge speed (m/s) ──
+    nudge_speed: 0.25
+
+    # ── Camera angles for antenna reads (degrees) ──
+    camera_angle_beacon: 90.0
+    camera_angle_keypad: 90.0
+    camera_angle_crater: 90.0
+    camera_angle_crank: 90.0

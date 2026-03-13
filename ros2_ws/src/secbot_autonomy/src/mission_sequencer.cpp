@@ -73,11 +73,73 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   beacon_color_client_ =
       rclcpp_action::create_client<ReadBeaconColor>(this, "read_beacon_color");
 
+  // Load waypoints from YAML parameters
+  loadWaypoints();
+
   // Main tick timer at 10 Hz
   tick_timer_ = this->create_wall_timer(100ms, [this]() { stepMission(); });
 
   RCLCPP_INFO(this->get_logger(),
               "Mission sequencer ready. Waiting for start...");
+}
+
+// ============================================================================
+// Waypoint loading from YAML parameters
+// ============================================================================
+
+void MissionSequencer::loadWaypoints() {
+  // Declare all waypoint parameters with defaults
+  const std::vector<std::pair<std::string, std::vector<double>>> defaults = {
+      {"start_pose",    {15.0, 15.0, 0.0}},
+      {"button_step2",  {108.0, 38.0, 0.0}},
+      {"button_step3",  {38.0, 38.0, 0.0}},
+      {"button_step4",  {38.0, 38.0, -45.0}},
+      {"button_step5",  {54.0, 27.0, -45.0}},
+      {"button_step6",  {54.0, 27.0, 0.0}},
+      {"button_step7",  {78.0, 27.0, 0.0}},
+      {"button_step9",  {78.0, 27.0, 0.0}},
+      {"button_step11", {78.0, 28.0, 0.0}},
+      {"button_step13", {30.0, 27.0, 0.0}},
+      {"keypad_step1",  {30.0, 27.0, 45.0}},
+      {"keypad_step2",  {81.0, 95.0, 45.0}},
+      {"keypad_step3",  {81.0, 95.0, 0.0}},
+      {"keypad_step4",  {38.0, 95.0, 0.0}},
+      {"keypad_step6",  {55.0, 95.0, 0.0}},
+      {"keypad_step7",  {55.0, 95.0, 90.0}},
+      {"keypad_step11", {55.0, 95.0, 180.0}},
+      {"keypad_step12", {91.0, 95.0, 180.0}},
+      {"keypad_step14", {91.0, 95.0, 115.0}},
+      {"keypad_step16", {90.0, 110.0, 45.0}},
+      {"keypad_step17", {100.0, 190.0, 90.0}},
+      {"keypad_step18", {53.0, 225.0, 180.0}},
+      {"keypad_step19", {53.0, 225.0, 150.0}},
+      {"keypad_step20", {53.0, 228.0, 180.0}},
+      {"keypad_step21", {53.0, 228.0, 0.0}},
+  };
+
+  for (const auto& [name, def] : defaults) {
+    this->declare_parameter<std::vector<double>>(name, def);
+    waypoints_[name] = this->get_parameter(name).as_double_array();
+  }
+
+  this->declare_parameter<double>("nudge_speed", 0.25);
+  nudge_speed_mps_ = this->get_parameter("nudge_speed").as_double();
+
+  this->declare_parameter<double>("camera_angle_beacon", 90.0);
+  this->declare_parameter<double>("camera_angle_keypad", 90.0);
+  this->declare_parameter<double>("camera_angle_crater", 90.0);
+  this->declare_parameter<double>("camera_angle_crank", 90.0);
+  camera_angle_beacon_ = static_cast<float>(this->get_parameter("camera_angle_beacon").as_double());
+  camera_angle_keypad_ = static_cast<float>(this->get_parameter("camera_angle_keypad").as_double());
+  camera_angle_crater_ = static_cast<float>(this->get_parameter("camera_angle_crater").as_double());
+  camera_angle_crank_ = static_cast<float>(this->get_parameter("camera_angle_crank").as_double());
+
+  RCLCPP_INFO(this->get_logger(), "Loaded %zu waypoints from parameters",
+              waypoints_.size());
+}
+
+std::vector<double> MissionSequencer::wp(const std::string& name) const {
+  return waypoints_.at(name);
 }
 
 // ============================================================================
@@ -567,8 +629,8 @@ void MissionSequencer::stepMission() {
         phase_entry_ = false;
         RCLCPP_INFO(this->get_logger(), "=== ROBOT START ===");
         match_start_ = std::chrono::steady_clock::now();
-        // Start setup: tare IMU, reset pose to (15, 15, 0) in Rafeed coords
-        startSetup(15.0, 15.0, 0.0);
+        // Start setup: tare IMU, reset pose to start_pose in Rafeed coords
+        { auto s = wp("start_pose"); startSetup(s[0], s[1], s[2]); }
       }
       if (tickSetup()) {
         transitionTo(MissionPhase::PHASE_BUTTON);
@@ -602,7 +664,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 2: Drive to UWB placement (108, 38, 0)");
-            startNavMove(108.0, 38.0, 0.0);
+            { auto w = wp("button_step2"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -617,7 +679,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 3: Reverse to (38, 38, 0)");
-            startNavMove(38.0, 38.0, 0.0, true);
+            { auto w = wp("button_step3"); startNavMove(w[0], w[1], w[2], true); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -632,7 +694,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 4: Turn to -45 deg at (38, 38, -45)");
-            startNavMove(38.0, 38.0, -45.0);
+            { auto w = wp("button_step4"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -647,7 +709,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 5: Drive to (54, 27, -45)");
-            startNavMove(54.0, 27.0, -45.0);
+            { auto w = wp("button_step5"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -662,7 +724,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 6: Turn to 0 deg at (54, 27, 0)");
-            startNavMove(54.0, 27.0, 0.0);
+            { auto w = wp("button_step6"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -677,7 +739,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 7: Drive to button (78, 27, 0)");
-            startNavMove(78.0, 27.0, 0.0);
+            { auto w = wp("button_step7"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -692,7 +754,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 8: Nudge forward (tap #1)");
-            sendNudge(NUDGE_SPEED_MPS);
+            sendNudge(nudge_speed_mps_);
           }
           if (stepElapsed() > 1.0) {
             stopRobot();
@@ -707,7 +769,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 9: Reverse to (78, 27, 0)");
-            startNavMove(78.0, 27.0, 0.0, true);
+            { auto w = wp("button_step9"); startNavMove(w[0], w[1], w[2], true); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -722,7 +784,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 10: Nudge forward (tap #2)");
-            sendNudge(NUDGE_SPEED_MPS);
+            sendNudge(nudge_speed_mps_);
           }
           if (stepElapsed() > 1.0) {
             stopRobot();
@@ -737,7 +799,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 11: Reverse to (78, 28, 0)");
-            startNavMove(78.0, 28.0, 0.0, true);
+            { auto w = wp("button_step11"); startNavMove(w[0], w[1], w[2], true); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -752,7 +814,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 12: Nudge forward (tap #3)");
-            sendNudge(NUDGE_SPEED_MPS);
+            sendNudge(nudge_speed_mps_);
           }
           if (stepElapsed() > 1.0) {
             stopRobot();
@@ -767,7 +829,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 13: Reverse to (30, 27, 0)");
-            startNavMove(30.0, 27.0, 0.0, true);
+            { auto w = wp("button_step13"); startNavMove(w[0], w[1], w[2], true); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -782,7 +844,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 14: Read beacon antenna");
-            startAntennaRead("beacon", CAMERA_ANGLE_DEFAULT);
+            startAntennaRead("beacon", camera_angle_beacon_);
           }
           if (antennaReadComplete() || checkStepTimeout(10.0)) {
             antenna_colors_[0] = last_antenna_color_;
@@ -817,7 +879,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 1: Turn to 45 deg at (30, 27, 45)");
-            startNavMove(30.0, 27.0, 45.0);
+            { auto w = wp("keypad_step1"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -832,7 +894,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 2: Drive to (81, 95, 45)");
-            startNavMove(81.0, 95.0, 45.0);
+            { auto w = wp("keypad_step2"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -847,7 +909,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 3: Turn to 0 deg at (81, 95, 0)");
-            startNavMove(81.0, 95.0, 0.0);
+            { auto w = wp("keypad_step3"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -862,7 +924,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 4: Reverse to keypad (38, 95, 0)");
-            startNavMove(38.0, 95.0, 0.0, true);
+            { auto w = wp("keypad_step4"); startNavMove(w[0], w[1], w[2], true); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -891,7 +953,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 6: Drive forward to (55, 95, 0)");
-            startNavMove(55.0, 95.0, 0.0);
+            { auto w = wp("keypad_step6"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -906,7 +968,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 7: Turn to 90 deg at (55, 95, 90)");
-            startNavMove(55.0, 95.0, 90.0);
+            { auto w = wp("keypad_step7"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -962,7 +1024,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 11: Turn to 180 deg at (55, 95, 180)");
-            startNavMove(55.0, 95.0, 180.0);
+            { auto w = wp("keypad_step11"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -977,7 +1039,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 12: Reverse to (91, 95, 180)");
-            startNavMove(91.0, 95.0, 180.0, true);
+            { auto w = wp("keypad_step12"); startNavMove(w[0], w[1], w[2], true); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -992,7 +1054,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 13: Read keypad antenna");
-            startAntennaRead("keypad", CAMERA_ANGLE_DEFAULT);
+            startAntennaRead("keypad", camera_angle_keypad_);
           }
           if (antennaReadComplete() || checkStepTimeout(10.0)) {
             antenna_colors_[1] = last_antenna_color_;
@@ -1007,7 +1069,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 14: Turn to 115 deg at (91, 95, 115)");
-            startNavMove(91.0, 95.0, 115.0);
+            { auto w = wp("keypad_step14"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -1022,7 +1084,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 15: Read crater antenna");
-            startAntennaRead("crater", CAMERA_ANGLE_DEFAULT);
+            startAntennaRead("crater", camera_angle_crater_);
           }
           if (antennaReadComplete() || checkStepTimeout(10.0)) {
             antenna_colors_[2] = last_antenna_color_;
@@ -1037,7 +1099,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 16: Wall alignment (90, 110, 45)");
-            startNavMove(90.0, 110.0, 45.0);
+            { auto w = wp("keypad_step16"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -1052,7 +1114,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 17: Safe path to (100, 190, 90)");
-            startNavMove(100.0, 190.0, 90.0);
+            { auto w = wp("keypad_step17"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(20.0)) {
@@ -1067,7 +1129,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 18: Align with crank (53, 225, 180)");
-            startNavMove(53.0, 225.0, 180.0);
+            { auto w = wp("keypad_step18"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -1082,7 +1144,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 19: Reverse to crank (53, 225, 150)");
-            startNavMove(53.0, 225.0, 150.0, true);
+            { auto w = wp("keypad_step19"); startNavMove(w[0], w[1], w[2], true); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -1097,7 +1159,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 20: Fine adjust (53, 228, 180)");
-            startNavMove(53.0, 228.0, 180.0);
+            { auto w = wp("keypad_step20"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -1112,7 +1174,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 21: Turn to 0 deg at (53, 228, 0)");
-            startNavMove(53.0, 228.0, 0.0);
+            { auto w = wp("keypad_step21"); startNavMove(w[0], w[1], w[2]); }
           }
           tickNavMove();
           if (navMoveComplete() || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
@@ -1127,7 +1189,7 @@ void MissionSequencer::stepMission() {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 22: Read crank antenna");
-            startAntennaRead("crank", CAMERA_ANGLE_DEFAULT);
+            startAntennaRead("crank", camera_angle_crank_);
           }
           if (antennaReadComplete() || checkStepTimeout(10.0)) {
             antenna_colors_[3] = last_antenna_color_;

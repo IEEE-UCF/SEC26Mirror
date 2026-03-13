@@ -70,7 +70,7 @@ class DetectorNode(Node):
         self.pub_topic  = self.get_parameter('pub_topic').value
         self.debug_viz  = self.get_parameter('debug_viz').value
         self.pub_dbg_name = self.get_parameter('pub_debug_image').value
-        pub_mask_name = self.get_parameter('pub_mask_image').value
+        self.pub_mask_name = self.get_parameter('pub_mask_image').value
 
         # ROS Inputs and outputs
         qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.BEST_EFFORT)
@@ -97,7 +97,7 @@ class DetectorNode(Node):
         self.get_logger().info(f"Detections: {self.pub_topic}")
         if self.debug_viz:
             self.get_logger().info(f"Debug image: {self.pub_dbg_name}")
-            self.get_logger().info(f"Mask image: {pub_mask_name}")
+            self.get_logger().info(f"Mask image: {self.pub_mask_name}")
         pkg_share = get_package_share_directory('secbot_vision')
         self.colors_path = os.path.join(pkg_share, 'config', 'colors.yaml')
 

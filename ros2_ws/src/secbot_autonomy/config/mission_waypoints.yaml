@@ -16,6 +16,9 @@ mission_sequencer:
 
     start_pose: [15.0, 15.0, 0.0]
     nudge_speed: 0.25
+    turn_timeout: 3.0
+    drive_timeout: 3.0
+    default_step_timeout: 3.0
 
     #  Phase 1: Button 
     phase_button:

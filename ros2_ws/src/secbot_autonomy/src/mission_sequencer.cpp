@@ -148,6 +148,14 @@ void MissionSequencer::loadMission() {
   this->declare_parameter<double>("nudge_speed", 0.25);
   nudge_speed_mps_ = this->get_parameter("nudge_speed").as_double();
 
+  // Timeouts
+  this->declare_parameter<double>("turn_timeout", 3.0);
+  this->declare_parameter<double>("drive_timeout", 3.0);
+  this->declare_parameter<double>("default_step_timeout", 3.0);
+  turn_timeout_s_ = this->get_parameter("turn_timeout").as_double();
+  drive_timeout_s_ = this->get_parameter("drive_timeout").as_double();
+  default_step_timeout_s_ = this->get_parameter("default_step_timeout").as_double();
+
   // Phase commands
   this->declare_parameter<std::vector<std::string>>("phase_button", std::vector<std::string>{});
   this->declare_parameter<std::vector<std::string>>("phase_keypad", std::vector<std::string>{});
@@ -295,7 +303,7 @@ void MissionSequencer::tickNavMove() {
             std::chrono::duration<double>(std::chrono::steady_clock::now() -
                                           nav_substep_timer_)
                 .count();
-        if (elapsed > TURN_TIMEOUT_S) {
+        if (elapsed > turn_timeout_s_) {
           RCLCPP_WARN(this->get_logger(),
                       "  NavMove: TURN_TO_FACE timed out (%.1f s)", elapsed);
           advanceNavSubStep(NavSubStep::PAUSE);  // stopRobot() called inside
@@ -310,7 +318,7 @@ void MissionSequencer::tickNavMove() {
             std::chrono::duration<double>(std::chrono::steady_clock::now() -
                                           nav_substep_timer_)
                 .count();
-        if (elapsed > DRIVE_TIMEOUT_S) {
+        if (elapsed > drive_timeout_s_) {
           RCLCPP_WARN(this->get_logger(),
                       "  NavMove: DRIVE timed out (%.1f s)", elapsed);
           // Check if we need final heading turn
@@ -346,7 +354,7 @@ void MissionSequencer::tickNavMove() {
             std::chrono::duration<double>(std::chrono::steady_clock::now() -
                                           nav_substep_timer_)
                 .count();
-        if (elapsed > TURN_TIMEOUT_S) {
+        if (elapsed > turn_timeout_s_) {
           RCLCPP_WARN(this->get_logger(),
                       "  NavMove: TURN_TO_HEADING timed out (%.1f s)", elapsed);
           advanceNavSubStep(NavSubStep::DONE);  // stopRobot() called inside
@@ -659,7 +667,7 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
         startNavMove(cmd.x, cmd.y, cmd.heading, rev);
       }
       tickNavMove();
-      double t = (cmd.timeout > 0) ? cmd.timeout : DEFAULT_STEP_TIMEOUT_S;
+      double t = (cmd.timeout > 0) ? cmd.timeout : default_step_timeout_s_;
       if (navMoveComplete() || checkStepTimeout(t)) {
         setStep(++idx);
       }

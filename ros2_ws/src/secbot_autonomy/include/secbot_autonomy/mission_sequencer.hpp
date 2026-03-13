@@ -104,12 +104,12 @@ class MissionSequencer : public rclcpp::Node {
   // ── Tolerances & timing ──
   static constexpr double DIST_TOL_M = 0.03;          // 3 cm
   static constexpr double HEADING_TOL_RAD = 0.12;      // ~7 deg
-  static constexpr double TURN_TIMEOUT_S = 8.0;
-  static constexpr double DRIVE_TIMEOUT_S = 12.0;
+  double turn_timeout_s_ = 3.0;
+  double drive_timeout_s_ = 3.0;
+  double default_step_timeout_s_ = 3.0;
   static constexpr double INTER_MOVE_PAUSE_S = 0.4;
   static constexpr double MIN_DRIVE_DIST_M = 0.02;     // below = pure turn
   static constexpr double HEADING_MATCH_RAD = 0.1;     // ~6 deg, skip final turn
-  static constexpr double DEFAULT_STEP_TIMEOUT_S = 15.0;
   static constexpr double SETUP_SETTLE_S = 0.5;
 
   // ── Turn-in-place P-controller ──

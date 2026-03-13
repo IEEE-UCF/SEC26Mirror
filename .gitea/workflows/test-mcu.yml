@@ -54,23 +54,18 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build all PlatformIO environments
+      - name: Run all native test environments
         working-directory: mcu_ws/
         shell: bash
         run: |
-          # Build all native test environments
-          pio test \
-            -e test-math-pose2d \
-            -e test-math-vector2d \
-            -e test-math-pose3d \
-            -e test-control-pid \
-            -e test-control-arm-kinematics \
-            -e test-control-trapezoidal-motion-profile \
-            -e test-control-scurve-motion-profile \
-            -e test-control-trajectory-controller \
-            -e test-utils-filters \
-            -e test-utils-units \
-            -e test-drive-tankdrivelocalization \
-            -e test-drone-motor-mixer \
-            -e test-drone-ekf \
-            -e test-drone-imu-math
+          # Auto-discover [env:test-*] sections from platformio.ini
+          ENVS=$(grep -oP '(?<=\[env:)test-[^\]]+' platformio.ini | sort)
+          echo "Discovered test environments:"
+          echo "$ENVS"
+          # Build pio test command with -e flags
+          CMD="pio test"
+          for env in $ENVS; do
+            CMD="$CMD -e $env"
+          done
+          echo "Running: $CMD"
+          $CMD

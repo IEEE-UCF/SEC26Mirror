@@ -15,6 +15,7 @@
  * rafeedToMcu() before any DriveBase message is built.
  */
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <future>
@@ -27,6 +28,8 @@
 #include <mcu_msgs/msg/robot_inputs.hpp>
 #include <mcu_msgs/srv/reset.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <secbot_msgs/action/read_beacon_color.hpp>
 #include <secbot_msgs/msg/task_status.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <std_srvs/srv/trigger.hpp>
@@ -167,7 +170,14 @@ class MissionSequencer : public rclcpp::Node {
   void sendTaskCommand(uint8_t task_id);
   void sendArmCommand(uint8_t joint_id, int16_t position, uint8_t speed);
   void sendIntakeCommand(uint8_t cmd, float value = 0.0f);
-  void readAntennaDummy(const char* label);
+
+  // ── Antenna reading (ReadBeaconColor action) ──
+  using ReadBeaconColor = secbot_msgs::action::ReadBeaconColor;
+  using BeaconGoalHandle = rclcpp_action::ClientGoalHandle<ReadBeaconColor>;
+
+  void startAntennaRead(const char* label, float camera_angle);
+  bool antennaReadComplete() const { return !antenna_read_active_; }
+  std::string lastAntennaColor() const { return last_antenna_color_; }
 
   // ── State machine ──
   void stepMission();
@@ -225,12 +235,23 @@ class MissionSequencer : public rclcpp::Node {
   // Intake state
   uint8_t intake_state_ = 0;
 
+  // Antenna reading state
+  bool antenna_read_active_ = false;
+  std::string last_antenna_color_;
+  std::array<std::string, 5> antenna_colors_;  // indexed by antenna (0-3: beacon, keypad, crater, crank)
+
+  // Camera angles for each antenna (degrees, configurable)
+  static constexpr float CAMERA_ANGLE_DEFAULT = 90.0f;
+
   // ── ROS interfaces ──
   rclcpp::TimerBase::SharedPtr tick_timer_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_service_;
 
   // Service clients
   rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr imu_tare_client_;
+
+  // Action clients
+  rclcpp_action::Client<ReadBeaconColor>::SharedPtr beacon_color_client_;
 
   // Publishers
   rclcpp::Publisher<mcu_msgs::msg::DriveBase>::SharedPtr drive_cmd_pub_;

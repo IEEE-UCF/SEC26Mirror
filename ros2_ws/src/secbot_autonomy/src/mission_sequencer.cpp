@@ -69,6 +69,10 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   imu_tare_client_ =
       this->create_client<mcu_msgs::srv::Reset>("/mcu_robot/imu/tare");
 
+  // ReadBeaconColor action client
+  beacon_color_client_ =
+      rclcpp_action::create_client<ReadBeaconColor>(this, "read_beacon_color");
+
   // Main tick timer at 10 Hz
   tick_timer_ = this->create_wall_timer(100ms, [this]() { stepMission(); });
 
@@ -496,10 +500,44 @@ void MissionSequencer::sendIntakeCommand(uint8_t cmd, float value) {
               value);
 }
 
-void MissionSequencer::readAntennaDummy(const char* label) {
-  RCLCPP_INFO(
-      this->get_logger(),
-      "  [DUMMY] Reading %s antenna... (placeholder, returning green)", label);
+void MissionSequencer::startAntennaRead(const char* label,
+                                        float camera_angle) {
+  antenna_read_active_ = true;
+  last_antenna_color_ = "unknown";
+
+  if (!beacon_color_client_->wait_for_action_server(std::chrono::seconds(1))) {
+    RCLCPP_WARN(this->get_logger(),
+                "  ReadBeaconColor action server not available, "
+                "skipping %s antenna read",
+                label);
+    antenna_read_active_ = false;
+    return;
+  }
+
+  auto goal = ReadBeaconColor::Goal();
+  goal.camera_angle_goal = camera_angle;
+
+  auto options = rclcpp_action::Client<ReadBeaconColor>::SendGoalOptions();
+  options.result_callback =
+      [this, lbl = std::string(label)](
+          const BeaconGoalHandle::WrappedResult& result) {
+        antenna_read_active_ = false;
+        if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+          last_antenna_color_ = result.result->color;
+          RCLCPP_INFO(this->get_logger(), "  Antenna %s read: %s", lbl.c_str(),
+                      last_antenna_color_.c_str());
+        } else {
+          last_antenna_color_ = "unknown";
+          RCLCPP_WARN(this->get_logger(),
+                      "  Antenna %s read failed (code=%d)", lbl.c_str(),
+                      static_cast<int>(result.code));
+        }
+      };
+
+  beacon_color_client_->async_send_goal(goal, options);
+  RCLCPP_INFO(this->get_logger(),
+              "  Reading %s antenna at camera angle %.1f deg", label,
+              camera_angle);
 }
 
 // ============================================================================
@@ -738,15 +776,16 @@ void MissionSequencer::stepMission() {
           break;
         }
 
-        // Step 14: Read beacon antenna (DUMMY)
+        // Step 14: Read beacon antenna
         case 14: {
           if (step_entry_) {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "BUTTON Step 14: Read beacon antenna");
-            readAntennaDummy("beacon");
+            startAntennaRead("beacon", CAMERA_ANGLE_DEFAULT);
           }
-          if (stepElapsed() > 1.0) {
+          if (antennaReadComplete() || checkStepTimeout(10.0)) {
+            antenna_colors_[0] = last_antenna_color_;
             RCLCPP_INFO(this->get_logger(),
                         "=== PHASE 1 COMPLETE: Button task done ===");
             transitionTo(MissionPhase::PHASE_KEYPAD_CRATER);
@@ -947,15 +986,16 @@ void MissionSequencer::stepMission() {
           break;
         }
 
-        // Step 13: Read keypad antenna (DUMMY)
+        // Step 13: Read keypad antenna
         case 13: {
           if (step_entry_) {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 13: Read keypad antenna");
-            readAntennaDummy("keypad");
+            startAntennaRead("keypad", CAMERA_ANGLE_DEFAULT);
           }
-          if (stepElapsed() > 1.0) {
+          if (antennaReadComplete() || checkStepTimeout(10.0)) {
+            antenna_colors_[1] = last_antenna_color_;
             setStep(14);
           }
           break;
@@ -976,15 +1016,16 @@ void MissionSequencer::stepMission() {
           break;
         }
 
-        // Step 15: Read crater antenna (DUMMY)
+        // Step 15: Read crater antenna
         case 15: {
           if (step_entry_) {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 15: Read crater antenna");
-            readAntennaDummy("crater");
+            startAntennaRead("crater", CAMERA_ANGLE_DEFAULT);
           }
-          if (stepElapsed() > 1.0) {
+          if (antennaReadComplete() || checkStepTimeout(10.0)) {
+            antenna_colors_[2] = last_antenna_color_;
             setStep(16);
           }
           break;
@@ -1080,15 +1121,16 @@ void MissionSequencer::stepMission() {
           break;
         }
 
-        // Step 22: Read crank antenna (DUMMY)
+        // Step 22: Read crank antenna
         case 22: {
           if (step_entry_) {
             step_entry_ = false;
             RCLCPP_INFO(this->get_logger(),
                         "KEYPAD Step 22: Read crank antenna");
-            readAntennaDummy("crank");
+            startAntennaRead("crank", CAMERA_ANGLE_DEFAULT);
           }
-          if (stepElapsed() > 1.0) {
+          if (antennaReadComplete() || checkStepTimeout(10.0)) {
+            antenna_colors_[3] = last_antenna_color_;
             RCLCPP_INFO(
                 this->get_logger(),
                 "=== PHASE 2 COMPLETE: Keypad + Crater + Crank done ===");

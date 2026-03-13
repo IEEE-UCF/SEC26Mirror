@@ -15,6 +15,7 @@
   <depend>sensor_msgs</depend>
   <depend>vision_msgs</depend>
   <depend>secbot_msgs</depend>
+  <depend>mcu_msgs</depend>
   <depend>image_transport</depend>
   <depend>cv_bridge</depend>
   <depend>python3-opencv</depend>

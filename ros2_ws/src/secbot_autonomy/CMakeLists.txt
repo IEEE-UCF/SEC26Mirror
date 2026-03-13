@@ -81,6 +81,7 @@ add_executable(mission_sequencer
 
 ament_target_dependencies(mission_sequencer
   rclcpp
+  rclcpp_action
   std_msgs
   std_srvs
   geometry_msgs

@@ -67,6 +67,15 @@ def generate_launch_description():
         DeclareLaunchArgument('width',      default_value=_default_width),
         DeclareLaunchArgument('height',     default_value=_default_height),
         DeclareLaunchArgument('frame_rate', default_value=_default_fps),
+        DeclareLaunchArgument(
+            'debug_filter',
+            default_value=os.environ.get('VISION_DEBUG_FILTER', 'tuning'),
+            description=(
+                'When non-empty, the detector runs ONLY a live-tuning filter '
+                'driven by /color_tunning (HSV slider GUI). Set to empty string '
+                'to disable tuning and run normal detection from colors.yaml.'
+            ),
+        ),
 
         # Camera driver
         Node(
@@ -86,13 +95,27 @@ def generate_launch_description():
             output='screen',
         ),
 
-        # Detector (yellow object detection + bounding box debug image)
+        # HSV tuning GUI (only useful when debug_filter is set)
+        Node(
+            package='secbot_vision',
+            executable='rgb_slider_gui',
+            name='rgb_slider_gui',
+            output='screen',
+            additional_env={'DISPLAY': os.environ.get('DISPLAY', ':0')},
+        ),
+
+        # Detector (color detection + bounding box debug image)
         Node(
             package='secbot_vision',
             executable='detector_node',
             name='detector_node',
             parameters=[
                 os.path.join(pkg_share, 'config', 'vision.yaml'),
+                {
+                    'image_topic':  '/camera/image_raw',
+                    'debug_filter': LaunchConfiguration('debug_filter'),
+                    'debug_viz':    True,
+                },
             ],
             output='screen',
         ),

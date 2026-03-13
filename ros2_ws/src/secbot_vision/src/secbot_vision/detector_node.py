@@ -55,7 +55,7 @@ class DetectorNode(Node):
         self.declare_parameter('pub_topic', '/detected_objects')
         self.declare_parameter('pub_debug_image', '/vision/debug_image')
         self.declare_parameter('pub_mask_image', '/vision/mask')
-        self.declare_parameter('debug_filter', False)
+        self.declare_parameter('debug_filter', '')
         self.declare_parameter('debug_viz', True)
         self.declare_parameter('yellow_detection_duck', 'yellow')
         self.declare_parameter('red_antenna', 'red')
@@ -98,14 +98,6 @@ class DetectorNode(Node):
         self._isDuck() if duck_or_antenna else self._isAntenna()
 
         self.debug_filter = self.get_parameter('debug_filter').value
-        if self.debug_filter:
-            self.get_logger().warn(
-                f"[DEBUG FILTER] Active — only running filter: '{self.debug_filter}' | DRIVEN BY /color_tunning"
-            )
-            self._color_tunner = self.create_subscription(
-                ColorTunning, '/color_tunning', self._on_color_tunning, 10
-            )
-            self.get_logger().info("[DEBUG FILTER] Subscribed to /color_tunning")
 
         self.color_configs_for_objects = []
         for filter_name in self.filters_array:
@@ -117,39 +109,52 @@ class DetectorNode(Node):
                 'hsv_value':  np.array(color_cfg['hsv_values'], dtype=np.uint8),
             })
 
+        if self.debug_filter:
+            self.get_logger().warn(
+                f"[DEBUG FILTER] Active — ONLY tuning filter runs | DRIVEN BY /color_tunning"
+            )
+            self._color_tunner = self.create_subscription(
+                ColorTunning, '/color_tunning', self._on_color_tunning, 10
+            )
+            self.get_logger().info("[DEBUG FILTER] Subscribed to /color_tunning")
+            # In debug mode, replace all loaded filters with a single tuning entry
+            # so the mask/debug image always shows the tuning filter result.
+            first_cfg = self.color_configs_for_objects[0] if self.color_configs_for_objects else {
+                'color_low': np.array([0, 0, 0], dtype=np.uint8),
+                'color_high': np.array([179, 255, 255], dtype=np.uint8),
+                'hsv_value': np.array([90, 128, 128], dtype=np.uint8),
+            }
+            self.color_configs_for_objects = [{
+                'filter':     'tuning',
+                'color_low':  first_cfg['color_low'].copy(),
+                'color_high': first_cfg['color_high'].copy(),
+                'hsv_value':  first_cfg.get('hsv_value', np.array([90, 128, 128], dtype=np.uint8)).copy(),
+            }]
+
         self.min_area_ratio = float(self.get_parameter('min_area_ratio').value)
 
     def _on_color_tunning(self, msg: ColorTunning):
-        """Live-update the debug filter's color ranges from the slider GUI.
+        """Live-update the tuning filter's HSV ranges from the slider GUI.
 
-        ColorTunning.msg (9 flat fields):
-            low_red, low_green, low_blue     — HSV/BGR lower bound
-            high_red, high_green, high_blue  — HSV/BGR upper bound
-            hue, saturation, value           — shared HSV target for scoring
+        ColorTunning.msg field mapping (HSV, repurposed from RGB names):
+            low_red   → H low    low_green  → S low    low_blue  → V low
+            high_red  → H high   high_green → S high   high_blue → V high
+            hue, saturation, value → midpoint HSV for confidence scoring
         """
         color_low  = np.array([msg.low_red,  msg.low_green,  msg.low_blue],  dtype=np.uint8)
         color_high = np.array([msg.high_red, msg.high_green, msg.high_blue], dtype=np.uint8)
         hsv_value  = np.array([msg.hue,      msg.saturation, msg.value],     dtype=np.uint8)
 
-        for cfg in self.color_configs_for_objects:
-            if cfg['filter'] == 'debug':
-                cfg['color_low']  = color_low
-                cfg['color_high'] = color_high
-                cfg['hsv_value']  = hsv_value
-                break
-        else:
-            self.color_configs_for_objects.append({
-                'filter':     'debug',
-                'color_low':  color_low,
-                'color_high': color_high,
-                'hsv_value':  hsv_value,
-            })
+        # Update the single tuning filter entry
+        self.color_configs_for_objects[0]['color_low']  = color_low
+        self.color_configs_for_objects[0]['color_high'] = color_high
+        self.color_configs_for_objects[0]['hsv_value']  = hsv_value
 
         self.get_logger().info(
-            f"[COLOR TUNNING] "
-            f"low=({msg.low_red},{msg.low_green},{msg.low_blue}) "
-            f"high=({msg.high_red},{msg.high_green},{msg.high_blue}) "
-            f"HSV H={msg.hue} S={msg.saturation} V={msg.value}"
+            f"[TUNING] "
+            f"low=H{msg.low_red} S{msg.low_green} V{msg.low_blue} | "
+            f"high=H{msg.high_red} S{msg.high_green} V{msg.high_blue} | "
+            f"mid=H{msg.hue} S{msg.saturation} V{msg.value}"
         )
 
     def on_image(self, msg: Image):
@@ -170,6 +175,13 @@ class DetectorNode(Node):
                 hsv_values=filter_cfgs['hsv_value'],
                 min_area_ratio=self.min_area_ratio,
             )
+
+            # In debug/tuning mode, always use the mask (even with no detections)
+            # so you can see the HSV filter result in real time.
+            if self.debug_filter:
+                best_mask = mask_out
+                debug = debug_out
+                best_filter_name = filter_cfgs
 
             if not metadata:
                 continue

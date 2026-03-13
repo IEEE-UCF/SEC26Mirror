@@ -119,6 +119,9 @@ class MissionSequencer : public rclcpp::Node {
   static constexpr double TURN_MAX_OMEGA = 3.0;       // rad/s cap (conservative)
   static constexpr double TURN_MIN_OMEGA = 0.3;       // rad/s floor to overcome friction
 
+  // ── Task IDs ──
+  static constexpr uint8_t TASK_NONE = 0;
+
   // ── Parsed mission command ──
   enum class CmdType : uint8_t {
     NAV, NAV_REV, NUDGE, STOP, WAIT, TASK,

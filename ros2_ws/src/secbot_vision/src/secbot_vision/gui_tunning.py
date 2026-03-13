@@ -1,8 +1,7 @@
 import threading
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-from your_package.msg import ColorTunning  # adjust 'your_package' to your actual package name
+from secbot_msgs.msg import ColorTunning
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
@@ -13,110 +12,175 @@ HTML = """
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ROS2 RGB/HSV Slider</title>
+  <title>ROS2 Color Tuner</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI', sans-serif;
       background: #1a1a2e; color: #eee;
-      display: flex; justify-content: center; align-items: center; min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 100vh; gap: 24px; padding: 32px 0;
     }
+
+    .row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+
     .card {
-      background: #16213e; border-radius: 16px; padding: 36px 40px;
-      width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      background: #16213e; border-radius: 16px; padding: 32px 36px;
+      width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
     }
-    h1 { font-size: 1.3rem; font-weight: 600; margin-bottom: 28px; text-align: center; color: #a0c4ff; }
+
+    h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; text-align: center; color: #a0c4ff; }
+
     .color-preview {
-      width: 100%; height: 90px; border-radius: 10px; margin-bottom: 28px;
+      width: 100%; height: 70px; border-radius: 10px; margin-bottom: 16px;
       border: 2px solid #0f3460; transition: background-color 0.15s ease;
     }
-    .hex-label { text-align: center; font-size: 1rem; font-weight: 600; letter-spacing: 2px; margin-bottom: 28px; }
+    .hex-label { text-align: center; font-size: 0.9rem; font-weight: 600; letter-spacing: 2px; margin-bottom: 4px; }
+    .bgr-label { text-align: center; font-size: 0.65rem; color: #556; letter-spacing: 1px; margin-bottom: 16px; }
+
     .section-title {
-      font-size: 0.7rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
-      color: #556; margin-bottom: 14px; margin-top: 6px;
-      border-top: 1px solid #223; padding-top: 18px;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+      color: #556; margin-bottom: 12px; border-top: 1px solid #223; padding-top: 14px;
     }
-    .section-title:first-of-type { border-top: none; padding-top: 0; }
-    .slider-row { margin-bottom: 18px; }
-    .slider-row label { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; letter-spacing: 1px; }
+    .section-title.first { border-top: none; padding-top: 0; }
+
+    .slider-row { margin-bottom: 14px; }
+    .slider-row label { display: flex; justify-content: space-between; font-size: 0.75rem;
+      font-weight: 600; margin-bottom: 5px; letter-spacing: 1px; }
     .slider-row label span { color: #aaa; font-weight: 400; }
-    input[type=range] { -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }
-    #rSlider { background: linear-gradient(to right, #111, #ff4444); }
-    #gSlider { background: linear-gradient(to right, #111, #44ff44); }
-    #bSlider { background: linear-gradient(to right, #111, #4444ff); }
+
+    input[type=range] { -webkit-appearance: none; width: 100%; height: 6px;
+      border-radius: 3px; outline: none; cursor: pointer; }
+
+    /* RGB sliders */
+    #r1Slider { background: linear-gradient(to right, #111, #ff4444); }
+    #g1Slider { background: linear-gradient(to right, #111, #44ff44); }
+    #b1Slider { background: linear-gradient(to right, #111, #4444ff); }
+    #r2Slider { background: linear-gradient(to right, #111, #ff4444); }
+    #g2Slider { background: linear-gradient(to right, #111, #44ff44); }
+    #b2Slider { background: linear-gradient(to right, #111, #4444ff); }
+
+    /* HSV sliders — read-only */
     #hSlider {
       background: linear-gradient(to right,
         hsl(0,100%,50%), hsl(30,100%,50%), hsl(60,100%,50%), hsl(90,100%,50%),
         hsl(120,100%,50%), hsl(150,100%,50%), hsl(180,100%,50%), hsl(210,100%,50%),
         hsl(240,100%,50%), hsl(270,100%,50%), hsl(300,100%,50%), hsl(330,100%,50%),
         hsl(360,100%,50%));
+      pointer-events: none; opacity: 0.7;
     }
-    #sSlider { background: linear-gradient(to right, #888, #ff2222); }
-    #vSlider { background: linear-gradient(to right, #000, #ffffff); }
+    #sSlider { background: linear-gradient(to right, #888, #ff2222); pointer-events: none; opacity: 0.7; }
+    #vSlider { background: linear-gradient(to right, #000, #ffffff); pointer-events: none; opacity: 0.7; }
+
     input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
       background: white; box-shadow: 0 0 4px rgba(0,0,0,0.5); cursor: pointer; transition: transform 0.1s;
     }
-    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-    .status { margin-top: 22px; font-size: 0.75rem; text-align: center; color: #555; }
-    .status.ok  { color: #44cc88; }
-    .status.err { color: #ff6655; }
+
+    .hsv-note {
+      text-align: center; font-size: 0.65rem; color: #445; letter-spacing: 1px;
+      margin-bottom: 14px; text-transform: uppercase;
+    }
+
+    .global-status {
+      width: 706px; max-width: 95vw; background: #16213e; border-radius: 12px;
+      padding: 14px 20px; text-align: center; font-size: 0.7rem; color: #555;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+    .global-status.ok  { color: #44cc88; }
+    .global-status.err { color: #ff6655; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>ROS2 RGB / HSV Slider</h1>
-    <div class="color-preview" id="preview" style="background-color:#0000FF"></div>
-    <div class="hex-label" id="hexLabel">#0000FF</div>
 
-    <div class="section-title">RGB</div>
-    <div class="slider-row">
-      <label>RED <span id="rVal">0</span></label>
-      <input type="range" id="rSlider" min="0" max="255" value="0">
-    </div>
-    <div class="slider-row">
-      <label>GREEN <span id="gVal">0</span></label>
-      <input type="range" id="gSlider" min="0" max="255" value="0">
-    </div>
-    <div class="slider-row">
-      <label>BLUE <span id="bVal">255</span></label>
-      <input type="range" id="bSlider" min="0" max="255" value="255">
-    </div>
+  <div class="row">
 
-    <div class="section-title">HSV</div>
-    <div class="slider-row">
-      <label>HUE <span id="hVal">240°</span></label>
-      <input type="range" id="hSlider" min="0" max="360" value="240">
-    </div>
-    <div class="slider-row">
-      <label>SATURATION <span id="sVal">100%</span></label>
-      <input type="range" id="sSlider" min="0" max="100" value="100">
-    </div>
-    <div class="slider-row">
-      <label>VALUE <span id="vVal">100%</span></label>
-      <input type="range" id="vSlider" min="0" max="100" value="100">
+    <!-- ── Card 1: LOW ── -->
+    <div class="card">
+      <h1>LOW COLOR</h1>
+      <!-- preview shows BGR: R→B, G→G, B→R -->
+      <div class="color-preview" id="preview1"></div>
+      <div class="hex-label" id="hexLabel1">#000000</div>
+      <div class="bgr-label" id="bgrLabel1">BGR: B=0 G=0 R=0</div>
+
+      <div class="section-title first">RGB</div>
+      <div class="slider-row">
+        <label>RED <span id="r1Val">0</span></label>
+        <input type="range" id="r1Slider" min="0" max="255" value="0">
+      </div>
+      <div class="slider-row">
+        <label>GREEN <span id="g1Val">0</span></label>
+        <input type="range" id="g1Slider" min="0" max="255" value="0">
+      </div>
+      <div class="slider-row">
+        <label>BLUE <span id="b1Val">0</span></label>
+        <input type="range" id="b1Slider" min="0" max="255" value="0">
+      </div>
     </div>
 
-    <div class="status" id="status">Waiting for input…</div>
+    <!-- ── Card 2: HIGH ── -->
+    <div class="card">
+      <h1>HIGH COLOR</h1>
+      <div class="color-preview" id="preview2"></div>
+      <div class="hex-label" id="hexLabel2">#000000</div>
+      <div class="bgr-label" id="bgrLabel2">BGR: B=0 G=0 R=0</div>
+
+      <div class="section-title first">RGB</div>
+      <div class="slider-row">
+        <label>RED <span id="r2Val">0</span></label>
+        <input type="range" id="r2Slider" min="0" max="255" value="0">
+      </div>
+      <div class="slider-row">
+        <label>GREEN <span id="g2Val">0</span></label>
+        <input type="range" id="g2Slider" min="0" max="255" value="0">
+      </div>
+      <div class="slider-row">
+        <label>BLUE <span id="b2Val">0</span></label>
+        <input type="range" id="b2Slider" min="0" max="255" value="0">
+      </div>
+    </div>
+
   </div>
+
+  <!-- ── HSV readout — average of both cards ── -->
+  <div class="card" style="width:706px; max-width:95vw;">
+    <h1>HSV — Average</h1>
+    <div class="hsv-note">📊 Midpoint between LOW and HIGH · not editable</div>
+
+    <div class="slider-row">
+      <label>HUE <span id="hVal">0°</span></label>
+      <input type="range" id="hSlider" min="0" max="360" value="0" tabindex="-1">
+    </div>
+    <div class="slider-row">
+      <label>SATURATION <span id="sVal">0%</span></label>
+      <input type="range" id="sSlider" min="0" max="100" value="0" tabindex="-1">
+    </div>
+    <div class="slider-row">
+      <label>VALUE <span id="vVal">0%</span></label>
+      <input type="range" id="vSlider" min="0" max="100" value="0" tabindex="-1">
+    </div>
+  </div>
+
+  <!-- ── Global publish status ── -->
+  <div class="global-status" id="globalStatus">Waiting…</div>
+
   <script>
-    const rS = document.getElementById('rSlider');
-    const gS = document.getElementById('gSlider');
-    const bS = document.getElementById('bSlider');
-    const hS = document.getElementById('hSlider');
-    const sS = document.getElementById('sSlider');
-    const vS = document.getElementById('vSlider');
-    const preview  = document.getElementById('preview');
-    const hexLabel = document.getElementById('hexLabel');
-    const status   = document.getElementById('status');
-    let debounce, _lock = false;
+    const S = {};
+    ['r1','g1','b1','r2','g2','b2','h','s','v'].forEach(id => {
+      S[id] = document.getElementById(id + 'Slider');
+    });
 
-    function toHex(n) { return Math.round(n).toString(16).padStart(2,'0').toUpperCase(); }
+    let publishDebounce;
 
+    function toHex(n) { return Math.round(n).toString(16).padStart(2, '0').toUpperCase(); }
+
+    // ── RGB → HSV ────────────────────────────────────────────────────────────
     function rgbToHsv(r, g, b) {
       r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
-      let h = 0, s = max === 0 ? 0 : d / max, v = max;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+      let h = 0;
+      const s = max === 0 ? 0 : d / max;
+      const v = max;
       if (d !== 0) {
         switch (max) {
           case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
@@ -127,83 +191,99 @@ HTML = """
       return [Math.round(h * 360), Math.round(s * 100), Math.round(v * 100)];
     }
 
-    function hsvToRgb(h, s, v) {
-      s /= 100; v /= 100;
-      const i = Math.floor(h / 60) % 6;
-      const f = h / 60 - Math.floor(h / 60);
-      const p = v*(1-s), q = v*(1-f*s), t = v*(1-(1-f)*s);
-      let r, g, b;
-      switch (i) {
-        case 0:[r,g,b]=[v,t,p];break; case 1:[r,g,b]=[q,v,p];break;
-        case 2:[r,g,b]=[p,v,t];break; case 3:[r,g,b]=[p,q,v];break;
-        case 4:[r,g,b]=[t,p,v];break; case 5:[r,g,b]=[v,p,q];break;
-      }
-      return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+    // ── Circular average of two hues (shortest arc) ──────────────────────────
+    function avgHue(h1, h2) {
+      let diff = h2 - h1;
+      if (diff > 180)  diff -= 360;
+      if (diff < -180) diff += 360;
+      let avg = (h1 + diff / 2 + 360) % 360;
+      return Math.round(avg);
     }
 
-    function updateHsvTracks(h, s, v) {
-      sS.style.background = `linear-gradient(to right, hsl(0,0%,${v/2}%), hsl(${h},100%,${v/2}%))`;
-      vS.style.background = `linear-gradient(to right, #000, hsl(${h},${s}%,50%))`;
-    }
+    // ── Update HSV readout as midpoint between both cards ────────────────────
+    function updateHsvReadout() {
+      const r1 = parseInt(S.r1.value), g1 = parseInt(S.g1.value), b1 = parseInt(S.b1.value);
+      const r2 = parseInt(S.r2.value), g2 = parseInt(S.g2.value), b2 = parseInt(S.b2.value);
 
-    function applyColor(hex) {
-      preview.style.backgroundColor = hex;
-      hexLabel.textContent = hex;
-      clearTimeout(debounce);
-      debounce = setTimeout(() => publishColor(hex), 60);
-    }
+      const [h1, s1, v1] = rgbToHsv(r1, g1, b1);
+      const [h2, s2, v2] = rgbToHsv(r2, g2, b2);
 
-    function onRgbSlide() {
-      if (_lock) return;
-      const r = parseInt(rS.value), g = parseInt(gS.value), b = parseInt(bS.value);
-      document.getElementById('rVal').textContent = r;
-      document.getElementById('gVal').textContent = g;
-      document.getElementById('bVal').textContent = b;
-      const [h, s, v] = rgbToHsv(r, g, b);
-      _lock = true; hS.value = h; sS.value = s; vS.value = v; _lock = false;
+      const h = avgHue(h1, h2);
+      const s = Math.round((s1 + s2) / 2);
+      const v = Math.round((v1 + v2) / 2);
+
+      S.h.value = h; S.s.value = s; S.v.value = v;
       document.getElementById('hVal').textContent = h + '°';
       document.getElementById('sVal').textContent = s + '%';
       document.getElementById('vVal').textContent = v + '%';
-      updateHsvTracks(h, s, v);
-      applyColor('#' + toHex(r) + toHex(g) + toHex(b));
+      S.s.style.background = `linear-gradient(to right, hsl(0,0%,${v/2}%), hsl(${h},100%,${v/2}%))`;
+      S.v.style.background = `linear-gradient(to right, #000, hsl(${h},${s}%,50%))`;
     }
 
-    function onHsvSlide() {
-      if (_lock) return;
-      const h = parseInt(hS.value), s = parseInt(sS.value), v = parseInt(vS.value);
-      document.getElementById('hVal').textContent = h + '°';
-      document.getElementById('sVal').textContent = s + '%';
-      document.getElementById('vVal').textContent = v + '%';
-      updateHsvTracks(h, s, v);
-      const [r, g, b] = hsvToRgb(h, s, v);
-      _lock = true; rS.value = r; gS.value = g; bS.value = b; _lock = false;
-      document.getElementById('rVal').textContent = r;
-      document.getElementById('gVal').textContent = g;
-      document.getElementById('bVal').textContent = b;
-      applyColor('#' + toHex(r) + toHex(g) + toHex(b));
+    // ── Apply RGB to card — preview shown in BGR (swap R↔B for display) ──────
+    function applyRgbToCard(c, r, g, b) {
+      S[`r${c}`].value = r; S[`g${c}`].value = g; S[`b${c}`].value = b;
+      document.getElementById(`r${c}Val`).textContent = r;
+      document.getElementById(`g${c}Val`).textContent = g;
+      document.getElementById(`b${c}Val`).textContent = b;
+
+      // Published values use R,G,B order — preview swaps to BGR (B→red channel, R→blue channel)
+      const hexBgr = '#' + toHex(b) + toHex(g) + toHex(r);
+      document.getElementById(`preview${c}`).style.backgroundColor = hexBgr;
+
+      // Hex label shows the true RGB value for reference
+      const hexRgb = '#' + toHex(r) + toHex(g) + toHex(b);
+      document.getElementById(`hexLabel${c}`).textContent = `RGB ${hexRgb}`;
+      document.getElementById(`bgrLabel${c}`).textContent = `BGR: B=${b} G=${g} R=${r}`;
     }
 
-    async function publishColor(hex) {
-      const r = parseInt(rS.value), g = parseInt(gS.value), b = parseInt(bS.value);
-      const h = parseInt(hS.value), s = parseInt(sS.value), v = parseInt(vS.value);
+    // ── RGB slider moved ──────────────────────────────────────────────────────
+    function onRgbSlide(c) {
+      const r = parseInt(S[`r${c}`].value);
+      const g = parseInt(S[`g${c}`].value);
+      const b = parseInt(S[`b${c}`].value);
+      applyRgbToCard(c, r, g, b);
+      updateHsvReadout();   // average of both cards
+      schedulePublish();
+    }
+
+    function schedulePublish() {
+      clearTimeout(publishDebounce);
+      publishDebounce = setTimeout(publishAll, 60);
+    }
+
+    async function publishAll() {
+      const payload = {
+        low_r:  parseInt(S.r1.value), low_g:  parseInt(S.g1.value), low_b:  parseInt(S.b1.value),
+        high_r: parseInt(S.r2.value), high_g: parseInt(S.g2.value), high_b: parseInt(S.b2.value),
+        hue:    parseInt(S.h.value),  saturation: parseInt(S.s.value), value: parseInt(S.v.value),
+      };
+      const statusEl = document.getElementById('globalStatus');
       try {
         const res = await fetch('/update', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({color: hex, r, g, b, h, s, v})
+          body: JSON.stringify(payload)
         });
-        const data = await res.json();
-        status.textContent = `Published: R${data.r} G${data.g} B${data.b} | H${data.h} S${data.s} V${data.v}`;
-        status.className = 'status ok';
+        const d = await res.json();
+        statusEl.textContent =
+          `LOW  R=${d.low_r} G=${d.low_g} B=${d.low_b}   |   ` +
+          `HIGH  R=${d.high_r} G=${d.high_g} B=${d.high_b}   |   ` +
+          `HSV  H=${d.hue} S=${d.saturation} V=${d.value}`;
+        statusEl.className = 'global-status ok';
       } catch(e) {
-        status.textContent = 'Error publishing to ROS2';
-        status.className = 'status err';
+        statusEl.textContent = 'Error publishing to ROS2';
+        statusEl.className = 'global-status err';
       }
     }
 
-    [rS, gS, bS].forEach(s => s.addEventListener('input', onRgbSlide));
-    [hS, sS, vS].forEach(s => s.addEventListener('input', onHsvSlide));
-    onRgbSlide();
+    // ── Wire up ───────────────────────────────────────────────────────────────
+    ['r1','g1','b1'].forEach(k => S[k].addEventListener('input', () => onRgbSlide(1)));
+    ['r2','g2','b2'].forEach(k => S[k].addEventListener('input', () => onRgbSlide(2)));
+
+    // Init
+    onRgbSlide(1);
+    onRgbSlide(2);
   </script>
 </body>
 </html>
@@ -214,19 +294,26 @@ _node = None
 class GUITunner(Node):
     def __init__(self):
         super().__init__('rgb_slider_gui')
-        self.publisher = self.create_publisher(ColorTunning, '/color_tunning', 10)
-        self.get_logger().info('GUITunner node started')
+        self.pub = self.create_publisher(ColorTunning, '/color_tunning', 10)
+        self.get_logger().info('GUITunner node started — publishing on /color_tunning')
 
-    def publish_color(self, r, g, b, h, s, v):
+    def publish_color(self, low_r, low_g, low_b, high_r, high_g, high_b, hue, saturation, value):
         msg = ColorTunning()
-        msg.red        = int(r)
-        msg.green      = int(g)
-        msg.blue       = int(b)
-        msg.hue        = int(h)
-        msg.saturation = int(s)
-        msg.value      = int(v)
-        self.publisher.publish(msg)
-        self.get_logger().info(f'r={r} g={g} b={b} h={h} s={s} v={v}')
+        msg.low_red        = int(low_r)
+        msg.low_green      = int(low_g)
+        msg.low_blue       = int(low_b)
+        msg.high_red       = int(high_r)
+        msg.high_green     = int(high_g)
+        msg.high_blue      = int(high_b)
+        msg.hue            = int(hue)
+        msg.saturation     = int(saturation)
+        msg.value          = int(value)
+        self.pub.publish(msg)
+        self.get_logger().info(
+            f'LOW r={low_r} g={low_g} b={low_b} | '
+            f'HIGH r={high_r} g={high_g} b={high_b} | '
+            f'HSV h={hue} s={saturation} v={value}'
+        )
 
 @app.route('/')
 def index():
@@ -234,12 +321,17 @@ def index():
 
 @app.route('/update', methods=['POST'])
 def update():
-    data = request.get_json()
-    r, g, b = data.get('r', 0), data.get('g', 0), data.get('b', 0)
-    h, s, v = data.get('h', 0), data.get('s', 0), data.get('v', 0)
+    d = request.get_json()
+    low_r,  low_g,  low_b  = d.get('low_r',  0), d.get('low_g',  0), d.get('low_b',  0)
+    high_r, high_g, high_b = d.get('high_r', 0), d.get('high_g', 0), d.get('high_b', 0)
+    hue, saturation, value  = d.get('hue', 0), d.get('saturation', 0), d.get('value', 0)
     if _node is not None:
-        _node.publish_color(r, g, b, h, s, v)
-    return jsonify({'r': r, 'g': g, 'b': b, 'h': h, 's': s, 'v': v})
+        _node.publish_color(low_r, low_g, low_b, high_r, high_g, high_b, hue, saturation, value)
+    return jsonify({
+        'low_r': low_r, 'low_g': low_g, 'low_b': low_b,
+        'high_r': high_r, 'high_g': high_g, 'high_b': high_b,
+        'hue': hue, 'saturation': saturation, 'value': value,
+    })
 
 def main(args=None):
     global _node
@@ -247,7 +339,7 @@ def main(args=None):
     _node = GUITunner()
     ros_thread = threading.Thread(target=rclpy.spin, args=(_node,), daemon=True)
     ros_thread.start()
-    print('\n  ROS2 RGB/HSV Slider  ->  http://localhost:5000/\n')
+    print('\n  ROS2 Color Tuner  ->  http://localhost:5000/\n')
     try:
         app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
     except KeyboardInterrupt:

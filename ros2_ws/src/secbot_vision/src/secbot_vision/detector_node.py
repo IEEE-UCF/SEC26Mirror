@@ -176,7 +176,7 @@ class DetectorNode(Node):
             self.get_logger().info(f"[DEBUG IMG] filter: {best_filter_name['filter'] if best_filter_name else 'none'}")
             self.get_logger().info(f"[DEBUG IMG] INFO SENT -> {self.pub_dbg_name}")
             
-        self.pub_mask.publish(self.bridge.cv2_to_imgmsg(debug, encoding='bgr8'))
+        self.pub_mask.publish(self.bridge.cv2_to_imgmsg(best_mask, encoding='bgr8'))
         
         self._publish_duck_detections(msg, all_metadata) if self.duck_or_antenna else self._publish_antenna_detections(msg, all_metadata, best_filter_name)
     

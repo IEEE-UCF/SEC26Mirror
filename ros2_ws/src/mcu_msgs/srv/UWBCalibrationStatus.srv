@@ -1,0 +1,10 @@
+# UWB Calibration + Solved Beacon Positions
+
+---
+# WAITING = 0; CALIBRATING = 1; TRACKING = 2
+uint8 state
+
+# x,y,z solved position for each beacon
+float32[3] beacon_10
+float32[3] beacon_11
+float32[3] beacon_12

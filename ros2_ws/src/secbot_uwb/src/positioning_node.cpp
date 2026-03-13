@@ -28,6 +28,44 @@ UWBPositioningNode::UWBPositioningNode()
       std::bind(&UWBPositioningNode::rangingCallback, this,
                 std::placeholders::_1));
 
+  // ranging subs for calibration
+  range_10_11_sub_ = this->create_subscription<mcu_msgs::msg::UWBRange>(
+      "mcu_uwb/range_10_11", 10,
+      [this](const mcu_msgs::msg::UWBRange::SharedPtr msg) {
+        interBeaconRangeCallback(10, 11, msg);
+      });
+
+  range_10_12_sub_ = this->create_subscription<mcu_msgs::msg::UWBRange>(
+      "mcu_uwb/range_10_12", 10,
+      [this](const mcu_msgs::msg::UWBRange::SharedPtr msg) {
+        interBeaconRangeCallback(10, 12, msg);
+      });
+
+  range_11_12_sub_ = this->create_subscription<mcu_msgs::msg::UWBRange>(
+      "mcu_uwb/range_11_12", 10,
+      [this](const mcu_msgs::msg::UWBRange::SharedPtr msg) {
+        interBeaconRangeCallback(11, 12, msg);
+      });
+
+  // create status service
+  status_srv_ = this->create_service<mcu_msgs::srv::UWBCalibrationStatus>(
+      "/uwb/calibration_status",
+      [this](
+          const std::shared_ptr<mcu_msgs::srv::UWBCalibrationStatus::Request>,
+          std::shared_ptr<mcu_msgs::srv::UWBCalibrationStatus::Response>
+              response) {
+        response->state = static_cast<uint8_t>(current_state_);
+        response->beacon_10 = {calibrated_positions_[10][0],
+                               calibrated_positions_[10][1],
+                               calibrated_positions_[10][2]};
+        response->beacon_11 = {calibrated_positions_[11][0],
+                               calibrated_positions_[11][1],
+                               calibrated_positions_[11][2]};
+        response->beacon_12 = {calibrated_positions_[12][0],
+                               calibrated_positions_[12][1],
+                               calibrated_positions_[12][2]};
+      });
+
   logConfiguration();
   RCLCPP_INFO(this->get_logger(), "UWB Positioning Node started");
 }
@@ -130,7 +168,7 @@ void UWBPositioningNode::loadConfiguration() {
           BeaconConfig(beacon_id, type, position, known_axes, odometry_topic,
                        use_odometry_fusion, description));
 
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
       RCLCPP_ERROR(this->get_logger(), "Error loading beacon %d: %s", beacon_id,
                    e.what());
     }
@@ -166,7 +204,7 @@ void UWBPositioningNode::loadConfiguration() {
       tags_.emplace(tag_id,
                     TagConfig(tag_id, description, publish_topic, enable_3d));
 
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
       RCLCPP_ERROR(this->get_logger(), "Error loading tag %d: %s", tag_id,
                    e.what());
     }
@@ -177,7 +215,7 @@ void UWBPositioningNode::logConfiguration() {
   RCLCPP_INFO(this->get_logger(), "=== UWB Configuration ===");
   RCLCPP_INFO(this->get_logger(), "Beacons configured: %zu", beacons_.size());
 
-  for (const auto &[beacon_id, beacon] : beacons_) {
+  for (const auto& [beacon_id, beacon] : beacons_) {
     std::string type_str =
         (beacon.getType() == BeaconType::STATIONARY) ? "stationary" : "moving";
     auto pos = beacon.getPosition();
@@ -186,7 +224,7 @@ void UWBPositioningNode::logConfiguration() {
   }
 
   RCLCPP_INFO(this->get_logger(), "Tags configured: %zu", tags_.size());
-  for (const auto &[tag_id, tag] : tags_) {
+  for (const auto& [tag_id, tag] : tags_) {
     RCLCPP_INFO(this->get_logger(), "  Tag %d: %s, 3D=%s", tag_id,
                 tag.getDescription().c_str(),
                 tag.enable3D() ? "true" : "false");
@@ -195,18 +233,89 @@ void UWBPositioningNode::logConfiguration() {
   RCLCPP_INFO(this->get_logger(), "========================");
 }
 
-std::array<double, 3> UWBPositioningNode::getBeaconPosition(
-    int beacon_id) const {
-  auto it = beacons_.find(beacon_id);
-  if (it == beacons_.end()) {
-    return {0.0, 0.0, 0.0};
+// store ranges between beacons
+void UWBPositioningNode::interBeaconRangeCallback(
+    int from_id, int to_id, const mcu_msgs::msg::UWBRange::SharedPtr msg) {
+  if (current_state_ == TRACKING) return;
+  if (!msg->valid) return;
+
+  double distance_m = msg->distance / 100.0;
+  calibration_samples_[{from_id, to_id}].push_back(distance_m);
+
+  if (current_state_ == WAITING) {
+    // Check if all 3 pairs have at least one sample
+    if (calibration_samples_.size() == 3) {
+      for (auto& [pair, samples] : calibration_samples_) {
+        samples.clear();
+        current_state_ = CALIBRATING;
+        RCLCPP_INFO(get_logger(), "All beacons detected, calibrating...");
+      }
+    }
+  } else if (current_state_ == CALIBRATING) {
+    tryCalibrate();
+  }
+}
+
+void UWBPositioningNode::tryCalibrate() {
+  // Check all 3 pairs have enough samples
+  for (auto& [pair, samples] : calibration_samples_) {
+    if (samples.size() < MIN_CALIBRATION_SAMPLES) return;
   }
 
-  return it->second.getPosition();
+  // Average each pair
+  double d_10_11 = std::accumulate(calibration_samples_[{10, 11}].begin(),
+                                   calibration_samples_[{10, 11}].end(), 0.0) /
+                   calibration_samples_[{10, 11}].size();
+  double d_10_12 = std::accumulate(calibration_samples_[{10, 12}].begin(),
+                                   calibration_samples_[{10, 12}].end(), 0.0) /
+                   calibration_samples_[{10, 12}].size();
+  double d_11_12 = std::accumulate(calibration_samples_[{11, 12}].begin(),
+                                   calibration_samples_[{11, 12}].end(), 0.0) /
+                   calibration_samples_[{11, 12}].size();
+
+  // Solve triangle: beacon 10 at origin, beacon 12 on +X axis
+  // beacon 10 = (0, 0)
+  // beacon 12 = (d_10_12, 0)
+  // beacon 11 = solve from d_10_11 and d_11_12
+  double x_11 = (d_10_11 * d_10_11 + d_10_12 * d_10_12 - d_11_12 * d_11_12) /
+                (2.0 * d_10_12);
+  double y_11 = std::sqrt(d_10_11 * d_10_11 - x_11 * x_11);
+  // y_11 is positive by convention (beacon 11 is "top")
+
+  // beacon 10 at origin, beacon 11 at top, beacon 12 to the side
+  calibrated_positions_[10] = {0.0, 0.0, 0.15};
+  calibrated_positions_[11] = {x_11, y_11, 0.15};
+  calibrated_positions_[12] = {d_10_12, 0.0, 0.15};
+
+  current_state_ = TRACKING;
+  RCLCPP_INFO(get_logger(),
+              "Calibration complete: b10=(0,0) b12=(%.2f,0) b11=(%.2f,%.2f)",
+              d_10_12, x_11, y_11);
+}
+
+std::array<double, 3> UWBPositioningNode::getBeaconPosition(
+    int beacon_id) const {
+  // Use calibrated positions if available (TRACKING state)
+  auto cal_it = calibrated_positions_.find(beacon_id);
+  if (cal_it != calibrated_positions_.end()) {
+    return cal_it->second;
+  }
+
+  // Fallback to YAML config
+  auto it = beacons_.find(beacon_id);
+  if (it != beacons_.end()) {
+    return it->second.getPosition();
+  }
+
+  return {0.0, 0.0, 0.0};
 }
 
 void UWBPositioningNode::rangingCallback(
     const mcu_msgs::msg::UWBRanging::SharedPtr msg) {
+  if (current_state_ != TRACKING) {
+    return;
+  }
+
   int tag_id = msg->tag_id;
 
   // Check if tag is configured
@@ -216,11 +325,11 @@ void UWBPositioningNode::rangingCallback(
     return;
   }
 
-  const auto &tag_config = tag_it->second;
+  const auto& tag_config = tag_it->second;
 
   // Extract valid ranges
   std::map<int, double> ranges;
-  for (const auto &range_msg : msg->ranges) {
+  for (const auto& range_msg : msg->ranges) {
     if (range_msg.valid) {
       int beacon_id = range_msg.anchor_id;
       double distance_m = range_msg.distance / 100.0;  // Convert cm to meters
@@ -251,7 +360,7 @@ void UWBPositioningNode::rangingCallback(
       double worst_error = 0.0;
       int worst_id = -1;
 
-      for (const auto &[beacon_id, dist] : ranges) {
+      for (const auto& [beacon_id, dist] : ranges) {
         auto bp = getBeaconPosition(beacon_id);
         double dx = position[0] - bp[0];
         double dy = position[1] - bp[1];
@@ -289,18 +398,18 @@ void UWBPositioningNode::rangingCallback(
   }
 }
 
-bool UWBPositioningNode::trilaterate(const std::map<int, double> &ranges,
+bool UWBPositioningNode::trilaterate(const std::map<int, double>& ranges,
                                      bool enable_3d,
-                                     std::array<double, 3> &position,
-                                     double &residual) {
+                                     std::array<double, 3>& position,
+                                     double& residual) {
   // Get beacon positions
   std::map<int, std::array<double, 3>> beacon_positions;
-  for (const auto &[beacon_id, distance] : ranges) {
+  for (const auto& [beacon_id, distance] : ranges) {
     beacon_positions[beacon_id] = getBeaconPosition(beacon_id);
   }
 
   std::vector<int> valid_beacons;
-  for (const auto &[beacon_id, pos] : beacon_positions) {
+  for (const auto& [beacon_id, pos] : beacon_positions) {
     valid_beacons.push_back(beacon_id);
   }
 
@@ -369,7 +478,7 @@ bool UWBPositioningNode::trilaterate(const std::map<int, double> &ranges,
 
   // Calculate residual
   double error_sum = 0.0;
-  for (const auto &beacon_id : valid_beacons) {
+  for (const auto& beacon_id : valid_beacons) {
     auto beacon_pos = beacon_positions[beacon_id];
     double dx = position[0] - beacon_pos[0];
     double dy = position[1] - beacon_pos[1];
@@ -384,9 +493,9 @@ bool UWBPositioningNode::trilaterate(const std::map<int, double> &ranges,
 }
 
 void UWBPositioningNode::publishPose(
-    int tag_id, const std::array<double, 3> &position, double residual,
-    const builtin_interfaces::msg::Time &timestamp,
-    const TagConfig &tag_config) {
+    int tag_id, const std::array<double, 3>& position, double residual,
+    const builtin_interfaces::msg::Time& timestamp,
+    const TagConfig& tag_config) {
   // Create publisher if not exists
   if (pose_publishers_.find(tag_id) == pose_publishers_.end()) {
     pose_publishers_[tag_id] =
@@ -435,7 +544,7 @@ void UWBPositioningNode::publishPose(
 }
 }  // namespace secbot_uwb
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<secbot_uwb::UWBPositioningNode>());
   rclcpp::shutdown();

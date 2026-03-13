@@ -1,59 +1,195 @@
-# Drone ROS2 Interface
+# Drone Firmware
 
-All drone topics and services use the `/mcu_drone/` namespace.
-Transport: WiFi UDP to Pi (192.168.4.1:8888).
+Firmware for the SEC26 quadcopter drone. Implements cascaded PID flight control, UWB positioning, altitude hold, and IR transmission for the antenna color task.
+
+## Hardware
+
+- **MCU:** Seeed XIAO ESP32-S3 (dual-core 240 MHz, 8 MB PSRAM)
+- **Transport:** WiFi UDP micro-ROS to Pi agent (port 8888)
+- **Static IP:** 192.168.4.25
+- **OTA hostname:** `sec26-drone`
+
+### Peripherals
+
+| Component | Model | Protocol | Address/Pin |
+|-----------|-------|----------|-------------|
+| Flight motors (x4) | Brushless ESC | LEDC PWM 20kHz 10-bit | D0(1), D1(2), D2(42), D3(41) |
+| IMU | BNO085 (9-axis) | I2C 400kHz | 0x4A on D4/D5, RST=D7, INT=GPIO22 |
+| Altitude | VL53L0X (ToF) | I2C (shared bus) | 0x29 on D4/D5 |
+| UWB Tag | DW3000 | SPI | CS=GPIO21 |
+| IR Transmitter | NEC LED | GPIO | D6 (38kHz carrier) |
+
+### Motor Layout (X-Quad)
+
+```
+  FL (CCW, M3, D2)    FR (CW, M1, D0)
+            \          /
+             [DRONE]
+            /          \
+  BL (CW, M4, D3)    BR (CCW, M2, D1)
+```
+
+## Building and Flashing
+
+All commands run inside the Docker container.
+
+```bash
+cd /home/ubuntu/mcu_workspaces/sec26mcu
+
+# Build
+pio run -e drone
+
+# Flash via USB
+pio run -e drone --target upload
+
+# Flash via OTA
+pio run -e drone --target upload --upload-port 192.168.4.25
+
+# Serial monitor
+pio device monitor -e drone
+
+# Bench test build (no height/UWB)
+pio run -e drone-bench
+```
+
+### Build Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `DRONE_ENABLE_UWB` | 0 | Set to 1 if DW3000 hardware installed |
+| `DRONE_ENABLE_HEIGHT` | 1 | Set to 0 to disable VL53L0X |
+| `DRONE_DEBUG_STAGE` | 2 | 0=WiFi only, 1=+IMU, 2=full system |
+| `DRONE_SERIAL_DEBUG` | (unset) | Uncomment for USB CDC debug dashboard |
+
+## ROS2 Interface
+
+### Publishers
+
+| Topic | Message Type | QoS | Rate | Description |
+|-------|-------------|-----|------|-------------|
+| `/mcu_drone/state` | `mcu_msgs/DroneState` | Reliable | 10 Hz | Flight state, attitude (roll/pitch/yaw deg), altitude (m), position (m) |
+| `/mcu_drone/heartbeat` | `std_msgs/String` | Best-effort | 1 Hz | Alive signal with reset reason |
+| `/mcu_drone/uwb/ranging` | `mcu_msgs/UWBRanging` | Best-effort | 20 Hz | UWB ranges to beacons (tag ID=15) |
+| `/mcu_drone/debug` | `std_msgs/String` | Best-effort | On-demand | Debug messages, config dumps |
+
+### Subscribers
+
+| Topic | Message Type | Rate | Description |
+|-------|-------------|------|-------------|
+| `/mcu_drone/cmd_vel` | `geometry_msgs/Twist` | 10+ Hz | Velocity command. `linear.x`=pitch, `linear.y`=roll, `linear.z`=alt_rate, `angular.z`=yaw_rate. Timeout >500ms triggers auto-hover. Only processed in VELOCITY_CONTROL state. |
+
+### Services
+
+| Service | Type | Description |
+|---------|------|-------------|
+| `/mcu_drone/arm` | `DroneArm` | Arm (`arm: true`) or disarm. Only from UNARMED state. |
+| `/mcu_drone/ready_for_takeoff` | `DroneTare` | Pre-spin motors at 35%. ARMED -> READY_FOR_TAKEOFF. |
+| `/mcu_drone/takeoff` | `DroneTakeoff` | Takeoff to altitude (0.3m-2.0m ceiling). |
+| `/mcu_drone/land` | `DroneLand` | Descend at 0.15 m/s, disarm at <5cm. |
+| `/mcu_drone/tare` | `DroneTare` | Zero roll/pitch/yaw IMU reference. |
+| `/mcu_drone/set_anchors` | `DroneSetAnchors` | Configure UWB anchor 2D positions (max 4). |
+| `/mcu_drone/set_motors` | `DroneSetMotors` | Direct motor override [0.0-1.0] (ARMED only, bypasses PID). |
+| `/mcu_drone/transmit_ir` | `DroneTransmitIR` | Send NEC IR codes to antennas (VELOCITY_CONTROL only). |
+| `/mcu_drone/set_param` | `DroneSetParam` | Runtime PID/config tuning by name. |
+| `/mcu_drone/save_config` | `DroneTare` | Save all tunable params to ESP32 NVS flash. |
+| `/mcu_drone/get_config` | `DroneTare` | Publish all params via debug topic. |
+
+All service types are in the `mcu_msgs/srv/` namespace.
 
 ## State Machine
 
 ```
-INIT → UNARMED → ARMED → READY_FOR_TAKEOFF → LAUNCHING → VELOCITY_CONTROL → LANDING → UNARMED
-                    ↓            ↓                             ↓
-               EMERGENCY_LAND  EMERGENCY_LAND           EMERGENCY_LAND
+INIT -> UNARMED (sensors ready)
+  -> ARMED (arm service)
+    -> READY_FOR_TAKEOFF (ready service, motors pre-spin 35%)
+      -> LAUNCHING (takeoff service, ramp at 0.3 m/s)
+        -> VELOCITY_CONTROL (at 95% target altitude)
+          -> LANDING (land service, descend 0.15 m/s)
+            -> UNARMED (alt < 5cm)
+Any flying state -> EMERGENCY_LAND (safety trigger)
 ```
 
-## Services
+## Usage Examples
+
+### Full flight sequence
 
 ```bash
-# Arm / disarm (only from UNARMED; disarm works from any state)
-ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: true}"
-ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: false}"
-
-# Ready for takeoff — pre-spins motors at ~35% (from ARMED only)
-ros2 service call /mcu_drone/ready_for_takeoff mcu_msgs/srv/DroneTare
-
-# Takeoff to altitude in meters (from ARMED or READY_FOR_TAKEOFF, clamped 0.3m - ceiling)
-ros2 service call /mcu_drone/takeoff mcu_msgs/srv/DroneTakeoff "{target_altitude: 0.5}"
-
-# Land (from LAUNCHING, VELOCITY_CONTROL, or LANDING)
-ros2 service call /mcu_drone/land mcu_msgs/srv/DroneLand
-
-# Tare IMU yaw to current heading (any state, requires IMU ready)
+# 1. Tare IMU (zero reference)
 ros2 service call /mcu_drone/tare mcu_msgs/srv/DroneTare
 
-# Set UWB anchor positions for EKF (any state)
+# 2. Arm motors
+ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: true}"
+
+# 3. Pre-spin (optional, smooths takeoff)
+ros2 service call /mcu_drone/ready_for_takeoff mcu_msgs/srv/DroneTare
+
+# 4. Takeoff to 0.5m
+ros2 service call /mcu_drone/takeoff mcu_msgs/srv/DroneTakeoff "{target_altitude: 0.5}"
+
+# 5. Send velocity commands (hold rate >2 Hz to avoid timeout)
+ros2 topic pub --rate 10 /mcu_drone/cmd_vel geometry_msgs/Twist \
+  "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}"
+
+# 6. Land
+ros2 service call /mcu_drone/land mcu_msgs/srv/DroneLand
+
+# Emergency disarm (any time)
+ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: false}"
+```
+
+### Monitor state
+
+```bash
+ros2 topic echo /mcu_drone/state
+ros2 topic hz /mcu_drone/state    # Expect ~10 Hz
+
+# Watch state transitions
+ros2 topic echo /mcu_drone/state --field state
+
+# Watch attitude
+ros2 topic echo /mcu_drone/state --field roll --field pitch --field yaw
+```
+
+### UWB anchor configuration
+
+```bash
 ros2 service call /mcu_drone/set_anchors mcu_msgs/srv/DroneSetAnchors \
   "{anchor_ids: [10, 11, 12], anchor_x: [0.0, 3.0, 0.0], anchor_y: [0.0, 0.0, 3.0], num_anchors: 3}"
+```
 
-# Direct motor override for bench testing (ARMED only, not flying)
+### Direct motor test (bench only)
+
+```bash
+ros2 service call /mcu_drone/arm mcu_msgs/srv/DroneArm "{arm: true}"
 ros2 service call /mcu_drone/set_motors mcu_msgs/srv/DroneSetMotors \
   "{motor_speeds: [0.1, 0.1, 0.1, 0.1]}"
+```
 
-# Transmit IR to antennas (VELOCITY_CONTROL only)
+### IR transmission
+
+```bash
+# Colors: 1=RED, 2=GREEN, 3=BLUE, 4=PURPLE
 ros2 service call /mcu_drone/transmit_ir mcu_msgs/srv/DroneTransmitIR \
   "{antenna_colors: [1, 2, 3, 1]}"
+```
 
-# Set flight parameter at runtime (PID gains, hover throttle, limits, etc.)
+## PID Tuning
+
+### Runtime parameter adjustment
+
+```bash
 ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam \
   "{param_name: 'hover_throttle', value: 0.50}"
 
-# Save all current params to EEPROM (NVS) — persists across reboots
+# Save to flash (persists across reboots)
 ros2 service call /mcu_drone/save_config mcu_msgs/srv/DroneTare
 
-# Request current config (publishes via debug topic as CONFIG: messages)
+# Dump current config to debug topic
 ros2 service call /mcu_drone/get_config mcu_msgs/srv/DroneTare
+ros2 topic echo /mcu_drone/debug --once
 ```
 
-### Available Parameters for set_param
+### Available parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -65,104 +201,21 @@ ros2 service call /mcu_drone/get_config mcu_msgs/srv/DroneTare
 | `altitude_kp/ki/kd` | 1.2 / 0.15 / 0.0 | Altitude position PID |
 | `alt_vel_kp/ki/kd` | 0.5 / 0.0 / 0.0 | Altitude velocity PID |
 | `hover_throttle` | 0.45 | Baseline throttle for hover |
-| `motor_max_slew` | 0.5 | Max motor change per second (brownout protection) |
+| `motor_max_slew` | 0.5 | Max motor change per second |
 | `max_roll_deg` | 30.0 | Maximum roll angle limit |
 | `max_pitch_deg` | 30.0 | Maximum pitch angle limit |
 | `max_yaw_rate_dps` | 160.0 | Maximum yaw rate limit |
 | `motor_min_output` | 0.045 | ESC dead zone threshold (~4.5% duty) |
 | `ready_throttle` | 0.35 | Throttle in READY_FOR_TAKEOFF state |
 
-### Apply All Defaults
-
-```bash
-# Edit values and paste into terminal:
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_angle_kp', value: 1.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_angle_ki', value: 0.5}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_angle_kd', value: 0.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_angle_kp', value: 1.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_angle_ki', value: 0.5}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_angle_kd', value: 0.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_rate_kp', value: 0.003}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_rate_ki', value: 0.001}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'roll_rate_kd', value: 0.00003}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_rate_kp', value: 0.003}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_rate_ki', value: 0.001}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'pitch_rate_kd', value: 0.00003}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'yaw_rate_kp', value: 0.005}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'yaw_rate_ki', value: 0.001}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'yaw_rate_kd', value: 0.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'altitude_kp', value: 0.7}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'altitude_ki', value: 0.15}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'altitude_kd', value: 0.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'alt_vel_kp', value: 0.5}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'alt_vel_ki', value: 0.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'alt_vel_kd', value: 0.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'hover_throttle', value: 0.45}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'motor_max_slew', value: 0.5}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_roll_deg', value: 30.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_pitch_deg', value: 30.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'max_yaw_rate_dps', value: 160.0}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'motor_min_output', value: 0.045}"
-ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam "{param_name: 'ready_throttle', value: 0.35}"
-```
-
-## PID Tuning Guide
-
-### Tuning Order (always inner loops first)
+### Tuning order (always inner loops first)
 
 1. **Rate PIDs** (`roll_rate_kp/ki/kd`, `pitch_rate_kp/ki/kd`)
 2. **Angle PIDs** (`roll_angle_kp/ki/kd`, `pitch_angle_kp/ki/kd`)
 3. **Yaw rate** (`yaw_rate_kp/ki/kd`)
 4. **Altitude velocity** (`alt_vel_kp`) then **altitude position** (`altitude_kp/ki`)
 
-### Method
-
-```bash
-# Shorthand
-alias dp='ros2 service call /mcu_drone/set_param mcu_msgs/srv/DroneSetParam'
-```
-
-1. Arm the drone, hold by hand or tether loosely
-2. Zero ki and kd, start with kp only:
-   ```bash
-   dp "{param_name: 'roll_rate_ki', value: 0.0}"
-   dp "{param_name: 'roll_rate_kd', value: 0.0}"
-   ```
-3. Increase `roll_rate_kp` until the drone resists rotation when tilted by hand, back off when it oscillates
-4. Add `roll_rate_kd` in small increments to dampen oscillation
-5. Add `roll_rate_ki` last, very small — only if there's steady-state error
-6. Copy roll gains to pitch (symmetric frame)
-7. Move to outer angle loop — same process
-
-### Diagnostics
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Oscillation | kp too high or kd too low | Reduce kp or increase kd |
-| Sluggish response | kp too low | Increase kp |
-| Slow drift / won't hold angle | ki too low | Increase ki |
-| High-frequency vibration | kd too high (amplifying noise) | Reduce kd |
-| Motors saturating (0 or 1.0) | Gains too aggressive | Reduce output limits |
-
-### Monitoring While Tuning
-
-```bash
-# Attitude and state
-ros2 topic echo /mcu_drone/state
-
-# Loop rates and debug info (every 5s)
-ros2 topic echo /mcu_drone/debug
-```
-
-## EEPROM Persistence (NVS)
-
-All tunable parameters (28 total: 7 PIDs x 3 gains + 7 scalars) are saved to ESP32 NVS flash via `save_config` service. On boot, saved values are automatically loaded before any tasks start.
-
-- Parameters are stored under NVS namespace `"drone_cfg"` with index-based keys (`"p0"` through `"p27"`) because some param names exceed the 15-char NVS key limit.
-- On first micro-ROS connect, the drone publishes all current config values via debug topic (`"CONFIG:name=val,..."` format) so the tuner can sync. Config can also be requested on demand via `get_config` service.
-- To clear saved config, erase the ESP32 NVS partition.
-
-## PID Tuner TUI
+### PID Tuner TUI
 
 ```bash
 ros2 run secbot_drone_teleop drone_pid_tuner.py
@@ -175,54 +228,13 @@ ros2 run secbot_drone_teleop drone_pid_tuner.py
 | `[`/`]` | Coarse adjust (5x step) |
 | `Enter` | Type exact value |
 | `c` | Copy roll gains to pitch |
-| `r` | Reset selected param |
-| `R` | Reset ALL params |
-| `a` | Arm |
-| `d` | Disarm |
-| `D` | Emergency disarm (same as `d`, explicit for flying state) |
-| `f` | Ready for takeoff (pre-spin motors) |
-| `t` | Takeoff (prompts for altitude, default 1.0m) |
-| `L` | Land |
-| `T` | Tare IMU yaw |
 | `S` | Save config to EEPROM |
+| `a`/`d` | Arm / Disarm |
+| `t`/`L` | Takeoff / Land |
+| `T` | Tare IMU yaw |
 | `q` | Quit |
 
-The tuner auto-syncs param values from the drone on connect via CONFIG: debug messages.
-
-## Safety
-
-- **Crash detection**: If roll or pitch exceeds 2x the max angle limits (default 60 deg) or goes past 90 deg (upside down) for 200ms while flying, motors are immediately killed.
-- **Height timeout**: If VL53L0X data is stale for >200ms (except during LAUNCHING), triggers emergency land.
-- **micro-ROS disconnect**: If agent is unreachable for >3s, triggers emergency land.
-- **IMU failure**: Immediate disarm.
-
-## Published Topics
-
-```bash
-# Drone state (10 Hz) — flight state, attitude, altitude, EKF position
-ros2 topic echo /mcu_drone/state
-
-# Heartbeat (1 Hz)
-ros2 topic echo /mcu_drone/heartbeat
-
-# UWB ranging (20 Hz, when UWB enabled)
-ros2 topic echo /mcu_drone/uwb/ranging
-```
-
-## Subscribed Topics
-
-```bash
-# Velocity command (while in VELOCITY_CONTROL state)
-#   linear.x  → pitch      linear.y  → roll
-#   linear.z  → alt rate   angular.z → yaw rate
-# Auto-hovers if no message received for >200ms
-ros2 topic pub /mcu_drone/cmd_vel geometry_msgs/msg/Twist \
-  "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}"
-```
-
-## RC Teleop
-
-The `secbot_drone_teleop` node bridges RC input to drone commands:
+### RC Teleop
 
 ```bash
 ros2 run secbot_drone_teleop drone_teleop_node
@@ -236,28 +248,54 @@ ros2 run secbot_drone_teleop drone_teleop_node
 | Right stick X/Y | Roll / Pitch |
 | Left stick Y/X | Altitude rate / Yaw rate |
 
-## Monitoring
+## Architecture
 
-```bash
-# Check all drone topics are publishing
-for t in $(ros2 topic list | grep mcu_drone); do
-  echo "--- $t ---"
-  timeout 5 ros2 topic hz "$t" 2>&1 | tail -2 &
-done; wait
+### FreeRTOS Tasks
 
-# Watch state transitions
-ros2 topic echo /mcu_drone/state --field state
+| Task | Priority | Core | Rate | Stack | Description |
+|------|----------|------|------|-------|-------------|
+| GyroSubsystem | 5 | 1 | 250 Hz | 2048 | BNO085 I2C read, Euler extraction |
+| DroneFlightSubsystem | 4 | 1 | 250 Hz | 4096 | Cascaded PID, motor mixer, PWM write |
+| HeightSubsystem | 3 | 1 | 50 Hz | 2048 | VL53L0X altitude read |
+| DroneUWBSubsystem | 3 | 0 | 20 Hz | 2048 | UWB SPI ranging, EKF update |
+| DroneSafetySubsystem | 3 | any | 10 Hz | 2048 | Crash/stall/timeout detection |
+| DroneStateSubsystem | 2 | any | 10 Hz | 2048 | State machine, ROS2 pub/sub |
+| MicrorosManager | 2 | any | 100 Hz | 8192 | micro-ROS lifecycle, deferred publish |
+| HeartbeatSubsystem | 1 | any | 1 Hz | 2048 | Heartbeat publisher |
+| WiFi + OTA | 1 | any | 10 Hz | 4096 | WiFi reconnect, ArduinoOTA |
 
-# Watch attitude
-ros2 topic echo /mcu_drone/state --field roll --field pitch --field yaw
+### Cascaded PID Control
+
+```
+cmd_vel -> [Angle PID] -> desired rate -> [Rate PID] -> motor correction
+                                                              |
+target altitude -> [Altitude PID] -> alt rate -> [Alt Vel PID] -> throttle
+                                                                     |
+                                                       [X-Quad Mixer] -> 4x motor PWM
 ```
 
-## Motor Layout
+### Safety Checks (10 Hz)
 
-```
-  FL (CCW, M3, D2)    FR (CW, M1, D0)
-            \          /
-             [DRONE]
-            /          \
-  BL (CW, M4, D3)    BR (CCW, M2, D1)
-```
+| Condition | Action |
+|-----------|--------|
+| IMU not initialized | Disarm |
+| Height sensor stale >200ms | Emergency land |
+| Roll/pitch > 60 deg or inverted | Disarm |
+| Angular rate > 400 deg/s | Disarm (tumbling) |
+| Motor >30% + rate <5 deg/s for 500ms | Disarm (stalled) |
+| micro-ROS disconnect >3s | Emergency land |
+| cmd_vel timeout >500ms | Auto-hover |
+| Launch timeout >10s | Emergency land |
+
+### EKF (4-State Position Estimator)
+
+State: `[x, y, vx, vy]`
+- Predict: world-frame accelerometer integration
+- Update: per-range UWB scalar Kalman filter
+- Process noise: position 0.01 m2, velocity 0.1 (m/s)2
+- Measurement noise: 0.15 m2 per UWB range
+- Outlier gate: Mahalanobis chi2 = 9.0
+
+### NVS Parameter Persistence
+
+All 28 tunable parameters are stored in ESP32 NVS flash under namespace `"drone_cfg"` with index-based keys (`"p0"` through `"p27"`). On boot, saved values auto-load before tasks start. On first micro-ROS connect, current config publishes via debug topic in `"CONFIG:name=val,..."` format.

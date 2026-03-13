@@ -65,6 +65,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetServo.srv"
   "srv/SetMotor.srv"
   "srv/UWBCalibrationStatus.srv"
+  "srv/SetCameraAngle.srv"
   DEPENDENCIES std_msgs geometry_msgs nav_msgs
 )
 

@@ -17,10 +17,10 @@ pio run -e teensy-test-all-subsystems --target upload
 pio run -e robot --target upload
 
 # Start micro-ROS agent (if entrypoint isn't running it)
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600
 
 # Debug serial (Teensy SerialUSB1)
-cat /dev/ttyACM1   # or screen /dev/ttyACM1
+cat /dev/ttyTeensyDebug   # or screen /dev/ttyTeensyDebug
 
 # Check all topic rates at once
 for t in $(ros2 topic list | grep mcu_robot); do
@@ -64,7 +64,7 @@ sleep 3
 pio run -e teensy-test-all-subsystems --target upload
 ```
 
-**Verify on debug serial** (`/dev/ttyACM1`):
+**Verify on debug serial** (`/dev/ttyTeensyDebug`):
 - [ ] No `CrashReport` output
 - [ ] All `[INIT]` stages complete without errors
 - [ ] `[IMU] Calibration done` message appears
@@ -76,7 +76,7 @@ pio run -e teensy-test-all-subsystems --target upload
 Start the agent and wait ~10s for the Teensy to connect:
 
 ```bash
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600
 ```
 
 **Verify:**
@@ -234,7 +234,7 @@ pkill -9 -f "micro_ros_agent serial"
 sleep 5
 
 # Restart agent
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyTeensyROS -b 921600
 ```
 
 - [ ] Debug serial shows `CONNECTED` -> `WAITING` -> `CONNECTED` cycle
@@ -247,7 +247,7 @@ ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM0 -b 921600
 After running for 60+ seconds with all subsystems active, check debug serial:
 
 ```bash
-timeout 5 cat /dev/ttyACM1
+timeout 5 cat /dev/ttyTeensyDebug
 ```
 
 - [ ] IMU `updates` count increases steadily (no stalls)

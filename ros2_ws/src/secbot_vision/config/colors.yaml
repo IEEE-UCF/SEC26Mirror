@@ -1,4 +1,25 @@
 colors:
   yellow:
-    hsv_low: [0, 100, 100]
-    hsv_high: [35, 255, 255]
+    color_low: [0, 100, 100]
+    color_high: [35, 255, 255]
+    hsv_values: [25, 20, 15]
+
+  red:
+    color_low: [0, 100, 100]
+    color_high: [35, 255, 255]
+    hsv_values: [25, 20, 15]
+
+  green:
+    color_low: [0, 100, 100]
+    color_high: [35, 255, 255]
+    hsv_values: [25, 20, 15]
+
+  blue:
+    color_low: [0, 100, 100]
+    color_high: [35, 255, 255]
+    hsv_values: [25, 20, 15]
+  
+  purple:
+    color_low: [0, 100, 100]
+    color_high: [35, 255, 255]
+    hsv_values: [25, 20, 15]

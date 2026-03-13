@@ -70,4 +70,7 @@ jobs:
             -e test-control-trajectory-controller \
             -e test-utils-filters \
             -e test-utils-units \
-            -e test-drive-tankdrivelocalization
+            -e test-drive-tankdrivelocalization \
+            -e test-drone-motor-mixer \
+            -e test-drone-ekf \
+            -e test-drone-imu-math

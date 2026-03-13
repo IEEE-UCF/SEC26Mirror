@@ -1,6 +1,8 @@
 # UWB Beacon Configuration
 # This file defines the beacon setup for the UWB positioning system
 
+# 3-8-2026: changed IDs to match BeaconsLogic.h; breaks simulation beacon positions
+
 /**:
   ros__parameters:
     # Frame IDs
@@ -30,7 +32,7 @@
         description: "Stationary beacon at top-left corner"
 
       # Beacon 3: right side center of field
-      13:
+      12:
         type: "stationary"
         position:
           x: 7.5
@@ -41,17 +43,23 @@
 
     # Tag configuration (devices that are tracked)
     tags:
-      # Drone tag
-      20:
-        description: "Drone UWB tag"
-        publish_topic: "/uwb/pose/drone"
-        enable_3d_positioning: true  # Enable full 3D positioning for drone
-
       # Main robot tag
-      12:
+      13:
         description: "Main Robot"
         publish_topic: "/uwb/pose/robot"
         enable_3d_positioning: true
+
+      # Mini robot tag
+      14:
+        description: "mini Robot"
+        publish_topic: "/uwb/pose/mini_robot"
+        enable_3d_positioning: true
+
+      # Drone tag
+      15:
+        description: "Drone UWB tag"
+        publish_topic: "/uwb/pose/drone"
+        enable_3d_positioning: true  # Enable full 3D positioning for drone
 
     # Positioning algorithm parameters
     positioning:

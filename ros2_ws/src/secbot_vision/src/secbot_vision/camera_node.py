@@ -94,26 +94,32 @@ class CameraNode(Node):
             return False
 
     def _try_tcp(self) -> bool:
-        try:
-            import cv2
-            url = f'tcp://{self.tcp_host}:{self.tcp_port}'
-            self.get_logger().info(f'Trying TCP stream: {url}')
-            self.cap = cv2.VideoCapture(url)
-            if not self.cap.isOpened():
-                self.get_logger().info(f'TCP stream not available at {url}')
+        """Try HTTP MJPEG first (webcam_stream.py on Windows), then raw TCP."""
+        import cv2
+        # HTTP MJPEG — works over both IPv4 and IPv6, no buffer-overflow issues
+        for url in [
+            f'http://{self.tcp_host}:{self.tcp_port}/',
+            f'tcp://{self.tcp_host}:{self.tcp_port}',
+        ]:
+            try:
+                self.get_logger().info(f'Trying stream: {url}')
+                self.cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+                if not self.cap.isOpened():
+                    self.get_logger().info(f'Not available: {url}')
+                    self.cap = None
+                    continue
+                ret, _ = self.cap.read()
+                if not ret:
+                    self.get_logger().info(f'Opened but no frames: {url}')
+                    self.cap.release()
+                    self.cap = None
+                    continue
+                self.get_logger().info(f'Connected: {url}')
+                return True
+            except Exception as e:
+                self.get_logger().info(f'Stream init failed ({url}): {e}')
                 self.cap = None
-                return False
-            ret, frame = self.cap.read()
-            if not ret:
-                self.get_logger().info(f'TCP stream opened but no frames from {url}')
-                self.cap.release()
-                self.cap = None
-                return False
-            return True
-        except Exception as e:
-            self.get_logger().info(f'TCP init failed: {e}')
-            self.cap = None
-            return False
+        return False
 
     def _try_opencv(self) -> bool:
         try:
@@ -142,14 +148,18 @@ class CameraNode(Node):
 
     def _timer_cb(self):
         if self.picam is not None:
+            import cv2
             frame = self.picam.capture_array()
-            msg = self.bridge.cv2_to_imgmsg(frame, encoding='rgb8')
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
         else:
             import cv2
             ret, frame = self.cap.read()
             if not ret:
                 self.get_logger().warn('Frame capture failed', throttle_duration_sec=5.0)
                 return
+            if frame.ndim == 2 or (frame.ndim == 3 and frame.shape[2] == 1):
+                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
             msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
 
         msg.header.stamp = self.get_clock().now().to_msg()

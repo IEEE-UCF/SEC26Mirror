@@ -24,3 +24,4 @@ source /opt/ros/jazzy/setup.bash
 source "${SCRIPT_DIR}/../ros2_workspaces/install/setup.bash"
 
 exec ros2 launch secbot_vision vision.launch.py "$@"
+

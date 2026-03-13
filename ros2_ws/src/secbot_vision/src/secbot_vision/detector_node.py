@@ -207,14 +207,16 @@ class DetectorNode(Node):
                 all_metadata      = metadata
 
         if self.pub_dbg and debug is not None:
-            self.pub_dbg.publish(self.bridge.cv2_to_imgmsg(debug, encoding='bgr8'))
+            debug_rgb = cv2.cvtColor(debug, cv2.COLOR_BGR2RGB)
+            self.pub_dbg.publish(self.bridge.cv2_to_imgmsg(debug_rgb, encoding='rgb8'))
             self.get_logger().info(f"[DEBUG IMG] {len(all_metadata)} detections")
             self.get_logger().info(
                 f"[DEBUG IMG] filter: {best_filter_name['filter'] if best_filter_name else 'none'}"
             )
             self.get_logger().info(f"[DEBUG IMG] INFO SENT -> {self.pub_dbg_name}")
 
-        self.pub_mask.publish(self.bridge.cv2_to_imgmsg(best_mask, encoding='bgr8'))
+        mask_rgb = cv2.cvtColor(best_mask, cv2.COLOR_BGR2RGB)
+        self.pub_mask.publish(self.bridge.cv2_to_imgmsg(mask_rgb, encoding='rgb8'))
 
         if self.duck_or_antenna:
             self._publish_duck_detections(msg, all_metadata)

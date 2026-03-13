@@ -43,11 +43,12 @@ namespace Subsystem {
 // ═══════════════════════════════════════════════════════════════════════════
 
 enum class DriveMode : uint8_t {
-  IDLE,        // Motors off, no active control
-  VELOCITY,    // Twist (vx, omega) → S-curve → wheel PIDs
-  GOAL,        // Drive to (x, y, theta) pose
-  TRAJECTORY,  // Follow waypoint path (pure pursuit)
-  MANUAL       // Direct motor speed passthrough (for RC)
+  IDLE,            // Motors off, no active control
+  VELOCITY,        // Twist (vx, omega) → S-curve → wheel PIDs (gyro hold)
+  VELOCITY_RAW,    // Twist (vx, omega) → S-curve → wheel PIDs (no gyro hold)
+  GOAL,            // Drive to (x, y, theta) pose
+  TRAJECTORY,      // Follow waypoint path (pure pursuit)
+  MANUAL           // Direct motor speed passthrough (for RC)
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -422,9 +423,10 @@ class DriveSubsystem : public IMicroRosParticipant,
   // ── Public API (for RC subsystem, other on-MCU consumers) ──────────────
 
   /** @brief Command velocity (tank drive: vx forward, omega turn). */
-  void setVelocity(float vx_mps, float omega_radps) {
-    bool modeChange = (mode_ != DriveMode::VELOCITY);
-    mode_ = DriveMode::VELOCITY;
+  void setVelocity(float vx_mps, float omega_radps,
+                    DriveMode vel_mode = DriveMode::VELOCITY) {
+    bool modeChange = (mode_ != vel_mode);
+    mode_ = vel_mode;
     targetLinearVel_ = secbot::utils::clamp(
         vx_mps, -setup_.maxLinearVel, setup_.maxLinearVel);
     targetAngularVel_ = secbot::utils::clamp(
@@ -790,7 +792,9 @@ class DriveSubsystem : public IMicroRosParticipant,
 
     // Gyro heading hold: when commanding straight-line driving (omega ≈ 0),
     // lock the current heading and apply a small correction to prevent drift.
-    if (setup_.gyroHoldKp > 0.0f &&
+    // Skipped in VELOCITY_RAW mode (e.g. nudge — no heading correction wanted).
+    if (mode_ != DriveMode::VELOCITY_RAW &&
+        setup_.gyroHoldKp > 0.0f &&
         fabsf(targetAngularVel_) < setup_.gyroHoldThreshold) {
       float yaw = setup_.imuSub->getYaw();
       if (yaw == yaw) {  // NaN guard — skip if IMU fault
@@ -1035,7 +1039,8 @@ class DriveSubsystem : public IMicroRosParticipant,
     self->lastCommandMs_ = millis();
 
     switch (msg->drive_mode) {
-      case mcu_msgs__msg__DriveBase__DRIVE_VECTOR: {
+      case mcu_msgs__msg__DriveBase__DRIVE_VECTOR:
+      case mcu_msgs__msg__DriveBase__DRIVE_VECTOR_RAW: {
         // goal_velocity is in SI units: m/s (linear.x) and rad/s (angular.z)
         float vx = static_cast<float>(msg->goal_velocity.linear.x);
         float omega = static_cast<float>(msg->goal_velocity.angular.z);
@@ -1044,11 +1049,14 @@ class DriveSubsystem : public IMicroRosParticipant,
             vx, -self->setup_.maxLinearVel, self->setup_.maxLinearVel);
         omega = secbot::utils::clamp(
             omega, -self->setup_.maxAngularVel, self->setup_.maxAngularVel);
+        // Pick mode based on whether gyro hold is desired
+        DriveMode target_mode = (msg->drive_mode == mcu_msgs__msg__DriveBase__DRIVE_VECTOR_RAW)
+            ? DriveMode::VELOCITY_RAW : DriveMode::VELOCITY;
         // Only reset profiles/PID if target actually changed
-        if (self->mode_ != DriveMode::VELOCITY ||
+        if (self->mode_ != target_mode ||
             fabsf(vx - self->targetLinearVel_) > 0.01f ||
             fabsf(omega - self->targetAngularVel_) > 0.01f) {
-          self->setVelocity(vx, omega);
+          self->setVelocity(vx, omega, target_mode);
         } else {
           self->lastCommandMs_ = millis();  // refresh timeout
         }
@@ -1227,6 +1235,9 @@ class DriveSubsystem : public IMicroRosParticipant,
       case DriveMode::VELOCITY:
       case DriveMode::MANUAL:
         status_msg_.drive_mode = mcu_msgs__msg__DriveBase__DRIVE_VECTOR;
+        break;
+      case DriveMode::VELOCITY_RAW:
+        status_msg_.drive_mode = mcu_msgs__msg__DriveBase__DRIVE_VECTOR_RAW;
         break;
       case DriveMode::GOAL:
         status_msg_.drive_mode = mcu_msgs__msg__DriveBase__DRIVE_GOAL;

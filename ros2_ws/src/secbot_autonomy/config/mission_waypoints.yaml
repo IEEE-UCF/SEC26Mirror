@@ -13,6 +13,7 @@ mission_sequencer:
     #   read_antenna label angle [idx]    - read antenna color (idx = storage slot)
     #   arm joint position speed          - move arm servo
     #   intake extend|retract [timeout]   - intake command (default timeout 10s)
+    #   velocity_raw vx omega [duration]  - raw velocity, no gyro hold (default 1.0s)
 
     start_pose: [15.0, 15.0, 0.0]
     nudge_speed: 0.25

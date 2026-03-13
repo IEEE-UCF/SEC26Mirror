@@ -132,6 +132,10 @@ MissionSequencer::MissionCmd MissionSequencer::parseCommand(
         ? mcu_msgs::msg::IntakeCommand::CMD_EXTEND
         : mcu_msgs::msg::IntakeCommand::CMD_RETRACT;
     if (!(ss >> cmd.timeout)) cmd.timeout = 10.0;
+  } else if (token == "velocity_raw") {
+    cmd.type = CmdType::VELOCITY_RAW;
+    ss >> cmd.vx >> cmd.omega;
+    if (!(ss >> cmd.duration)) cmd.duration = 1.0;
   }
 
   return cmd;
@@ -526,9 +530,19 @@ void MissionSequencer::sendVelocity(double vx_mps, double omega_radps) {
   drive_cmd_pub_->publish(msg);
 }
 
+void MissionSequencer::sendVelocityRaw(double vx_mps, double omega_radps) {
+  auto msg = mcu_msgs::msg::DriveBase();
+  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_VECTOR_RAW;
+  msg.goal_velocity.linear.x = vx_mps;
+  msg.goal_velocity.angular.z = omega_radps;
+  last_drive_cmd_ = msg;
+  last_drive_mode_ = mcu_msgs::msg::DriveBase::DRIVE_VECTOR_RAW;
+  drive_cmd_pub_->publish(msg);
+}
+
 void MissionSequencer::sendNudge(double speed_mps) {
   RCLCPP_INFO(this->get_logger(), "  sendNudge(%.2f m/s)", speed_mps);
-  sendVelocity(speed_mps, 0.0);
+  sendVelocityRaw(speed_mps, 0.0);
 }
 
 void MissionSequencer::stopRobot() { sendVelocity(0.0, 0.0); }
@@ -768,6 +782,22 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
       double t = (cmd.timeout > 0) ? cmd.timeout : 10.0;
       if (intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE ||
           checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::VELOCITY_RAW: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(),
+                    "  %s [%d/%zu]: velocity_raw vx=%.2f omega=%.2f (%.1fs)",
+                    phase_name, idx + 1, cmds.size(),
+                    cmd.vx, cmd.omega, cmd.duration);
+        sendVelocityRaw(cmd.vx, cmd.omega);
+      }
+      if (stepElapsed() > cmd.duration) {
+        stopRobot();
         setStep(++idx);
       }
       break;

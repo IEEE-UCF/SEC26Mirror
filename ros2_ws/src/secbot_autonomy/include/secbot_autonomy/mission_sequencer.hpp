@@ -125,22 +125,23 @@ class MissionSequencer : public rclcpp::Node {
   // ── Parsed mission command ──
   enum class CmdType : uint8_t {
     NAV, NAV_REV, NUDGE, STOP, WAIT, TASK,
-    READ_ANTENNA, ARM, INTAKE,
+    READ_ANTENNA, ARM, INTAKE, VELOCITY_RAW,
   };
 
   struct MissionCmd {
     CmdType type;
     double x = 0, y = 0, heading = 0;  // NAV/NAV_REV
     double timeout = 0;                 // 0 = use default
-    double duration = 1.0;              // WAIT/NUDGE
-    uint8_t task_id = 0;                // TASK
+    double duration = 1.0;              // WAIT/NUDGE/VELOCITY_RAW
+    double vx = 0, omega = 0;          // VELOCITY_RAW
+    uint8_t task_id = 0;               // TASK
     std::string label;                  // READ_ANTENNA
-    float camera_angle = 90.0f;         // READ_ANTENNA
-    int antenna_slot = -1;              // READ_ANTENNA storage index
-    uint8_t joint = 0;                  // ARM
-    int16_t position = 0;               // ARM
-    uint8_t speed = 0;                  // ARM
-    uint8_t intake_cmd = 0;             // INTAKE
+    float camera_angle = 90.0f;        // READ_ANTENNA
+    int antenna_slot = -1;             // READ_ANTENNA storage index
+    uint8_t joint = 0;                 // ARM
+    int16_t position = 0;              // ARM
+    uint8_t speed = 0;                 // ARM
+    uint8_t intake_cmd = 0;            // INTAKE
   };
 
   static MissionCmd parseCommand(const std::string& line);
@@ -186,6 +187,7 @@ class MissionSequencer : public rclcpp::Node {
   void sendTurnInPlace(double target_rad);  // P-controller via DRIVE_VECTOR
   bool turnReachedHeading(double target_rad) const;
   void sendVelocity(double vx_mps, double omega_radps);
+  void sendVelocityRaw(double vx_mps, double omega_radps);
   void sendNudge(double speed_mps);
   void stopRobot();
   void refreshDriveCommand();

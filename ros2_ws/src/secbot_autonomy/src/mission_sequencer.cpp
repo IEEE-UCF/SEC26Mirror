@@ -545,7 +545,7 @@ void MissionSequencer::sendNudge(double speed_mps) {
   sendVelocityRaw(speed_mps, 0.0);
 }
 
-void MissionSequencer::stopRobot() { sendVelocity(0.0, 0.0); }
+void MissionSequencer::stopRobot() { sendVelocityRaw(0.0, 0.0); }
 
 void MissionSequencer::refreshDriveCommand() {
   // Don't re-publish during pause — robot should be stopped

@@ -225,6 +225,9 @@ void MissionSequencer::startSetup(double start_x_cm, double start_y_cm,
   setup_pose_ = rafeedToMcu(start_x_cm, start_y_cm, start_yaw_deg);
   setup_state_ = SetupState::TARE_WAIT;
   tare_sent_ = false;
+  tare_response_received_ = false;
+  drive_config_sent_ = false;
+  drive_config_response_received_ = false;
   RCLCPP_INFO(this->get_logger(), "[SETUP] Starting: tare → drive config → reset → settle");
 }
 
@@ -241,14 +244,19 @@ bool MissionSequencer::tickSetup() {
           return false;
         }
         auto req = std::make_shared<mcu_msgs::srv::Reset::Request>();
-        tare_future_ = imu_tare_client_->async_send_request(req);
+        imu_tare_client_->async_send_request(
+            req,
+            [this](rclcpp::Client<mcu_msgs::srv::Reset>::SharedFuture future) {
+              auto result = future.get();
+              tare_response_success_ = result->success;
+              tare_response_received_ = true;
+            });
         tare_sent_ = true;
         RCLCPP_INFO(this->get_logger(), "[SETUP] IMU tare request sent");
       }
 
-      if (tare_future_.wait_for(0s) == std::future_status::ready) {
-        auto result = tare_future_.get();
-        if (result->success) {
+      if (tare_response_received_) {
+        if (tare_response_success_) {
           RCLCPP_INFO(this->get_logger(), "[SETUP] IMU tare SUCCESS");
         } else {
           RCLCPP_WARN(this->get_logger(), "[SETUP] IMU tare returned false");
@@ -270,11 +278,10 @@ bool MissionSequencer::tickSetup() {
         drive_config_sent_ = true;
       }
 
-      if (drive_config_future_.wait_for(0s) == std::future_status::ready) {
-        auto result = drive_config_future_.get();
-        if (result->success) {
+      if (drive_config_response_received_) {
+        if (drive_config_response_success_) {
           RCLCPP_INFO(this->get_logger(), "[SETUP] Drive config applied: %s",
-                      result->message.c_str());
+                      drive_config_response_msg_.c_str());
         } else {
           RCLCPP_WARN(this->get_logger(), "[SETUP] Drive config failed");
         }
@@ -658,7 +665,14 @@ void MissionSequencer::sendDriveConfig() {
   req->command_timeout_ms = static_cast<uint32_t>(
       this->get_parameter("drive_config.command_timeout_ms").as_int());
 
-  drive_config_future_ = drive_config_client_->async_send_request(req);
+  drive_config_client_->async_send_request(
+      req,
+      [this](rclcpp::Client<mcu_msgs::srv::SetDriveConfig>::SharedFuture future) {
+        auto result = future.get();
+        drive_config_response_success_ = result->success;
+        drive_config_response_msg_ = result->message;
+        drive_config_response_received_ = true;
+      });
   RCLCPP_INFO(this->get_logger(), "[SETUP] Drive config request sent");
 }
 

@@ -18,7 +18,6 @@
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <future>
 #include <string>
 #include <vector>
 #include <geometry_msgs/msg/pose.hpp>
@@ -163,9 +162,12 @@ class MissionSequencer : public rclcpp::Node {
 
   SetupState setup_state_ = SetupState::IDLE;
   bool tare_sent_ = false;
-  std::shared_future<mcu_msgs::srv::Reset::Response::SharedPtr> tare_future_;
+  bool tare_response_received_ = false;
+  bool tare_response_success_ = false;
   bool drive_config_sent_ = false;
-  std::shared_future<mcu_msgs::srv::SetDriveConfig::Response::SharedPtr> drive_config_future_;
+  bool drive_config_response_received_ = false;
+  bool drive_config_response_success_ = false;
+  std::string drive_config_response_msg_;
   McuPose setup_pose_{};
   std::chrono::steady_clock::time_point settle_start_;
 

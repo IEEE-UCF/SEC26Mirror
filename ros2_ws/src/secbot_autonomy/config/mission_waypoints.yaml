@@ -14,50 +14,31 @@ mission_sequencer:
     #   arm joint position speed          - move arm servo
     #   intake extend|retract [timeout]   - intake command (default timeout 10s)
     #   velocity_raw vx omega [duration]  - raw velocity, no gyro hold (default 1.0s)
+    #   minibot enter|exit [timeout]     - call minibot enter/exit crater service (default 15s)
 
-    start_pose: [15.0, 15.0, 0.0]
+    start_pose: [15.0, 15.0, 180.0]
     nudge_speed: 0.25
-    turn_timeout: 3.0
-    drive_timeout: 3.0
-    default_step_timeout: 3.0
+    turn_timeout: 5.0
+    drive_timeout: 5.0
+    default_step_timeout: 5.0
 
     #  Phase 1: Button 
     phase_button:
-      - "nav 108.0 38.0 0.0"             # UWB placement
-      - "nav_rev 38.0 38.0 0.0"          # reverse back
-      - "nav 38.0 38.0 -45.0"            # turn -45
-      - "nav 54.0 27.0 -45.0"            # drive diagonal
-      - "nav 54.0 27.0 0.0"              # turn to 0
-      - "nav 78.0 27.0 0.0"              # approach button
-      - "nudge"                           # tap button 1
-      - "nav_rev 78.0 27.0 0.0"          # reverse after tap 1
-      - "nudge"                           # tap button 2
-      - "nav_rev 78.0 28.0 0.0"          # reverse after tap 2
-      - "nudge"                           # tap button 3
-      - "nav_rev 30.0 27.0 0.0"          # reverse away from button
-      - "read_antenna beacon 90.0 0"     # read beacon antenna (store slot 0)
-
-    #  Phase 2: Keypad + Crater + Crank 
-    phase_keypad:
-      - "nav 30.0 27.0 45.0"             # turn +45
-      - "nav 81.0 95.0 45.0"             # drive to keypad area
-      - "nav 81.0 95.0 0.0"              # turn to 0
-      - "nav_rev 38.0 95.0 0.0"          # reverse to keypad
-      - "task 6"                          # keypad task
-      - "nav 55.0 95.0 0.0"              # drive forward
-      - "nav 55.0 95.0 90.0"             # turn to 90
-      - "arm 6 90 200"                   # launch minibot (latch servo)
-      - "wait 1.0"                        # wait for minibot deploy
-      - "intake extend"                   # deploy intake extender
-      - "nav 55.0 95.0 180.0"            # turn to 180
-      - "nav_rev 91.0 95.0 180.0"        # reverse
-      - "read_antenna keypad 90.0 1"     # read keypad antenna (store slot 1)
-      - "nav 91.0 95.0 115.0"            # turn to 115
-      - "read_antenna crater 90.0 2"     # read crater antenna (store slot 2)
-      - "nav 90.0 110.0 45.0"            # wall alignment
-      - "nav 100.0 190.0 90.0 20.0"      # safe path up (20s timeout)
-      - "nav 53.0 225.0 180.0"           # align with crank
-      - "nav_rev 53.0 225.0 150.0"       # reverse to crank
-      - "nav 53.0 228.0 180.0"           # fine adjust
-      - "nav 53.0 228.0 0.0"             # spin 180
-      - "read_antenna crank 90.0 3"      # read crank antenna (store slot 3)
+      - "nav_rev 60.0 15.0 180.0" #backup to button
+      - "nav_rev 97.0 15.0 180.0" #press button
+      - "nav 60.0 15.0 180.0" #backup to repress button
+      - "nav_rev 97.0 15.0 180.0" #press button
+      - "nav 60.0 15.0 180.0" #backup to repress button
+      - "nav_rev 97.0 15.0 180.0" #press button
+      - "nav 50.0 18.0 90.0" #backup to go crater
+      - "nav 50.0 90.0 90.0" #go to crater
+      - "motor 2 -0.5"
+      - "minibot enter 10.0"    #launch minibot into crater
+      - "wait 5.0"              #wait just to be safe anyways
+      - "motor 2 0.0"
+      - "nav_rev 30.0 18.0 0.0" #backup to read button
+      - "wait 5.0"
+      - "read_antenna beacon 0.0 0"     # read beacon antenna (store slot 0)
+      - "wait 20"
+      - "minibot exit 15.0"     #call minibot exit crater service
+      - "wait 5.0"

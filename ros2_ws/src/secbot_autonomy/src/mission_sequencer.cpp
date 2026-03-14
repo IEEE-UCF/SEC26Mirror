@@ -52,9 +52,13 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
       "/autonomy/task_status", 10,
       std::bind(&MissionSequencer::onTaskStatus, this, _1));
 
-  robot_inputs_sub_ = this->create_subscription<mcu_msgs::msg::RobotInputs>(
-      "/mcu_robot/inputs", 10,
-      std::bind(&MissionSequencer::onRobotInputs, this, _1));
+  // Button start parameter (can be disabled via launch file)
+  this->declare_parameter<bool>("button_start_enabled", true);
+  button_start_enabled_ = this->get_parameter("button_start_enabled").as_bool();
+
+  buttons_sub_ = this->create_subscription<std_msgs::msg::UInt8>(
+      "/mcu_robot/buttons", 10,
+      std::bind(&MissionSequencer::onButtons, this, _1));
 
   intake_state_sub_ = this->create_subscription<mcu_msgs::msg::IntakeState>(
       "/mcu_robot/intake/state", rclcpp::SensorDataQoS(),
@@ -1123,11 +1127,13 @@ void MissionSequencer::onTaskStatus(
   }
 }
 
-void MissionSequencer::onRobotInputs(
-    const mcu_msgs::msg::RobotInputs::SharedPtr msg) {
-  if (msg->btn1 && !start_button_pressed_) {
+void MissionSequencer::onButtons(
+    const std_msgs::msg::UInt8::SharedPtr msg) {
+  if (!button_start_enabled_) return;
+  // Bit 0 = button channel 0
+  if ((msg->data & 0x01) && !start_button_pressed_) {
     start_button_pressed_ = true;
-    RCLCPP_INFO(this->get_logger(), "START BUTTON PRESSED!");
+    RCLCPP_INFO(this->get_logger(), "START BUTTON PRESSED (button 0)!");
   }
 }
 

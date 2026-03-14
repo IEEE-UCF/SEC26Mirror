@@ -27,7 +27,6 @@
 #include <mcu_msgs/msg/drive_base.hpp>
 #include <mcu_msgs/msg/intake_command.hpp>
 #include <mcu_msgs/msg/intake_state.hpp>
-#include <mcu_msgs/msg/robot_inputs.hpp>
 #include <mcu_msgs/srv/reset.hpp>
 #include <mcu_msgs/srv/set_motor.hpp>
 #include <mcu_msgs/srv/set_servo.hpp>
@@ -228,7 +227,7 @@ class MissionSequencer : public rclcpp::Node {
   // ── Subscriber callbacks ──
   void onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg);
   void onTaskStatus(const secbot_msgs::msg::TaskStatus::SharedPtr msg);
-  void onRobotInputs(const mcu_msgs::msg::RobotInputs::SharedPtr msg);
+  void onButtons(const std_msgs::msg::UInt8::SharedPtr msg);
   void onIntakeState(const mcu_msgs::msg::IntakeState::SharedPtr msg);
 
   // ── State ──
@@ -262,6 +261,7 @@ class MissionSequencer : public rclcpp::Node {
 
   // Start signal
   bool start_button_pressed_ = false;
+  bool button_start_enabled_ = true;
 
   // Task state
   bool task_idle_ = true;
@@ -316,8 +316,7 @@ class MissionSequencer : public rclcpp::Node {
   rclcpp::Subscription<mcu_msgs::msg::DriveBase>::SharedPtr drive_status_sub_;
   rclcpp::Subscription<secbot_msgs::msg::TaskStatus>::SharedPtr
       task_status_sub_;
-  rclcpp::Subscription<mcu_msgs::msg::RobotInputs>::SharedPtr
-      robot_inputs_sub_;
+  rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr buttons_sub_;
   rclcpp::Subscription<mcu_msgs::msg::IntakeState>::SharedPtr
       intake_state_sub_;
 };

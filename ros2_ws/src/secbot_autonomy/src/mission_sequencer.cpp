@@ -56,9 +56,20 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   this->declare_parameter<bool>("button_start_enabled", true);
   button_start_enabled_ = this->get_parameter("button_start_enabled").as_bool();
 
+  // Light start parameter (can be disabled via launch file)
+  this->declare_parameter<bool>("light_start_enabled", true);
+  light_start_enabled_ = this->get_parameter("light_start_enabled").as_bool();
+
+  this->declare_parameter<double>("light_start_threshold", 2000.0);
+  light_start_threshold_lux_ = this->get_parameter("light_start_threshold").as_double();
+
   buttons_sub_ = this->create_subscription<std_msgs::msg::UInt8>(
       "/mcu_robot/buttons", 10,
       std::bind(&MissionSequencer::onButtons, this, _1));
+
+  light_sub_ = this->create_subscription<std_msgs::msg::Float32>(
+      "/mcu_robot/light", rclcpp::SensorDataQoS(),
+      std::bind(&MissionSequencer::onLight, this, _1));
 
   intake_state_sub_ = this->create_subscription<mcu_msgs::msg::IntakeState>(
       "/mcu_robot/intake/state", rclcpp::SensorDataQoS(),
@@ -1134,6 +1145,17 @@ void MissionSequencer::onButtons(
   if ((msg->data & 0x01) && !start_button_pressed_) {
     start_button_pressed_ = true;
     RCLCPP_INFO(this->get_logger(), "START BUTTON PRESSED (button 0)!");
+  }
+}
+
+void MissionSequencer::onLight(
+    const std_msgs::msg::Float32::SharedPtr msg) {
+  if (!light_start_enabled_) return;
+  if (msg->data >= light_start_threshold_lux_ && !start_button_pressed_) {
+    start_button_pressed_ = true;
+    RCLCPP_INFO(this->get_logger(),
+                "LIGHT START TRIGGERED (%.0f lux >= %.0f threshold)",
+                msg->data, light_start_threshold_lux_);
   }
 }
 

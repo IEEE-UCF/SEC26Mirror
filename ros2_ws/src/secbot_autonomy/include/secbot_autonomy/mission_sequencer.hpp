@@ -34,6 +34,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <secbot_msgs/action/read_beacon_color.hpp>
 #include <secbot_msgs/msg/task_status.hpp>
+#include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
@@ -228,6 +229,7 @@ class MissionSequencer : public rclcpp::Node {
   void onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg);
   void onTaskStatus(const secbot_msgs::msg::TaskStatus::SharedPtr msg);
   void onButtons(const std_msgs::msg::UInt8::SharedPtr msg);
+  void onLight(const std_msgs::msg::Float32::SharedPtr msg);
   void onIntakeState(const mcu_msgs::msg::IntakeState::SharedPtr msg);
 
   // ── State ──
@@ -262,6 +264,8 @@ class MissionSequencer : public rclcpp::Node {
   // Start signal
   bool start_button_pressed_ = false;
   bool button_start_enabled_ = true;
+  bool light_start_enabled_ = true;
+  double light_start_threshold_lux_ = 2000.0;
 
   // Task state
   bool task_idle_ = true;
@@ -317,6 +321,7 @@ class MissionSequencer : public rclcpp::Node {
   rclcpp::Subscription<secbot_msgs::msg::TaskStatus>::SharedPtr
       task_status_sub_;
   rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr buttons_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr light_sub_;
   rclcpp::Subscription<mcu_msgs::msg::IntakeState>::SharedPtr
       intake_state_sub_;
 };

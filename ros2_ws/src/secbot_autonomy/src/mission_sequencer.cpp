@@ -76,6 +76,12 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   minibot_exit_client_ =
       this->create_client<mcu_msgs::srv::Reset>("/mcu_minibot/exit_crater");
 
+  // SetMotor / SetServo service clients
+  set_motor_client_ =
+      this->create_client<mcu_msgs::srv::SetMotor>("/mcu_robot/motor/set");
+  set_servo_client_ =
+      this->create_client<mcu_msgs::srv::SetServo>("/mcu_robot/servo/set");
+
   // ReadBeaconColor action client
   beacon_color_client_ =
       rclcpp_action::create_client<ReadBeaconColor>(this, "read_beacon_color");
@@ -146,6 +152,20 @@ MissionSequencer::MissionCmd MissionSequencer::parseCommand(
     cmd.type = CmdType::MINIBOT;
     ss >> cmd.minibot_action;  // "enter" or "exit"
     if (!(ss >> cmd.timeout)) cmd.timeout = 15.0;
+  } else if (token == "motor") {
+    cmd.type = CmdType::MOTOR;
+    int idx; float spd;
+    ss >> idx >> spd;
+    cmd.motor_index = static_cast<uint8_t>(idx);
+    cmd.motor_speed = spd;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 5.0;
+  } else if (token == "servo") {
+    cmd.type = CmdType::SERVO;
+    int idx; float ang;
+    ss >> idx >> ang;
+    cmd.servo_index = static_cast<uint8_t>(idx);
+    cmd.servo_angle = ang;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 5.0;
   }
 
   return cmd;
@@ -688,6 +708,7 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
     case CmdType::WAIT: {
       if (step_entry_) {
         step_entry_ = false;
+        stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: wait %.1fs",
                     phase_name, idx + 1, cmds.size(), cmd.duration);
       }
@@ -700,6 +721,7 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
     case CmdType::TASK: {
       if (step_entry_) {
         step_entry_ = false;
+        stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: task %d",
                     phase_name, idx + 1, cmds.size(), cmd.task_id);
         sendTaskCommand(cmd.task_id);
@@ -714,6 +736,7 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
     case CmdType::READ_ANTENNA: {
       if (step_entry_) {
         step_entry_ = false;
+        stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: read_antenna %s %.1f",
                     phase_name, idx + 1, cmds.size(),
                     cmd.label.c_str(), cmd.camera_angle);
@@ -733,6 +756,7 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
     case CmdType::ARM: {
       if (step_entry_) {
         step_entry_ = false;
+        stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: arm %d %d %d",
                     phase_name, idx + 1, cmds.size(),
                     cmd.joint, cmd.position, cmd.speed);
@@ -747,6 +771,7 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
     case CmdType::INTAKE: {
       if (step_entry_) {
         step_entry_ = false;
+        stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: intake %d",
                     phase_name, idx + 1, cmds.size(), cmd.intake_cmd);
         sendIntakeCommand(cmd.intake_cmd);
@@ -778,6 +803,7 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
     case CmdType::MINIBOT: {
       if (step_entry_) {
         step_entry_ = false;
+        stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: minibot %s",
                     phase_name, idx + 1, cmds.size(),
                     cmd.minibot_action.c_str());
@@ -814,6 +840,86 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
 
       double t = (cmd.timeout > 0) ? cmd.timeout : 15.0;
       if (minibot_call_done_ || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::MOTOR: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: motor %d %.2f",
+                    phase_name, idx + 1, cmds.size(),
+                    cmd.motor_index, cmd.motor_speed);
+
+        motor_call_done_ = false;
+        motor_call_success_ = false;
+
+        if (!set_motor_client_->wait_for_service(std::chrono::seconds(2))) {
+          RCLCPP_WARN(this->get_logger(),
+                      "  SetMotor service not available, skipping");
+          motor_call_done_ = true;
+          motor_call_success_ = false;
+        } else {
+          auto req = std::make_shared<mcu_msgs::srv::SetMotor::Request>();
+          req->index = cmd.motor_index;
+          req->speed = cmd.motor_speed;
+          set_motor_client_->async_send_request(
+              req,
+              [this](rclcpp::Client<mcu_msgs::srv::SetMotor>::SharedFuture future) {
+                auto result = future.get();
+                motor_call_success_ = result->success;
+                motor_call_done_ = true;
+                RCLCPP_INFO(this->get_logger(),
+                            "  SetMotor service returned: %s",
+                            result->success ? "OK" : "FAILED");
+              });
+        }
+      }
+
+      double t = (cmd.timeout > 0) ? cmd.timeout : 5.0;
+      if (motor_call_done_ || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::SERVO: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: servo %d %.1f",
+                    phase_name, idx + 1, cmds.size(),
+                    cmd.servo_index, cmd.servo_angle);
+
+        servo_call_done_ = false;
+        servo_call_success_ = false;
+
+        if (!set_servo_client_->wait_for_service(std::chrono::seconds(2))) {
+          RCLCPP_WARN(this->get_logger(),
+                      "  SetServo service not available, skipping");
+          servo_call_done_ = true;
+          servo_call_success_ = false;
+        } else {
+          auto req = std::make_shared<mcu_msgs::srv::SetServo::Request>();
+          req->index = cmd.servo_index;
+          req->angle = cmd.servo_angle;
+          set_servo_client_->async_send_request(
+              req,
+              [this](rclcpp::Client<mcu_msgs::srv::SetServo>::SharedFuture future) {
+                auto result = future.get();
+                servo_call_success_ = result->success;
+                servo_call_done_ = true;
+                RCLCPP_INFO(this->get_logger(),
+                            "  SetServo service returned: %s",
+                            result->success ? "OK" : "FAILED");
+              });
+        }
+      }
+
+      double t = (cmd.timeout > 0) ? cmd.timeout : 5.0;
+      if (servo_call_done_ || checkStepTimeout(t)) {
         setStep(++idx);
       }
       break;

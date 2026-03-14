@@ -29,6 +29,8 @@
 #include <mcu_msgs/msg/intake_state.hpp>
 #include <mcu_msgs/msg/robot_inputs.hpp>
 #include <mcu_msgs/srv/reset.hpp>
+#include <mcu_msgs/srv/set_motor.hpp>
+#include <mcu_msgs/srv/set_servo.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <secbot_msgs/action/read_beacon_color.hpp>
@@ -125,7 +127,7 @@ class MissionSequencer : public rclcpp::Node {
   // ── Parsed mission command ──
   enum class CmdType : uint8_t {
     NAV, NAV_REV, NUDGE, STOP, WAIT, TASK,
-    READ_ANTENNA, ARM, INTAKE, VELOCITY_RAW, MINIBOT,
+    READ_ANTENNA, ARM, INTAKE, VELOCITY_RAW, MINIBOT, MOTOR, SERVO,
   };
 
   struct MissionCmd {
@@ -143,6 +145,10 @@ class MissionSequencer : public rclcpp::Node {
     uint8_t speed = 0;                 // ARM
     uint8_t intake_cmd = 0;            // INTAKE
     std::string minibot_action;        // MINIBOT ("enter" or "exit")
+    uint8_t motor_index = 0;           // MOTOR
+    float motor_speed = 0.0f;          // MOTOR (-1.0 to 1.0)
+    uint8_t servo_index = 0;           // SERVO
+    float servo_angle = 0.0f;          // SERVO (0-180 degrees)
   };
 
   static MissionCmd parseCommand(const std::string& line);
@@ -268,6 +274,14 @@ class MissionSequencer : public rclcpp::Node {
   bool minibot_call_done_ = false;
   bool minibot_call_success_ = false;
 
+  // Motor service call state
+  bool motor_call_done_ = false;
+  bool motor_call_success_ = false;
+
+  // Servo service call state
+  bool servo_call_done_ = false;
+  bool servo_call_success_ = false;
+
   // Antenna reading state
   bool antenna_read_active_ = false;
   std::string last_antenna_color_;
@@ -284,6 +298,8 @@ class MissionSequencer : public rclcpp::Node {
   rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr imu_tare_client_;
   rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr minibot_enter_client_;
   rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr minibot_exit_client_;
+  rclcpp::Client<mcu_msgs::srv::SetMotor>::SharedPtr set_motor_client_;
+  rclcpp::Client<mcu_msgs::srv::SetServo>::SharedPtr set_servo_client_;
 
   // Action clients
   rclcpp_action::Client<ReadBeaconColor>::SharedPtr beacon_color_client_;

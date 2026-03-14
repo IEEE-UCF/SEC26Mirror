@@ -7,7 +7,7 @@
 # ros2 pkg executables secbot_vision
 
 
-# TO RUN: 
+# TO RUN:
 # 1) IMPORT MODEL (Mustard bottle):
 # ros2 run ros_gz_sim create   -world default   -name mustard_bottle   -file 'ros2_workspaces/src/sec26ros/src/secbot_vision/worlds/model.sdf'   -x 0.7 -y 0.0 -z 0.15 -Y 0.0
 
@@ -31,11 +31,11 @@ from secbot_msgs.msg import DuckDetection, DuckDetections, AntennaDetection, Ant
 
 class DetectorNode(Node):
     """DetectorNode class"""
-    
+
     def _isDuck(self):
         yellow_detection_duck = self.get_parameter('yellow_detection_duck').value
         self.filters_array = [yellow_detection_duck]
-        
+
     def _isAntenna(self):
         red_antenna    = self.get_parameter('red_antenna').value
         green_antenna  = self.get_parameter('green_antenna').value
@@ -45,7 +45,7 @@ class DetectorNode(Node):
 
     def __init__(self, duck_or_antenna):
         """initalize all parameters, logging info and inputs and outputs"""
-        
+
         super().__init__('detector_node')
         self.duck_or_antenna = duck_or_antenna
 
@@ -63,7 +63,7 @@ class DetectorNode(Node):
         self.declare_parameter('blue_antenna', 'blue')
         self.declare_parameter('purple_antenna', 'purple')
         self.declare_parameter('min_area_ratio', 0.0002)
-    
+
         # Read parameters
         self.class_name    = self.get_parameter('class_name').value
         image_topic        = self.get_parameter('image_topic').value
@@ -158,10 +158,10 @@ class DetectorNode(Node):
         )
 
     def on_image(self, msg: Image):
-        """Process incoming image frame."""
-        frame     = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        debug     = frame.copy()
-        best_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+        """Call function and read the metadata/debuging details"""
+        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        debug = frame.copy()
+        best_mask = np.zeros(frame.shape, dtype=np.uint8)  # 3-channel for colored mask output
 
         best_filter_name  = None
         best_filter_score = 0.0
@@ -261,22 +261,31 @@ def process_frame(frame, color_low, color_high, hsv_values, min_area_ratio=0.000
 
     MIN_AREA = int(min_area_ratio * frame.shape[0] * frame.shape[1])
 
-    value = int(value)
-    if value % 2 == 0:
-        value += 1  # keep kernel size odd
-    KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (value, value))
+    KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 
-    hsv  = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    # convert to hue saturation value
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # create mask for color range
     mask = cv2.inRange(hsv, color_low, color_high)
+
+    # clean up specks & fill small holes
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, KERNEL)
 
-    contours, __ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # fill detected regions with the representative color (midpoint of detection range)
+    h_mid = int((int(color_low[0]) + int(color_high[0])) // 2)
+    bgr_color = cv2.cvtColor(np.uint8([[[h_mid, 220, 220]]]), cv2.COLOR_HSV2BGR)[0][0].tolist()
+    solid = np.full(frame.shape, bgr_color, dtype=np.uint8)
+    result = cv2.bitwise_and(solid, solid, mask=mask)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     H     = hsv[:, :, 0]
     S     = hsv[:, :, 1]
     V     = hsv[:, :, 2]
     debug = frame.copy()
-    metadata = []
+    overlay = debug.copy()
+    metadata  = []
 
     for contour in contours:
         area       = cv2.contourArea(contour)
@@ -296,15 +305,21 @@ def process_frame(frame, color_low, color_high, hsv_values, min_area_ratio=0.000
 
         yy = roi_H[roi_mask > 0]
         if yy.size > 0:
-            d     = abs(yy.astype(np.int16) - hue)
-            d_i   = np.minimum(d, 180 - d).astype(np.float32)
-            hue_i = np.maximum(0.0, 1.0 - (d_i / saturation)).mean()
+            # --- Hue Accuracy ---
+            d = abs(yy.astype(np.int16) - hue)
+            d_i = np.minimum(d, 180 - d).astype(np.float32)
+            hue_i = np.maximum(0.0, 1.0 - (d_i / max(int(saturation), 1))).mean()
 
-            sat      = roi_S[roi_mask > 0].astype(np.float32) / 255
-            bri      = roi_V[roi_mask > 0].astype(np.float32) / 255
-            sv_boost = ((sat + bri) / 2).mean()
+            # --- Saturation and brightness ---
+            sat = roi_S[roi_mask>0].astype(np.float32) / 255
+            bri = roi_V[roi_mask>0].astype(np.float32) / 255
+            sv_boost = ((sat + bri)/2).mean()
 
+            # --- Confidence ---
             confidence = ((0.0 * fill_ratio) + (0.9 * hue_i) + (0.1 * sv_boost)) * 100
+
+            # colored fill on debug overlay
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), bgr_color, -1)
 
             metadata.append({
                 "Position": (float(x), float(y)),
@@ -312,6 +327,9 @@ def process_frame(frame, color_low, color_high, hsv_values, min_area_ratio=0.000
                 "Score":    float(confidence),
                 "Area":     float(area),
             })
+
+    # blend colored fills (40% opacity) into debug image
+    cv2.addWeighted(overlay, 0.4, debug, 0.6, 0, debug)
 
     metadata.sort(key=lambda d: d["Position"][0])
     for i, d in enumerate(metadata):

@@ -125,7 +125,7 @@ class MissionSequencer : public rclcpp::Node {
   // ── Parsed mission command ──
   enum class CmdType : uint8_t {
     NAV, NAV_REV, NUDGE, STOP, WAIT, TASK,
-    READ_ANTENNA, ARM, INTAKE, VELOCITY_RAW,
+    READ_ANTENNA, ARM, INTAKE, VELOCITY_RAW, MINIBOT,
   };
 
   struct MissionCmd {
@@ -142,6 +142,7 @@ class MissionSequencer : public rclcpp::Node {
     int16_t position = 0;              // ARM
     uint8_t speed = 0;                 // ARM
     uint8_t intake_cmd = 0;            // INTAKE
+    std::string minibot_action;        // MINIBOT ("enter" or "exit")
   };
 
   static MissionCmd parseCommand(const std::string& line);
@@ -262,6 +263,11 @@ class MissionSequencer : public rclcpp::Node {
   // Intake state
   uint8_t intake_state_ = 0;
 
+  // Minibot service call state
+  bool minibot_call_active_ = false;
+  bool minibot_call_done_ = false;
+  bool minibot_call_success_ = false;
+
   // Antenna reading state
   bool antenna_read_active_ = false;
   std::string last_antenna_color_;
@@ -276,6 +282,8 @@ class MissionSequencer : public rclcpp::Node {
 
   // Service clients
   rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr imu_tare_client_;
+  rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr minibot_enter_client_;
+  rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr minibot_exit_client_;
 
   // Action clients
   rclcpp_action::Client<ReadBeaconColor>::SharedPtr beacon_color_client_;

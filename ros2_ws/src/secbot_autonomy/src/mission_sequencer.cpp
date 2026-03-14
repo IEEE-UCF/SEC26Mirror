@@ -70,6 +70,12 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   imu_tare_client_ =
       this->create_client<mcu_msgs::srv::Reset>("/mcu_robot/imu/tare");
 
+  // Minibot service clients
+  minibot_enter_client_ =
+      this->create_client<mcu_msgs::srv::Reset>("/mcu_minibot/enter_crater");
+  minibot_exit_client_ =
+      this->create_client<mcu_msgs::srv::Reset>("/mcu_minibot/exit_crater");
+
   // ReadBeaconColor action client
   beacon_color_client_ =
       rclcpp_action::create_client<ReadBeaconColor>(this, "read_beacon_color");
@@ -136,6 +142,10 @@ MissionSequencer::MissionCmd MissionSequencer::parseCommand(
     cmd.type = CmdType::VELOCITY_RAW;
     ss >> cmd.vx >> cmd.omega;
     if (!(ss >> cmd.duration)) cmd.duration = 1.0;
+  } else if (token == "minibot") {
+    cmd.type = CmdType::MINIBOT;
+    ss >> cmd.minibot_action;  // "enter" or "exit"
+    if (!(ss >> cmd.timeout)) cmd.timeout = 15.0;
   }
 
   return cmd;
@@ -760,6 +770,50 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
       }
       if (stepElapsed() > cmd.duration) {
         stopRobot();
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::MINIBOT: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: minibot %s",
+                    phase_name, idx + 1, cmds.size(),
+                    cmd.minibot_action.c_str());
+
+        auto client = (cmd.minibot_action == "exit")
+                          ? minibot_exit_client_
+                          : minibot_enter_client_;
+
+        if (!client->wait_for_service(std::chrono::seconds(2))) {
+          RCLCPP_WARN(this->get_logger(),
+                      "  Minibot service not available, skipping");
+          minibot_call_active_ = false;
+          minibot_call_done_ = true;
+          minibot_call_success_ = false;
+        } else {
+          minibot_call_active_ = true;
+          minibot_call_done_ = false;
+          minibot_call_success_ = false;
+
+          auto req = std::make_shared<mcu_msgs::srv::Reset::Request>();
+          client->async_send_request(
+              req,
+              [this](rclcpp::Client<mcu_msgs::srv::Reset>::SharedFuture future) {
+                auto result = future.get();
+                minibot_call_success_ = result->success;
+                minibot_call_done_ = true;
+                minibot_call_active_ = false;
+                RCLCPP_INFO(this->get_logger(),
+                            "  Minibot service returned: %s",
+                            result->success ? "OK" : "FAILED");
+              });
+        }
+      }
+
+      double t = (cmd.timeout > 0) ? cmd.timeout : 15.0;
+      if (minibot_call_done_ || checkStepTimeout(t)) {
         setStep(++idx);
       }
       break;

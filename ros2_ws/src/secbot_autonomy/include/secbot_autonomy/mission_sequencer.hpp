@@ -19,23 +19,23 @@
 #include <chrono>
 #include <cmath>
 #include <future>
-#include <string>
-#include <vector>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <mcu_msgs/msg/arm_command.hpp>
 #include <mcu_msgs/msg/drive_base.hpp>
 #include <mcu_msgs/msg/intake_command.hpp>
 #include <mcu_msgs/msg/intake_state.hpp>
-#include <mcu_msgs/msg/robot_inputs.hpp>
 #include <mcu_msgs/srv/reset.hpp>
-#include <mcu_msgs/srv/set_drive_config.hpp>
+#include <mcu_msgs/srv/set_motor.hpp>
+#include <mcu_msgs/srv/set_servo.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <secbot_msgs/action/read_beacon_color.hpp>
 #include <secbot_msgs/msg/task_status.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <string>
+#include <vector>
 
 namespace secbot {
 
@@ -48,11 +48,10 @@ enum class MissionPhase : uint8_t {
   MISSION_COMPLETE = 4,
 };
 
-// ── Setup state machine (IMU tare → drive config → pose reset → settle) ──
+// ── Setup state machine (IMU tare → pose reset → settle) ──
 enum class SetupState : uint8_t {
   IDLE = 0,
   TARE_WAIT,
-  DRIVE_CONFIG,
   POSE_RESET,
   SETTLE,
   DONE,
@@ -104,46 +103,63 @@ class MissionSequencer : public rclcpp::Node {
   }
 
   // ── Tolerances & timing ──
-  static constexpr double DIST_TOL_M = 0.03;          // 3 cm
-  static constexpr double HEADING_TOL_RAD = 0.12;      // ~7 deg
+  static constexpr double DIST_TOL_M = 0.03;       // 3 cm
+  static constexpr double HEADING_TOL_RAD = 0.12;  // ~7 deg
   double turn_timeout_s_ = 3.0;
   double drive_timeout_s_ = 3.0;
   double default_step_timeout_s_ = 3.0;
   static constexpr double INTER_MOVE_PAUSE_S = 0.4;
-  static constexpr double MIN_DRIVE_DIST_M = 0.02;     // below = pure turn
-  static constexpr double HEADING_MATCH_RAD = 0.1;     // ~6 deg, skip final turn
+  static constexpr double MIN_DRIVE_DIST_M = 0.02;  // below = pure turn
+  static constexpr double HEADING_MATCH_RAD = 0.1;  // ~6 deg, skip final turn
   static constexpr double SETUP_SETTLE_S = 0.5;
 
   // ── Turn-in-place P-controller ──
   // Uses DRIVE_VECTOR mode (vx=0, omega=K*err) so MCU never tries to
   // correct a phantom position error from atan2 when dist < poseDistTol.
-  static constexpr double TURN_KP = 2.0;              // rad/s per rad (matches MCU)
-  static constexpr double TURN_MAX_OMEGA = 3.0;       // rad/s cap (conservative)
-  static constexpr double TURN_MIN_OMEGA = 0.3;       // rad/s floor to overcome friction
+  static constexpr double TURN_KP = 2.0;         // rad/s per rad (matches MCU)
+  static constexpr double TURN_MAX_OMEGA = 3.0;  // rad/s cap (conservative)
+  static constexpr double TURN_MIN_OMEGA =
+      0.3;  // rad/s floor to overcome friction
 
   // ── Task IDs ──
   static constexpr uint8_t TASK_NONE = 0;
 
   // ── Parsed mission command ──
   enum class CmdType : uint8_t {
-    NAV, NAV_REV, NUDGE, STOP, WAIT, TASK,
-    READ_ANTENNA, ARM, INTAKE, VELOCITY_RAW,
+    NAV,
+    NAV_REV,
+    NUDGE,
+    STOP,
+    WAIT,
+    TASK,
+    READ_ANTENNA,
+    ARM,
+    INTAKE,
+    VELOCITY_RAW,
+    MINIBOT,
+    MOTOR,
+    SERVO,
   };
 
   struct MissionCmd {
     CmdType type;
     double x = 0, y = 0, heading = 0;  // NAV/NAV_REV
-    double timeout = 0;                 // 0 = use default
-    double duration = 1.0;              // WAIT/NUDGE/VELOCITY_RAW
+    double timeout = 0;                // 0 = use default
+    double duration = 1.0;             // WAIT/NUDGE/VELOCITY_RAW
     double vx = 0, omega = 0;          // VELOCITY_RAW
     uint8_t task_id = 0;               // TASK
-    std::string label;                  // READ_ANTENNA
+    std::string label;                 // READ_ANTENNA
     float camera_angle = 90.0f;        // READ_ANTENNA
     int antenna_slot = -1;             // READ_ANTENNA storage index
     uint8_t joint = 0;                 // ARM
     int16_t position = 0;              // ARM
     uint8_t speed = 0;                 // ARM
     uint8_t intake_cmd = 0;            // INTAKE
+    std::string minibot_action;        // MINIBOT ("enter" or "exit")
+    uint8_t motor_index = 0;           // MOTOR
+    float motor_speed = 0.0f;          // MOTOR (-1.0 to 1.0)
+    uint8_t servo_index = 0;           // SERVO
+    float servo_angle = 0.0f;          // SERVO (0-180 degrees)
   };
 
   static MissionCmd parseCommand(const std::string& line);
@@ -159,13 +175,10 @@ class MissionSequencer : public rclcpp::Node {
   // ── Setup state machine ──
   void startSetup(double start_x_cm, double start_y_cm, double start_yaw_deg);
   bool tickSetup();  // returns true when done
-  void sendDriveConfig();  // send YAML-loaded config to MCU
 
   SetupState setup_state_ = SetupState::IDLE;
   bool tare_sent_ = false;
   std::shared_future<mcu_msgs::srv::Reset::Response::SharedPtr> tare_future_;
-  bool drive_config_sent_ = false;
-  std::shared_future<mcu_msgs::srv::SetDriveConfig::Response::SharedPtr> drive_config_future_;
   McuPose setup_pose_{};
   std::chrono::steady_clock::time_point settle_start_;
 
@@ -226,7 +239,7 @@ class MissionSequencer : public rclcpp::Node {
   // ── Subscriber callbacks ──
   void onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg);
   void onTaskStatus(const secbot_msgs::msg::TaskStatus::SharedPtr msg);
-  void onRobotInputs(const mcu_msgs::msg::RobotInputs::SharedPtr msg);
+  void onButtons(const std_msgs::msg::UInt8::SharedPtr msg);
   void onIntakeState(const mcu_msgs::msg::IntakeState::SharedPtr msg);
 
   // ── State ──
@@ -260,6 +273,7 @@ class MissionSequencer : public rclcpp::Node {
 
   // Start signal
   bool start_button_pressed_ = false;
+  bool button_start_enabled_ = true;
 
   // Task state
   bool task_idle_ = true;
@@ -267,10 +281,24 @@ class MissionSequencer : public rclcpp::Node {
   // Intake state
   uint8_t intake_state_ = 0;
 
+  // Minibot service call state
+  bool minibot_call_active_ = false;
+  bool minibot_call_done_ = false;
+  bool minibot_call_success_ = false;
+
+  // Motor service call state
+  bool motor_call_done_ = false;
+  bool motor_call_success_ = false;
+
+  // Servo service call state
+  bool servo_call_done_ = false;
+  bool servo_call_success_ = false;
+
   // Antenna reading state
   bool antenna_read_active_ = false;
   std::string last_antenna_color_;
-  std::array<std::string, 5> antenna_colors_;  // indexed by antenna (0-3: beacon, keypad, crater, crank)
+  std::array<std::string, 5> antenna_colors_;  // indexed by antenna (0-3:
+                                               // beacon, keypad, crater, crank)
 
   // ── Tunable parameters from YAML ──
   double nudge_speed_mps_ = 0.25;
@@ -281,7 +309,10 @@ class MissionSequencer : public rclcpp::Node {
 
   // Service clients
   rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr imu_tare_client_;
-  rclcpp::Client<mcu_msgs::srv::SetDriveConfig>::SharedPtr drive_config_client_;
+  rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr minibot_enter_client_;
+  rclcpp::Client<mcu_msgs::srv::Reset>::SharedPtr minibot_exit_client_;
+  rclcpp::Client<mcu_msgs::srv::SetMotor>::SharedPtr set_motor_client_;
+  rclcpp::Client<mcu_msgs::srv::SetServo>::SharedPtr set_servo_client_;
 
   // Action clients
   rclcpp_action::Client<ReadBeaconColor>::SharedPtr beacon_color_client_;
@@ -298,10 +329,8 @@ class MissionSequencer : public rclcpp::Node {
   rclcpp::Subscription<mcu_msgs::msg::DriveBase>::SharedPtr drive_status_sub_;
   rclcpp::Subscription<secbot_msgs::msg::TaskStatus>::SharedPtr
       task_status_sub_;
-  rclcpp::Subscription<mcu_msgs::msg::RobotInputs>::SharedPtr
-      robot_inputs_sub_;
-  rclcpp::Subscription<mcu_msgs::msg::IntakeState>::SharedPtr
-      intake_state_sub_;
+  rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr buttons_sub_;
+  rclcpp::Subscription<mcu_msgs::msg::IntakeState>::SharedPtr intake_state_sub_;
 };
 
 }  // namespace secbot

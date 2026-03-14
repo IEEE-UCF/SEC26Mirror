@@ -97,7 +97,8 @@ class DetectorNode(Node):
         # DUCK STATE IS 1, ANTENNA STATE IS 0
         self._isDuck() if duck_or_antenna else self._isAntenna()
 
-        self.debug_filter = self.get_parameter('debug_filter').value
+        _df = self.get_parameter('debug_filter').value
+        self.debug_filter = '' if _df in ('', 'none') else _df
 
         self.color_configs_for_objects = []
         for filter_name in self.filters_array:
@@ -306,9 +307,10 @@ def process_frame(frame, color_low, color_high, hsv_values, min_area_ratio=0.000
         yy = roi_H[roi_mask > 0]
         if yy.size > 0:
             # --- Hue Accuracy ---
+            HUE_TOLERANCE = 15.0  # max hue distance before confidence drops to 0
             d = abs(yy.astype(np.int16) - hue)
             d_i = np.minimum(d, 180 - d).astype(np.float32)
-            hue_i = np.maximum(0.0, 1.0 - (d_i / max(int(saturation), 1))).mean()
+            hue_i = np.maximum(0.0, 1.0 - (d_i / HUE_TOLERANCE)).mean()
 
             # --- Saturation and brightness ---
             sat = roi_S[roi_mask>0].astype(np.float32) / 255

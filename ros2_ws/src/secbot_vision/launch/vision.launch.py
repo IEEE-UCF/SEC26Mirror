@@ -19,6 +19,7 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch.actions import ExecuteProcess
 from launch.conditions import LaunchConfigurationEquals
 from ament_index_python.packages import get_package_share_directory
 
@@ -77,6 +78,8 @@ def generate_launch_description():
                 'to disable tuning and run normal detection from colors.yaml.'
             ),
         ),
+        DeclareLaunchArgument('dummy_servo', default_value='false',
+                              description='Launch a dummy SetServo service for testing without MCU'),
         DeclareLaunchArgument('enable_goal_converter', default_value='true',
                               description='Launch convert_vision_to_goal node'),
         DeclareLaunchArgument('odom_topic', default_value='/odometry/global',
@@ -125,6 +128,45 @@ def generate_launch_description():
                 },
             ],
             output='screen',
+        ),
+
+        # Antenna detector (runs in parallel with duck detector)
+        Node(
+            package='secbot_vision',
+            executable='detector_node',
+            name='antenna_detector_node',
+            arguments=['antenna'],
+            parameters=[{
+                'image_topic':  '/camera/image_raw',
+                'debug_filter': '',
+                'debug_viz':    False,
+            }],
+            output='screen',
+        ),
+
+        # Beacon color action server
+        Node(
+            package='secbot_vision',
+            executable='read_beacon_color',
+            name='read_beacon_color',
+            output='screen',
+        ),
+
+        # Dummy servo service for testing without MCU hardware
+        ExecuteProcess(
+            cmd=['python3', '-c', (
+                'import rclpy; from rclpy.node import Node; '
+                'from mcu_msgs.srv import SetServo; '
+                'rclpy.init(); '
+                'n = Node("dummy_servo"); '
+                'n.create_service(SetServo, "/mcu_robot/servo/set", '
+                'lambda req, res: [setattr(res, "success", True), '
+                'n.get_logger().info(f"Dummy servo {req.index} -> {req.angle}"), res][-1]); '
+                'n.get_logger().info("Dummy servo service ready"); '
+                'rclpy.spin(n)'
+            )],
+            output='screen',
+            condition=LaunchConfigurationEquals('dummy_servo', 'true'),
         ),
 
         # Vision-to-goal converter: turns duck detections into navigation goals

@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./scripts/launch_vision.sh                    # uses CAMERA_PROFILE from .env
+#   ./scripts/launch_vision.sh --test             # test mode: no tuning GUI, dummy servo
 #   ./scripts/launch_vision.sh backend:=opencv    # override individual args
 #
 # To switch profiles, edit .env and set CAMERA_PROFILE=rpicam or CAMERA_PROFILE=webcam.
@@ -23,5 +24,15 @@ fi
 source /opt/ros/jazzy/setup.bash
 source "${SCRIPT_DIR}/../ros2_workspaces/install/setup.bash"
 
-exec ros2 launch secbot_vision vision.launch.py "$@"
+# --test flag: disable tuning GUI, enable dummy servo
+EXTRA_ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--test" ]; then
+        EXTRA_ARGS+=("debug_filter:=none" "dummy_servo:=true")
+    else
+        EXTRA_ARGS+=("$arg")
+    fi
+done
+
+exec ros2 launch secbot_vision vision.launch.py "${EXTRA_ARGS[@]}"
 

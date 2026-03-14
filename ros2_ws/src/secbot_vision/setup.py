@@ -54,7 +54,7 @@ setup(
             'teleop_pid = secbot_vision.teleop_pid:main',
             'camera_node = secbot_vision.camera_node:main',
             'rgb_slider_gui = secbot_vision.gui_tunning:main',
-            'convert_vision_to_goal = secbot_vision.convert_vision_to_goal:main'
+            'convert_vision_to_goal = secbot_vision.convert_vision_to_goal:main',
             'read_beacon_color = secbot_vision.read_beacon_color:main',
         ],
     },

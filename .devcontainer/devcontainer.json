@@ -5,6 +5,7 @@
   "workspaceFolder": "/home/ubuntu",
   "overrideCommand": false,
   "remoteUser": "ubuntu",
+  "forwardPorts": [5000],
   "features": {},
   "customizations": {
     "vscode": {

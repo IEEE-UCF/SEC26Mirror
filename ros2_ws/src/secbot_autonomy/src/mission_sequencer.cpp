@@ -32,12 +32,12 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
   // Publishers
   drive_cmd_pub_ = this->create_publisher<mcu_msgs::msg::DriveBase>(
       "drive_base/command", 10);
-  task_cmd_pub_ =
-      this->create_publisher<std_msgs::msg::UInt8>("/autonomy/task_command", 10);
+  task_cmd_pub_ = this->create_publisher<std_msgs::msg::UInt8>(
+      "/autonomy/task_command", 10);
   minibot_cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
       "/mcu_minibot/cmd_vel", 10);
-  arm_cmd_pub_ = this->create_publisher<mcu_msgs::msg::ArmCommand>(
-      "/arm_command", 10);
+  arm_cmd_pub_ =
+      this->create_publisher<mcu_msgs::msg::ArmCommand>("/arm_command", 10);
   intake_cmd_pub_ = this->create_publisher<mcu_msgs::msg::IntakeCommand>(
       "/mcu_robot/intake/command", 10);
   pose_reset_pub_ = this->create_publisher<geometry_msgs::msg::Pose>(
@@ -66,9 +66,8 @@ MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
 
   // Start service
   start_service_ = this->create_service<std_srvs::srv::Trigger>(
-      "/mission/start",
-      std::bind(&MissionSequencer::onStartService, this, _1,
-                std::placeholders::_2));
+      "/mission/start", std::bind(&MissionSequencer::onStartService, this, _1,
+                                  std::placeholders::_2));
 
   // IMU tare service client
   imu_tare_client_ =
@@ -115,7 +114,10 @@ MissionSequencer::MissionCmd MissionSequencer::parseCommand(
     cmd.type = (token == "nav") ? CmdType::NAV : CmdType::NAV_REV;
     ss >> cmd.x >> cmd.y >> cmd.heading;
     // Optional timeout as 4th number
-    if (ss >> cmd.timeout) { /* got it */ } else { cmd.timeout = 0; }
+    if (ss >> cmd.timeout) { /* got it */
+    } else {
+      cmd.timeout = 0;
+    }
   } else if (token == "nudge") {
     cmd.type = CmdType::NUDGE;
     if (!(ss >> cmd.duration)) cmd.duration = 1.0;
@@ -126,7 +128,9 @@ MissionSequencer::MissionCmd MissionSequencer::parseCommand(
     ss >> cmd.duration;
   } else if (token == "task") {
     cmd.type = CmdType::TASK;
-    int id; ss >> id; cmd.task_id = static_cast<uint8_t>(id);
+    int id;
+    ss >> id;
+    cmd.task_id = static_cast<uint8_t>(id);
     if (!(ss >> cmd.timeout)) cmd.timeout = 30.0;
   } else if (token == "read_antenna") {
     cmd.type = CmdType::READ_ANTENNA;
@@ -143,10 +147,11 @@ MissionSequencer::MissionCmd MissionSequencer::parseCommand(
     if (!(ss >> cmd.duration)) cmd.duration = 1.0;
   } else if (token == "intake") {
     cmd.type = CmdType::INTAKE;
-    std::string action; ss >> action;
+    std::string action;
+    ss >> action;
     cmd.intake_cmd = (action == "extend")
-        ? mcu_msgs::msg::IntakeCommand::CMD_EXTEND
-        : mcu_msgs::msg::IntakeCommand::CMD_RETRACT;
+                         ? mcu_msgs::msg::IntakeCommand::CMD_EXTEND
+                         : mcu_msgs::msg::IntakeCommand::CMD_RETRACT;
     if (!(ss >> cmd.timeout)) cmd.timeout = 10.0;
   } else if (token == "velocity_raw") {
     cmd.type = CmdType::VELOCITY_RAW;
@@ -158,14 +163,16 @@ MissionSequencer::MissionCmd MissionSequencer::parseCommand(
     if (!(ss >> cmd.timeout)) cmd.timeout = 15.0;
   } else if (token == "motor") {
     cmd.type = CmdType::MOTOR;
-    int idx; float spd;
+    int idx;
+    float spd;
     ss >> idx >> spd;
     cmd.motor_index = static_cast<uint8_t>(idx);
     cmd.motor_speed = spd;
     if (!(ss >> cmd.timeout)) cmd.timeout = 5.0;
   } else if (token == "servo") {
     cmd.type = CmdType::SERVO;
-    int idx; float ang;
+    int idx;
+    float ang;
     ss >> idx >> ang;
     cmd.servo_index = static_cast<uint8_t>(idx);
     cmd.servo_angle = ang;
@@ -192,11 +199,14 @@ void MissionSequencer::loadMission() {
   this->declare_parameter<double>("default_step_timeout", 3.0);
   turn_timeout_s_ = this->get_parameter("turn_timeout").as_double();
   drive_timeout_s_ = this->get_parameter("drive_timeout").as_double();
-  default_step_timeout_s_ = this->get_parameter("default_step_timeout").as_double();
+  default_step_timeout_s_ =
+      this->get_parameter("default_step_timeout").as_double();
 
   // Phase commands
-  this->declare_parameter<std::vector<std::string>>("phase_button", std::vector<std::string>{});
-  this->declare_parameter<std::vector<std::string>>("phase_keypad", std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("phase_button",
+                                                    std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("phase_keypad",
+                                                    std::vector<std::string>{});
 
   auto button_strs = this->get_parameter("phase_button").as_string_array();
   auto keypad_strs = this->get_parameter("phase_keypad").as_string_array();
@@ -266,10 +276,9 @@ bool MissionSequencer::tickSetup() {
     }
 
     case SetupState::SETTLE: {
-      double elapsed =
-          std::chrono::duration<double>(std::chrono::steady_clock::now() -
-                                        settle_start_)
-              .count();
+      double elapsed = std::chrono::duration<double>(
+                           std::chrono::steady_clock::now() - settle_start_)
+                           .count();
       if (elapsed >= SETUP_SETTLE_S) {
         setup_state_ = SetupState::DONE;
         RCLCPP_INFO(this->get_logger(), "[SETUP] Complete");
@@ -316,10 +325,9 @@ void MissionSequencer::startNavMove(double x_cm, double y_cm,
     RCLCPP_INFO(this->get_logger(),
                 "  NavMove: (%.0f,%.0f,%.0f%s) → MCU(%.3f,%.3f) "
                 "travel_hdg=%.1f° final_hdg=%.1f° dist=%.3f m",
-                x_cm, y_cm, heading_deg, reverse ? " REV" : "",
-                nav_target_.x_m, nav_target_.y_m,
-                rad2deg(nav_travel_heading_), rad2deg(nav_final_heading_),
-                dist);
+                x_cm, y_cm, heading_deg, reverse ? " REV" : "", nav_target_.x_m,
+                nav_target_.y_m, rad2deg(nav_travel_heading_),
+                rad2deg(nav_final_heading_), dist);
     // Skip TURN_TO_FACE — assume robot is already facing the right direction.
     // Go directly to DRIVE phase (via PAUSE to settle).
     advanceNavSubStep(NavSubStep::PAUSE);
@@ -346,11 +354,11 @@ void MissionSequencer::tickNavMove() {
                                           nav_substep_timer_)
                 .count();
         if (elapsed > drive_timeout_s_) {
-          RCLCPP_WARN(this->get_logger(),
-                      "  NavMove: DRIVE timed out (%.1f s)", elapsed);
+          RCLCPP_WARN(this->get_logger(), "  NavMove: DRIVE timed out (%.1f s)",
+                      elapsed);
           // Check if we need final heading turn
-          double hdg_err =
-              std::abs(normalizeAngle(nav_final_heading_ - nav_travel_heading_));
+          double hdg_err = std::abs(
+              normalizeAngle(nav_final_heading_ - nav_travel_heading_));
           if (hdg_err > HEADING_MATCH_RAD) {
             advanceNavSubStep(NavSubStep::PAUSE);
           } else {
@@ -411,8 +419,8 @@ void MissionSequencer::tickNavMove() {
           RCLCPP_INFO(this->get_logger(), "  NavMove: → DRIVE");
         } else if (nav_pause_next_ == NavSubStep::TURN_TO_HEADING) {
           // Check if heading turn is even needed
-          double hdg_err = std::abs(
-              normalizeAngle(nav_final_heading_ - robot_theta_rad_));
+          double hdg_err =
+              std::abs(normalizeAngle(nav_final_heading_ - robot_theta_rad_));
           if (hdg_err < HEADING_TOL_RAD) {
             RCLCPP_INFO(this->get_logger(),
                         "  NavMove: skip TURN_TO_HEADING (err=%.1f deg < tol)",
@@ -462,8 +470,7 @@ void MissionSequencer::advanceNavSubStep(NavSubStep next) {
     // Enter turn sub-step — tickNavMove() runs P-controller via DRIVE_VECTOR
     nav_sub_step_ = NavSubStep::TURN_TO_HEADING;
     nav_substep_timer_ = std::chrono::steady_clock::now();
-    RCLCPP_INFO(this->get_logger(),
-                "  NavMove: → TURN_TO_HEADING (%.1f deg)",
+    RCLCPP_INFO(this->get_logger(), "  NavMove: → TURN_TO_HEADING (%.1f deg)",
                 rad2deg(nav_final_heading_));
   } else if (next == NavSubStep::DONE) {
     nav_sub_step_ = NavSubStep::DONE;
@@ -557,8 +564,7 @@ void MissionSequencer::refreshDriveCommand() {
   }
 }
 
-void MissionSequencer::resetPoseMcu(double x_m, double y_m,
-                                    double theta_rad) {
+void MissionSequencer::resetPoseMcu(double x_m, double y_m, double theta_rad) {
   auto msg = geometry_msgs::msg::Pose();
   msg.position.x = x_m;
   msg.position.y = y_m;
@@ -605,8 +611,7 @@ void MissionSequencer::sendIntakeCommand(uint8_t cmd, float value) {
               value);
 }
 
-void MissionSequencer::startAntennaRead(const char* label,
-                                        float camera_angle) {
+void MissionSequencer::startAntennaRead(const char* label, float camera_angle) {
   antenna_read_active_ = true;
   last_antenna_color_ = "unknown";
 
@@ -623,21 +628,19 @@ void MissionSequencer::startAntennaRead(const char* label,
   goal.camera_angle_goal = camera_angle;
 
   auto options = rclcpp_action::Client<ReadBeaconColor>::SendGoalOptions();
-  options.result_callback =
-      [this, lbl = std::string(label)](
-          const BeaconGoalHandle::WrappedResult& result) {
-        antenna_read_active_ = false;
-        if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
-          last_antenna_color_ = result.result->color;
-          RCLCPP_INFO(this->get_logger(), "  Antenna %s read: %s", lbl.c_str(),
-                      last_antenna_color_.c_str());
-        } else {
-          last_antenna_color_ = "unknown";
-          RCLCPP_WARN(this->get_logger(),
-                      "  Antenna %s read failed (code=%d)", lbl.c_str(),
-                      static_cast<int>(result.code));
-        }
-      };
+  options.result_callback = [this, lbl = std::string(label)](
+                                const BeaconGoalHandle::WrappedResult& result) {
+    antenna_read_active_ = false;
+    if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+      last_antenna_color_ = result.result->color;
+      RCLCPP_INFO(this->get_logger(), "  Antenna %s read: %s", lbl.c_str(),
+                  last_antenna_color_.c_str());
+    } else {
+      last_antenna_color_ = "unknown";
+      RCLCPP_WARN(this->get_logger(), "  Antenna %s read failed (code=%d)",
+                  lbl.c_str(), static_cast<int>(result.code));
+    }
+  };
 
   beacon_color_client_->async_send_goal(goal, options);
   RCLCPP_INFO(this->get_logger(),
@@ -654,8 +657,7 @@ void MissionSequencer::startAntennaRead(const char* label,
 // ============================================================================
 
 void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
-                                            int& idx,
-                                            MissionPhase next_phase,
+                                            int& idx, MissionPhase next_phase,
                                             const char* phase_name) {
   if (idx >= static_cast<int>(cmds.size())) {
     RCLCPP_INFO(this->get_logger(), "=== %s COMPLETE ===", phase_name);
@@ -672,8 +674,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
         step_entry_ = false;
         bool rev = (cmd.type == CmdType::NAV_REV);
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: %s %.0f %.0f %.0f",
-                    phase_name, idx + 1, cmds.size(),
-                    rev ? "nav_rev" : "nav", cmd.x, cmd.y, cmd.heading);
+                    phase_name, idx + 1, cmds.size(), rev ? "nav_rev" : "nav",
+                    cmd.x, cmd.y, cmd.heading);
         startNavMove(cmd.x, cmd.y, cmd.heading, rev);
       }
       tickNavMove();
@@ -701,8 +703,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
     case CmdType::STOP: {
       if (step_entry_) {
         step_entry_ = false;
-        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: stop",
-                    phase_name, idx + 1, cmds.size());
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: stop", phase_name,
+                    idx + 1, cmds.size());
         stopRobot();
       }
       setStep(++idx);
@@ -713,8 +715,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
       if (step_entry_) {
         step_entry_ = false;
         stopRobot();
-        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: wait %.1fs",
-                    phase_name, idx + 1, cmds.size(), cmd.duration);
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: wait %.1fs", phase_name,
+                    idx + 1, cmds.size(), cmd.duration);
       }
       if (stepElapsed() > cmd.duration) {
         setStep(++idx);
@@ -726,8 +728,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
       if (step_entry_) {
         step_entry_ = false;
         stopRobot();
-        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: task %d",
-                    phase_name, idx + 1, cmds.size(), cmd.task_id);
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: task %d", phase_name,
+                    idx + 1, cmds.size(), cmd.task_id);
         sendTaskCommand(cmd.task_id);
       }
       double t = (cmd.timeout > 0) ? cmd.timeout : 30.0;
@@ -742,8 +744,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
         step_entry_ = false;
         stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: read_antenna %s %.1f",
-                    phase_name, idx + 1, cmds.size(),
-                    cmd.label.c_str(), cmd.camera_angle);
+                    phase_name, idx + 1, cmds.size(), cmd.label.c_str(),
+                    cmd.camera_angle);
         startAntennaRead(cmd.label.c_str(), cmd.camera_angle);
       }
       double t = (cmd.timeout > 0) ? cmd.timeout : 10.0;
@@ -762,8 +764,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
         step_entry_ = false;
         stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: arm %d %d %d",
-                    phase_name, idx + 1, cmds.size(),
-                    cmd.joint, cmd.position, cmd.speed);
+                    phase_name, idx + 1, cmds.size(), cmd.joint, cmd.position,
+                    cmd.speed);
         sendArmCommand(cmd.joint, cmd.position, cmd.speed);
       }
       if (stepElapsed() > cmd.duration) {
@@ -776,8 +778,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
       if (step_entry_) {
         step_entry_ = false;
         stopRobot();
-        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: intake %d",
-                    phase_name, idx + 1, cmds.size(), cmd.intake_cmd);
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: intake %d", phase_name,
+                    idx + 1, cmds.size(), cmd.intake_cmd);
         sendIntakeCommand(cmd.intake_cmd);
       }
       double t = (cmd.timeout > 0) ? cmd.timeout : 10.0;
@@ -793,8 +795,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
         step_entry_ = false;
         RCLCPP_INFO(this->get_logger(),
                     "  %s [%d/%zu]: velocity_raw vx=%.2f omega=%.2f (%.1fs)",
-                    phase_name, idx + 1, cmds.size(),
-                    cmd.vx, cmd.omega, cmd.duration);
+                    phase_name, idx + 1, cmds.size(), cmd.vx, cmd.omega,
+                    cmd.duration);
         sendVelocityRaw(cmd.vx, cmd.omega);
       }
       if (stepElapsed() > cmd.duration) {
@@ -808,13 +810,11 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
       if (step_entry_) {
         step_entry_ = false;
         stopRobot();
-        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: minibot %s",
-                    phase_name, idx + 1, cmds.size(),
-                    cmd.minibot_action.c_str());
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: minibot %s", phase_name,
+                    idx + 1, cmds.size(), cmd.minibot_action.c_str());
 
-        auto client = (cmd.minibot_action == "exit")
-                          ? minibot_exit_client_
-                          : minibot_enter_client_;
+        auto client = (cmd.minibot_action == "exit") ? minibot_exit_client_
+                                                     : minibot_enter_client_;
 
         if (!client->wait_for_service(std::chrono::seconds(2))) {
           RCLCPP_WARN(this->get_logger(),
@@ -830,7 +830,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
           auto req = std::make_shared<mcu_msgs::srv::Reset::Request>();
           client->async_send_request(
               req,
-              [this](rclcpp::Client<mcu_msgs::srv::Reset>::SharedFuture future) {
+              [this](
+                  rclcpp::Client<mcu_msgs::srv::Reset>::SharedFuture future) {
                 auto result = future.get();
                 minibot_call_success_ = result->success;
                 minibot_call_done_ = true;
@@ -854,8 +855,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
         step_entry_ = false;
         stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: motor %d %.2f",
-                    phase_name, idx + 1, cmds.size(),
-                    cmd.motor_index, cmd.motor_speed);
+                    phase_name, idx + 1, cmds.size(), cmd.motor_index,
+                    cmd.motor_speed);
 
         motor_call_done_ = false;
         motor_call_success_ = false;
@@ -870,8 +871,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
           req->index = cmd.motor_index;
           req->speed = cmd.motor_speed;
           set_motor_client_->async_send_request(
-              req,
-              [this](rclcpp::Client<mcu_msgs::srv::SetMotor>::SharedFuture future) {
+              req, [this](rclcpp::Client<mcu_msgs::srv::SetMotor>::SharedFuture
+                              future) {
                 auto result = future.get();
                 motor_call_success_ = result->success;
                 motor_call_done_ = true;
@@ -894,8 +895,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
         step_entry_ = false;
         stopRobot();
         RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: servo %d %.1f",
-                    phase_name, idx + 1, cmds.size(),
-                    cmd.servo_index, cmd.servo_angle);
+                    phase_name, idx + 1, cmds.size(), cmd.servo_index,
+                    cmd.servo_angle);
 
         servo_call_done_ = false;
         servo_call_success_ = false;
@@ -910,8 +911,8 @@ void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
           req->index = cmd.servo_index;
           req->angle = cmd.servo_angle;
           set_servo_client_->async_send_request(
-              req,
-              [this](rclcpp::Client<mcu_msgs::srv::SetServo>::SharedFuture future) {
+              req, [this](rclcpp::Client<mcu_msgs::srv::SetServo>::SharedFuture
+                              future) {
                 auto result = future.get();
                 servo_call_success_ = result->success;
                 servo_call_done_ = true;
@@ -1091,8 +1092,8 @@ void MissionSequencer::onDriveStatus(
                   "  GOAL REACHED at MCU(%.3f, %.3f, %.1f deg) "
                   "Rafeed(%.1f, %.1f, %.1f deg) "
                   "err: dist=%.3f m, heading=%.1f deg",
-                  robot_x_m_, robot_y_m_, rad2deg(robot_theta_rad_),
-                  raf.x_cm, raf.y_cm, raf.yaw_deg, dist, rad2deg(heading_err));
+                  robot_x_m_, robot_y_m_, rad2deg(robot_theta_rad_), raf.x_cm,
+                  raf.y_cm, raf.yaw_deg, dist, rad2deg(heading_err));
     }
   }
 
@@ -1106,10 +1107,9 @@ void MissionSequencer::onDriveStatus(
                   "  [POSE] MCU(%.3f, %.3f, %.1f deg) "
                   "Rafeed(%.1f, %.1f, %.1f deg) "
                   "goal_MCU(%.3f, %.3f, %.1f deg) navStep=%d",
-                  robot_x_m_, robot_y_m_, rad2deg(robot_theta_rad_),
-                  raf.x_cm, raf.y_cm, raf.yaw_deg, goal_x_m_, goal_y_m_,
-                  rad2deg(goal_theta_rad_),
-                  static_cast<int>(nav_sub_step_));
+                  robot_x_m_, robot_y_m_, rad2deg(robot_theta_rad_), raf.x_cm,
+                  raf.y_cm, raf.yaw_deg, goal_x_m_, goal_y_m_,
+                  rad2deg(goal_theta_rad_), static_cast<int>(nav_sub_step_));
     }
   }
 }
@@ -1127,8 +1127,7 @@ void MissionSequencer::onTaskStatus(
   }
 }
 
-void MissionSequencer::onButtons(
-    const std_msgs::msg::UInt8::SharedPtr msg) {
+void MissionSequencer::onButtons(const std_msgs::msg::UInt8::SharedPtr msg) {
   if (!button_start_enabled_) return;
   // Bit 0 = button channel 0
   if ((msg->data & 0x01) && !start_button_pressed_) {

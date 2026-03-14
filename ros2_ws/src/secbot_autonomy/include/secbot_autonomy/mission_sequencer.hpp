@@ -19,8 +19,6 @@
 #include <chrono>
 #include <cmath>
 #include <future>
-#include <string>
-#include <vector>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <mcu_msgs/msg/arm_command.hpp>
@@ -36,6 +34,8 @@
 #include <secbot_msgs/msg/task_status.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <string>
+#include <vector>
 
 namespace secbot {
 
@@ -103,40 +103,52 @@ class MissionSequencer : public rclcpp::Node {
   }
 
   // ── Tolerances & timing ──
-  static constexpr double DIST_TOL_M = 0.03;          // 3 cm
-  static constexpr double HEADING_TOL_RAD = 0.12;      // ~7 deg
+  static constexpr double DIST_TOL_M = 0.03;       // 3 cm
+  static constexpr double HEADING_TOL_RAD = 0.12;  // ~7 deg
   double turn_timeout_s_ = 3.0;
   double drive_timeout_s_ = 3.0;
   double default_step_timeout_s_ = 3.0;
   static constexpr double INTER_MOVE_PAUSE_S = 0.4;
-  static constexpr double MIN_DRIVE_DIST_M = 0.02;     // below = pure turn
-  static constexpr double HEADING_MATCH_RAD = 0.1;     // ~6 deg, skip final turn
+  static constexpr double MIN_DRIVE_DIST_M = 0.02;  // below = pure turn
+  static constexpr double HEADING_MATCH_RAD = 0.1;  // ~6 deg, skip final turn
   static constexpr double SETUP_SETTLE_S = 0.5;
 
   // ── Turn-in-place P-controller ──
   // Uses DRIVE_VECTOR mode (vx=0, omega=K*err) so MCU never tries to
   // correct a phantom position error from atan2 when dist < poseDistTol.
-  static constexpr double TURN_KP = 2.0;              // rad/s per rad (matches MCU)
-  static constexpr double TURN_MAX_OMEGA = 3.0;       // rad/s cap (conservative)
-  static constexpr double TURN_MIN_OMEGA = 0.3;       // rad/s floor to overcome friction
+  static constexpr double TURN_KP = 2.0;         // rad/s per rad (matches MCU)
+  static constexpr double TURN_MAX_OMEGA = 3.0;  // rad/s cap (conservative)
+  static constexpr double TURN_MIN_OMEGA =
+      0.3;  // rad/s floor to overcome friction
 
   // ── Task IDs ──
   static constexpr uint8_t TASK_NONE = 0;
 
   // ── Parsed mission command ──
   enum class CmdType : uint8_t {
-    NAV, NAV_REV, NUDGE, STOP, WAIT, TASK,
-    READ_ANTENNA, ARM, INTAKE, VELOCITY_RAW, MINIBOT, MOTOR, SERVO,
+    NAV,
+    NAV_REV,
+    NUDGE,
+    STOP,
+    WAIT,
+    TASK,
+    READ_ANTENNA,
+    ARM,
+    INTAKE,
+    VELOCITY_RAW,
+    MINIBOT,
+    MOTOR,
+    SERVO,
   };
 
   struct MissionCmd {
     CmdType type;
     double x = 0, y = 0, heading = 0;  // NAV/NAV_REV
-    double timeout = 0;                 // 0 = use default
-    double duration = 1.0;              // WAIT/NUDGE/VELOCITY_RAW
+    double timeout = 0;                // 0 = use default
+    double duration = 1.0;             // WAIT/NUDGE/VELOCITY_RAW
     double vx = 0, omega = 0;          // VELOCITY_RAW
     uint8_t task_id = 0;               // TASK
-    std::string label;                  // READ_ANTENNA
+    std::string label;                 // READ_ANTENNA
     float camera_angle = 90.0f;        // READ_ANTENNA
     int antenna_slot = -1;             // READ_ANTENNA storage index
     uint8_t joint = 0;                 // ARM
@@ -285,7 +297,8 @@ class MissionSequencer : public rclcpp::Node {
   // Antenna reading state
   bool antenna_read_active_ = false;
   std::string last_antenna_color_;
-  std::array<std::string, 5> antenna_colors_;  // indexed by antenna (0-3: beacon, keypad, crater, crank)
+  std::array<std::string, 5> antenna_colors_;  // indexed by antenna (0-3:
+                                               // beacon, keypad, crater, crank)
 
   // ── Tunable parameters from YAML ──
   double nudge_speed_mps_ = 0.25;
@@ -317,8 +330,7 @@ class MissionSequencer : public rclcpp::Node {
   rclcpp::Subscription<secbot_msgs::msg::TaskStatus>::SharedPtr
       task_status_sub_;
   rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr buttons_sub_;
-  rclcpp::Subscription<mcu_msgs::msg::IntakeState>::SharedPtr
-      intake_state_sub_;
+  rclcpp::Subscription<mcu_msgs::msg::IntakeState>::SharedPtr intake_state_sub_;
 };
 
 }  // namespace secbot

@@ -1,25 +1,25 @@
 colors:
   yellow:
-    color_low: [0, 100, 100]
-    color_high: [35, 255, 255]
-    hsv_values: [25, 20, 15]
-
+    color_low: [20, 111, 180]
+    color_high: [40, 211, 255]
+    hsv_values: [30, 161, 218]
   red:
-    color_low: [0, 100, 100]
-    color_high: [35, 255, 255]
-    hsv_values: [25, 20, 15]
-
+    color_low: [0, 120, 100]
+    color_high: [10, 255, 255]
+    hsv_values: [5, 220, 200]
   green:
-    color_low: [0, 100, 100]
-    color_high: [35, 255, 255]
-    hsv_values: [25, 20, 15]
-
+    color_low: [56, 95, 125]
+    color_high: [60, 255, 255]
+    hsv_values: [58, 175, 190]
   blue:
-    color_low: [0, 100, 100]
-    color_high: [35, 255, 255]
-    hsv_values: [25, 20, 15]
-  
+    color_low: [100, 120, 100]
+    color_high: [130, 255, 255]
+    hsv_values: [115, 220, 200]
   purple:
-    color_low: [0, 100, 100]
-    color_high: [35, 255, 255]
-    hsv_values: [25, 20, 15]
+    color_low: [130, 80, 80]
+    color_high: [160, 255, 255]
+    hsv_values: [145, 180, 200]
+  white:
+    color_low:  [0, 0, 183]
+    color_high: [0, 0, 255]
+    hsv_values: [0, 0, 219]

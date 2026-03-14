@@ -19,6 +19,7 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch.conditions import LaunchConfigurationEquals
 from ament_index_python.packages import get_package_share_directory
 
 # ── profile → default settings ───────────────────────────────────────────────
@@ -76,6 +77,12 @@ def generate_launch_description():
                 'to disable tuning and run normal detection from colors.yaml.'
             ),
         ),
+        DeclareLaunchArgument('enable_goal_converter', default_value='true',
+                              description='Launch convert_vision_to_goal node'),
+        DeclareLaunchArgument('odom_topic', default_value='/odometry/global',
+                              description='Odometry topic for vision goal converter'),
+        DeclareLaunchArgument('camera_info_topic', default_value='/camera/camera_info',
+                              description='CameraInfo topic for vision goal converter'),
 
         # Camera driver
         Node(
@@ -118,5 +125,25 @@ def generate_launch_description():
                 },
             ],
             output='screen',
+        ),
+
+        # Vision-to-goal converter: turns duck detections into navigation goals
+        Node(
+            package='secbot_vision',
+            executable='convert_vision_to_goal',
+            name='convert_vision_to_goal',
+            parameters=[{
+                'detections_topic': '/duck_detections',
+                'camera_info_topic': LaunchConfiguration('camera_info_topic'),
+                'odom_topic': LaunchConfiguration('odom_topic'),
+                'goal_topic': '/goal_pose',
+                'camera_height': 0.30,
+                'camera_tilt_deg': 0,
+                'goal_standoff': 0.0,
+                'min_confidence': 60.0,
+                'use_largest_area': True,
+            }],
+            output='screen',
+            condition=LaunchConfigurationEquals('enable_goal_converter', 'true'),
         ),
     ])

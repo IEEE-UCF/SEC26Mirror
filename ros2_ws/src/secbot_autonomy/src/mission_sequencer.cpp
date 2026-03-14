@@ -1,27 +1,21 @@
 /**
- * @file mission_node.cpp
- * @author Rafeed Khan
- * @brief Implementation of the mission sequencer state machine
+ * @file mission_sequencer.cpp
+ * @brief Corrected mission sequencer — turn-before-drive + coord frame fix.
  *
- * State machine from statemachine.md:
- *   Phase 1: Button task (14 steps)
- *   Phase 2: Keypad + Crater + Crank (22 steps)
+ * Preserves all of Rafeed's waypoints and mission logic from mission_node.cpp.
+ * Every navigation step is decomposed into: DRIVE → TURN_TO_HEADING
+ * (assumes robot is already facing the right direction).
  *
- * Coordinate system:
- *   Origin (0,0) = bottom-right corner of field
- *   +X = LEFT (0 -> 120 cm), +Y = UP (0 -> 240 cm)
- *   Yaw 0 = facing +X (left), positive = CCW
- *   All coordinates in cm, all yaw in degrees internally.
- *   MCU uses meters and radians, so we convert at the boundary.
- *
- * Drives robot via drive_base/command (DriveBase msg), no Nav2.
- * Reads pose from drive_base/status.  MCU auto-stops after 500ms without
- * a command, so refreshDriveCommand() re-publishes every tick (100ms).
+ * Coordinate conversion:
+ *   Rafeed (cm, deg): +X=north, +Y=east, +angle=CW
+ *   MCU (m, rad):     +X=north, +Y=west, +angle=CCW
+ *   Y and angle are negated at the boundary.
  */
 
-#include <cmath>
+#include "secbot_autonomy/mission_sequencer.hpp"
 
-#include "secbot_autonomy/mission_node.hpp"
+#include <cmath>
+#include <sstream>
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -32,8 +26,8 @@ namespace secbot {
 // Constructor
 // ============================================================================
 
-MissionNode::MissionNode() : Node("mission_node") {
-  RCLCPP_INFO(this->get_logger(), "Mission node starting...");
+MissionSequencer::MissionSequencer() : Node("mission_sequencer") {
+  RCLCPP_INFO(this->get_logger(), "Mission sequencer starting...");
 
   // Publishers
   drive_cmd_pub_ = this->create_publisher<mcu_msgs::msg::DriveBase>(
@@ -49,44 +43,900 @@ MissionNode::MissionNode() : Node("mission_node") {
   pose_reset_pub_ = this->create_publisher<geometry_msgs::msg::Pose>(
       "drive_base/reset_pose", 10);
 
-  // Subscribers -- drive_base/status MUST use SensorDataQoS (best-effort)
+  // Subscribers — drive_base/status MUST use SensorDataQoS (best-effort)
   drive_status_sub_ = this->create_subscription<mcu_msgs::msg::DriveBase>(
       "drive_base/status", rclcpp::SensorDataQoS(),
-      std::bind(&MissionNode::onDriveStatus, this, _1));
+      std::bind(&MissionSequencer::onDriveStatus, this, _1));
 
   task_status_sub_ = this->create_subscription<secbot_msgs::msg::TaskStatus>(
       "/autonomy/task_status", 10,
-      std::bind(&MissionNode::onTaskStatus, this, _1));
+      std::bind(&MissionSequencer::onTaskStatus, this, _1));
 
-  robot_inputs_sub_ = this->create_subscription<mcu_msgs::msg::RobotInputs>(
-      "/mcu_robot/inputs", 10,
-      std::bind(&MissionNode::onRobotInputs, this, _1));
+  // Button start parameter (can be disabled via launch file)
+  this->declare_parameter<bool>("button_start_enabled", true);
+  button_start_enabled_ = this->get_parameter("button_start_enabled").as_bool();
+
+  buttons_sub_ = this->create_subscription<std_msgs::msg::UInt8>(
+      "/mcu_robot/buttons", 10,
+      std::bind(&MissionSequencer::onButtons, this, _1));
 
   intake_state_sub_ = this->create_subscription<mcu_msgs::msg::IntakeState>(
       "/mcu_robot/intake/state", rclcpp::SensorDataQoS(),
-      std::bind(&MissionNode::onIntakeState, this, _1));
+      std::bind(&MissionSequencer::onIntakeState, this, _1));
 
   // Start service
   start_service_ = this->create_service<std_srvs::srv::Trigger>(
-      "/mission/start",
-      std::bind(&MissionNode::onStartService, this, _1, std::placeholders::_2));
+      "/mission/start", std::bind(&MissionSequencer::onStartService, this, _1,
+                                  std::placeholders::_2));
 
-  // Main tick timer at 10 Hz (100ms)
+  // IMU tare service client
+  imu_tare_client_ =
+      this->create_client<mcu_msgs::srv::Reset>("/mcu_robot/imu/tare");
+
+  // Minibot service clients
+  minibot_enter_client_ =
+      this->create_client<mcu_msgs::srv::Reset>("/mcu_minibot/enter_crater");
+  minibot_exit_client_ =
+      this->create_client<mcu_msgs::srv::Reset>("/mcu_minibot/exit_crater");
+
+  // SetMotor / SetServo service clients
+  set_motor_client_ =
+      this->create_client<mcu_msgs::srv::SetMotor>("/mcu_robot/motor/set");
+  set_servo_client_ =
+      this->create_client<mcu_msgs::srv::SetServo>("/mcu_robot/servo/set");
+
+  // ReadBeaconColor action client
+  beacon_color_client_ =
+      rclcpp_action::create_client<ReadBeaconColor>(this, "read_beacon_color");
+
+  // Load mission commands from YAML parameters
+  loadMission();
+
+  // Main tick timer at 10 Hz
   tick_timer_ = this->create_wall_timer(100ms, [this]() { stepMission(); });
 
-  RCLCPP_INFO(this->get_logger(), "Mission node ready. Waiting for start...");
+  RCLCPP_INFO(this->get_logger(),
+              "Mission sequencer ready. Waiting for start...");
+}
+
+// ============================================================================
+// Mission loading from YAML — each line is a command
+// ============================================================================
+
+MissionSequencer::MissionCmd MissionSequencer::parseCommand(
+    const std::string& line) {
+  MissionCmd cmd;
+  std::istringstream ss(line);
+  std::string token;
+  ss >> token;
+
+  if (token == "nav" || token == "nav_rev") {
+    cmd.type = (token == "nav") ? CmdType::NAV : CmdType::NAV_REV;
+    ss >> cmd.x >> cmd.y >> cmd.heading;
+    // Optional timeout as 4th number
+    if (ss >> cmd.timeout) { /* got it */
+    } else {
+      cmd.timeout = 0;
+    }
+  } else if (token == "nudge") {
+    cmd.type = CmdType::NUDGE;
+    if (!(ss >> cmd.duration)) cmd.duration = 1.0;
+  } else if (token == "stop") {
+    cmd.type = CmdType::STOP;
+  } else if (token == "wait") {
+    cmd.type = CmdType::WAIT;
+    ss >> cmd.duration;
+  } else if (token == "task") {
+    cmd.type = CmdType::TASK;
+    int id;
+    ss >> id;
+    cmd.task_id = static_cast<uint8_t>(id);
+    if (!(ss >> cmd.timeout)) cmd.timeout = 30.0;
+  } else if (token == "read_antenna") {
+    cmd.type = CmdType::READ_ANTENNA;
+    ss >> cmd.label >> cmd.camera_angle;
+    if (!(ss >> cmd.antenna_slot)) cmd.antenna_slot = -1;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 10.0;
+  } else if (token == "arm") {
+    cmd.type = CmdType::ARM;
+    int j, p, s;
+    ss >> j >> p >> s;
+    cmd.joint = static_cast<uint8_t>(j);
+    cmd.position = static_cast<int16_t>(p);
+    cmd.speed = static_cast<uint8_t>(s);
+    if (!(ss >> cmd.duration)) cmd.duration = 1.0;
+  } else if (token == "intake") {
+    cmd.type = CmdType::INTAKE;
+    std::string action;
+    ss >> action;
+    cmd.intake_cmd = (action == "extend")
+                         ? mcu_msgs::msg::IntakeCommand::CMD_EXTEND
+                         : mcu_msgs::msg::IntakeCommand::CMD_RETRACT;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 10.0;
+  } else if (token == "velocity_raw") {
+    cmd.type = CmdType::VELOCITY_RAW;
+    ss >> cmd.vx >> cmd.omega;
+    if (!(ss >> cmd.duration)) cmd.duration = 1.0;
+  } else if (token == "minibot") {
+    cmd.type = CmdType::MINIBOT;
+    ss >> cmd.minibot_action;  // "enter" or "exit"
+    if (!(ss >> cmd.timeout)) cmd.timeout = 15.0;
+  } else if (token == "motor") {
+    cmd.type = CmdType::MOTOR;
+    int idx;
+    float spd;
+    ss >> idx >> spd;
+    cmd.motor_index = static_cast<uint8_t>(idx);
+    cmd.motor_speed = spd;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 5.0;
+  } else if (token == "servo") {
+    cmd.type = CmdType::SERVO;
+    int idx;
+    float ang;
+    ss >> idx >> ang;
+    cmd.servo_index = static_cast<uint8_t>(idx);
+    cmd.servo_angle = ang;
+    if (!(ss >> cmd.timeout)) cmd.timeout = 5.0;
+  }
+
+  return cmd;
+}
+
+void MissionSequencer::loadMission() {
+  // Start pose
+  this->declare_parameter<std::vector<double>>("start_pose", {15.0, 15.0, 0.0});
+  auto sp = this->get_parameter("start_pose").as_double_array();
+  // Store for use in ROBOT_START phase
+  setup_pose_ = rafeedToMcu(sp[0], sp[1], sp[2]);
+
+  // Nudge speed
+  this->declare_parameter<double>("nudge_speed", 0.25);
+  nudge_speed_mps_ = this->get_parameter("nudge_speed").as_double();
+
+  // Timeouts
+  this->declare_parameter<double>("turn_timeout", 3.0);
+  this->declare_parameter<double>("drive_timeout", 3.0);
+  this->declare_parameter<double>("default_step_timeout", 3.0);
+  turn_timeout_s_ = this->get_parameter("turn_timeout").as_double();
+  drive_timeout_s_ = this->get_parameter("drive_timeout").as_double();
+  default_step_timeout_s_ =
+      this->get_parameter("default_step_timeout").as_double();
+
+  // Phase commands
+  this->declare_parameter<std::vector<std::string>>("phase_button",
+                                                    std::vector<std::string>{});
+  this->declare_parameter<std::vector<std::string>>("phase_keypad",
+                                                    std::vector<std::string>{});
+
+  auto button_strs = this->get_parameter("phase_button").as_string_array();
+  auto keypad_strs = this->get_parameter("phase_keypad").as_string_array();
+
+  for (const auto& s : button_strs) {
+    button_cmds_.push_back(parseCommand(s));
+  }
+  for (const auto& s : keypad_strs) {
+    keypad_cmds_.push_back(parseCommand(s));
+  }
+
+  RCLCPP_INFO(this->get_logger(),
+              "Loaded mission: %zu button cmds, %zu keypad cmds",
+              button_cmds_.size(), keypad_cmds_.size());
+}
+
+// ============================================================================
+// Setup state machine (IMU tare → pose reset → settle)
+// ============================================================================
+
+void MissionSequencer::startSetup(double start_x_cm, double start_y_cm,
+                                  double start_yaw_deg) {
+  setup_pose_ = rafeedToMcu(start_x_cm, start_y_cm, start_yaw_deg);
+  setup_state_ = SetupState::TARE_WAIT;
+  tare_sent_ = false;
+  RCLCPP_INFO(this->get_logger(), "[SETUP] Starting: tare → reset → settle");
+}
+
+bool MissionSequencer::tickSetup() {
+  switch (setup_state_) {
+    case SetupState::IDLE:
+      return false;
+
+    case SetupState::TARE_WAIT: {
+      if (!tare_sent_) {
+        if (!imu_tare_client_->wait_for_service(0s)) {
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                               "[SETUP] Waiting for /mcu_robot/imu/tare...");
+          return false;
+        }
+        auto req = std::make_shared<mcu_msgs::srv::Reset::Request>();
+        tare_future_ = imu_tare_client_->async_send_request(req);
+        tare_sent_ = true;
+        RCLCPP_INFO(this->get_logger(), "[SETUP] IMU tare request sent");
+      }
+
+      if (tare_future_.wait_for(0s) == std::future_status::ready) {
+        auto result = tare_future_.get();
+        if (result->success) {
+          RCLCPP_INFO(this->get_logger(), "[SETUP] IMU tare SUCCESS");
+        } else {
+          RCLCPP_WARN(this->get_logger(), "[SETUP] IMU tare returned false");
+        }
+        setup_state_ = SetupState::POSE_RESET;
+      }
+      return false;
+    }
+
+    case SetupState::POSE_RESET: {
+      resetPoseMcu(setup_pose_.x_m, setup_pose_.y_m, setup_pose_.theta_rad);
+      RCLCPP_INFO(this->get_logger(),
+                  "[SETUP] Pose reset to (%.3f, %.3f, %.3f rad)",
+                  setup_pose_.x_m, setup_pose_.y_m, setup_pose_.theta_rad);
+      settle_start_ = std::chrono::steady_clock::now();
+      setup_state_ = SetupState::SETTLE;
+      return false;
+    }
+
+    case SetupState::SETTLE: {
+      double elapsed = std::chrono::duration<double>(
+                           std::chrono::steady_clock::now() - settle_start_)
+                           .count();
+      if (elapsed >= SETUP_SETTLE_S) {
+        setup_state_ = SetupState::DONE;
+        RCLCPP_INFO(this->get_logger(), "[SETUP] Complete");
+      }
+      return false;
+    }
+
+    case SetupState::DONE:
+      return true;
+  }
+  return false;
+}
+
+// ============================================================================
+// NavMove executor — decompose every goal into DRIVE → TURN_TO_HEADING
+// ============================================================================
+
+void MissionSequencer::startNavMove(double x_cm, double y_cm,
+                                    double heading_deg, bool reverse) {
+  nav_target_ = rafeedToMcu(x_cm, y_cm, heading_deg);
+  nav_final_heading_ = nav_target_.theta_rad;
+  nav_reverse_ = reverse;
+
+  // Compute distance to target in MCU coords
+  double dx = nav_target_.x_m - robot_x_m_;
+  double dy = nav_target_.y_m - robot_y_m_;
+  double dist = std::hypot(dx, dy);
+
+  if (dist < MIN_DRIVE_DIST_M) {
+    // Pure turn — skip drive, go straight to final heading
+    nav_is_pure_turn_ = true;
+    nav_travel_heading_ = nav_final_heading_;
+    RCLCPP_INFO(this->get_logger(),
+                "  NavMove: pure turn to %.1f deg (dist=%.3f m < threshold)",
+                rad2deg(nav_final_heading_), dist);
+    advanceNavSubStep(NavSubStep::TURN_TO_HEADING);
+  } else {
+    // Compute travel heading (direction to face the target)
+    nav_travel_heading_ = std::atan2(dy, dx);
+    if (reverse) {
+      nav_travel_heading_ = normalizeAngle(nav_travel_heading_ + M_PI);
+    }
+    nav_is_pure_turn_ = false;
+    RCLCPP_INFO(this->get_logger(),
+                "  NavMove: (%.0f,%.0f,%.0f%s) → MCU(%.3f,%.3f) "
+                "travel_hdg=%.1f° final_hdg=%.1f° dist=%.3f m",
+                x_cm, y_cm, heading_deg, reverse ? " REV" : "", nav_target_.x_m,
+                nav_target_.y_m, rad2deg(nav_travel_heading_),
+                rad2deg(nav_final_heading_), dist);
+    // Skip TURN_TO_FACE — assume robot is already facing the right direction.
+    // Go directly to DRIVE phase (via PAUSE to settle).
+    advanceNavSubStep(NavSubStep::PAUSE);
+    nav_pause_next_ = NavSubStep::DRIVE;
+  }
+}
+
+void MissionSequencer::tickNavMove() {
+  switch (nav_sub_step_) {
+    case NavSubStep::IDLE:
+    case NavSubStep::DONE:
+      return;
+
+    case NavSubStep::TURN_TO_FACE:
+      // Unreachable — TURN_TO_FACE is skipped (assume already facing goal)
+      advanceNavSubStep(NavSubStep::PAUSE);
+      nav_pause_next_ = NavSubStep::DRIVE;
+      break;
+
+    case NavSubStep::DRIVE: {
+      if (!goal_reached_) {
+        double elapsed =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                          nav_substep_timer_)
+                .count();
+        if (elapsed > drive_timeout_s_) {
+          RCLCPP_WARN(this->get_logger(), "  NavMove: DRIVE timed out (%.1f s)",
+                      elapsed);
+          // Check if we need final heading turn
+          double hdg_err = std::abs(
+              normalizeAngle(nav_final_heading_ - nav_travel_heading_));
+          if (hdg_err > HEADING_MATCH_RAD) {
+            advanceNavSubStep(NavSubStep::PAUSE);
+          } else {
+            advanceNavSubStep(NavSubStep::DONE);
+          }
+        }
+      } else {
+        RCLCPP_INFO(this->get_logger(), "  NavMove: DRIVE complete");
+        double hdg_err =
+            std::abs(normalizeAngle(nav_final_heading_ - nav_travel_heading_));
+        if (hdg_err > HEADING_MATCH_RAD) {
+          advanceNavSubStep(NavSubStep::PAUSE);
+        } else {
+          advanceNavSubStep(NavSubStep::DONE);
+        }
+      }
+      break;
+    }
+
+    case NavSubStep::TURN_TO_HEADING: {
+      // P-controller turn via DRIVE_VECTOR
+      if (turnReachedHeading(nav_final_heading_)) {
+        RCLCPP_INFO(this->get_logger(), "  NavMove: TURN_TO_HEADING complete");
+        advanceNavSubStep(NavSubStep::DONE);  // stopRobot() called inside
+      } else {
+        sendTurnInPlace(nav_final_heading_);
+        double elapsed =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                          nav_substep_timer_)
+                .count();
+        if (elapsed > turn_timeout_s_) {
+          RCLCPP_WARN(this->get_logger(),
+                      "  NavMove: TURN_TO_HEADING timed out (%.1f s)", elapsed);
+          advanceNavSubStep(NavSubStep::DONE);  // stopRobot() called inside
+        }
+      }
+      break;
+    }
+
+    case NavSubStep::PAUSE: {
+      double elapsed =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                        nav_substep_timer_)
+              .count();
+      if (elapsed >= INTER_MOVE_PAUSE_S) {
+        // Determine what comes after this pause
+        // DRIVE → (pause) → TURN_TO_HEADING
+        if (!nav_is_pure_turn_ && nav_pause_next_ == NavSubStep::DRIVE) {
+          // Start drive
+          goal_reached_ = false;
+          goal_x_m_ = nav_target_.x_m;
+          goal_y_m_ = nav_target_.y_m;
+          goal_theta_rad_ = nav_travel_heading_;
+          sendGoalMcu(nav_target_.x_m, nav_target_.y_m, nav_travel_heading_,
+                      nav_reverse_);
+          nav_sub_step_ = NavSubStep::DRIVE;
+          nav_substep_timer_ = std::chrono::steady_clock::now();
+          RCLCPP_INFO(this->get_logger(), "  NavMove: → DRIVE");
+        } else if (nav_pause_next_ == NavSubStep::TURN_TO_HEADING) {
+          // Check if heading turn is even needed
+          double hdg_err =
+              std::abs(normalizeAngle(nav_final_heading_ - robot_theta_rad_));
+          if (hdg_err < HEADING_TOL_RAD) {
+            RCLCPP_INFO(this->get_logger(),
+                        "  NavMove: skip TURN_TO_HEADING (err=%.1f deg < tol)",
+                        rad2deg(hdg_err));
+            nav_sub_step_ = NavSubStep::DONE;
+          } else {
+            // Enter turn sub-step — P-controller runs on next tick
+            goal_reached_ = false;  // clear stale flag from DRIVE
+            nav_sub_step_ = NavSubStep::TURN_TO_HEADING;
+            nav_substep_timer_ = std::chrono::steady_clock::now();
+            RCLCPP_INFO(this->get_logger(), "  NavMove: → TURN_TO_HEADING");
+          }
+        } else {
+          nav_sub_step_ = NavSubStep::DONE;
+        }
+      }
+      break;
+    }
+  }
+}
+
+void MissionSequencer::advanceNavSubStep(NavSubStep next) {
+  stopRobot();
+
+  if (next == NavSubStep::PAUSE) {
+    // Figure out what comes after this pause
+    if (nav_sub_step_ == NavSubStep::DRIVE) {
+      nav_pause_next_ = NavSubStep::TURN_TO_HEADING;
+    } else {
+      nav_pause_next_ = NavSubStep::DONE;
+    }
+    nav_sub_step_ = NavSubStep::PAUSE;
+    nav_substep_timer_ = std::chrono::steady_clock::now();
+    RCLCPP_INFO(this->get_logger(), "  NavMove: → PAUSE (%.1f s)",
+                INTER_MOVE_PAUSE_S);
+  } else if (next == NavSubStep::TURN_TO_HEADING) {
+    // Check if heading turn is needed
+    double hdg_err =
+        std::abs(normalizeAngle(nav_final_heading_ - robot_theta_rad_));
+    if (hdg_err < HEADING_TOL_RAD) {
+      RCLCPP_INFO(this->get_logger(),
+                  "  NavMove: skip TURN_TO_HEADING (err=%.1f deg < tol)",
+                  rad2deg(hdg_err));
+      nav_sub_step_ = NavSubStep::DONE;
+      return;
+    }
+    // Enter turn sub-step — tickNavMove() runs P-controller via DRIVE_VECTOR
+    nav_sub_step_ = NavSubStep::TURN_TO_HEADING;
+    nav_substep_timer_ = std::chrono::steady_clock::now();
+    RCLCPP_INFO(this->get_logger(), "  NavMove: → TURN_TO_HEADING (%.1f deg)",
+                rad2deg(nav_final_heading_));
+  } else if (next == NavSubStep::DONE) {
+    nav_sub_step_ = NavSubStep::DONE;
+    RCLCPP_INFO(this->get_logger(), "  NavMove: DONE");
+  }
+}
+
+// ============================================================================
+// Low-level MCU command helpers
+// ============================================================================
+
+void MissionSequencer::sendGoalMcu(double x_m, double y_m, double theta_rad,
+                                   bool reverse) {
+  auto msg = mcu_msgs::msg::DriveBase();
+  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
+  msg.goal_transform.transform.translation.x = x_m;
+  msg.goal_transform.transform.translation.y = y_m;
+  msg.goal_transform.transform.translation.z = reverse ? -1.0 : 0.0;
+
+  float half = static_cast<float>(theta_rad) * 0.5f;
+  msg.goal_transform.transform.rotation.x = 0.0;
+  msg.goal_transform.transform.rotation.y = 0.0;
+  msg.goal_transform.transform.rotation.z = std::sin(half);
+  msg.goal_transform.transform.rotation.w = std::cos(half);
+
+  last_drive_cmd_ = msg;
+  last_drive_mode_ = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
+  drive_cmd_pub_->publish(msg);
+}
+
+void MissionSequencer::sendTurnInPlace(double target_rad) {
+  double err = normalizeAngle(target_rad - robot_theta_rad_);
+  double omega = TURN_KP * err;
+
+  // Clamp magnitude
+  if (omega > TURN_MAX_OMEGA) omega = TURN_MAX_OMEGA;
+  if (omega < -TURN_MAX_OMEGA) omega = -TURN_MAX_OMEGA;
+
+  // Apply minimum omega to overcome static friction (keep sign)
+  if (std::abs(omega) < TURN_MIN_OMEGA && std::abs(err) > 0.01) {
+    omega = (err > 0) ? TURN_MIN_OMEGA : -TURN_MIN_OMEGA;
+  }
+
+  sendVelocity(0.0, omega);
+}
+
+bool MissionSequencer::turnReachedHeading(double target_rad) const {
+  return std::abs(normalizeAngle(target_rad - robot_theta_rad_)) <
+         HEADING_TOL_RAD;
+}
+
+void MissionSequencer::sendVelocity(double vx_mps, double omega_radps) {
+  auto msg = mcu_msgs::msg::DriveBase();
+  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_VECTOR;
+  msg.goal_velocity.linear.x = vx_mps;
+  msg.goal_velocity.angular.z = omega_radps;
+
+  last_drive_cmd_ = msg;
+  last_drive_mode_ = mcu_msgs::msg::DriveBase::DRIVE_VECTOR;
+  drive_cmd_pub_->publish(msg);
+}
+
+void MissionSequencer::sendVelocityRaw(double vx_mps, double omega_radps) {
+  auto msg = mcu_msgs::msg::DriveBase();
+  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_VECTOR_RAW;
+  msg.goal_velocity.linear.x = vx_mps;
+  msg.goal_velocity.angular.z = omega_radps;
+  last_drive_cmd_ = msg;
+  last_drive_mode_ = mcu_msgs::msg::DriveBase::DRIVE_VECTOR_RAW;
+  drive_cmd_pub_->publish(msg);
+}
+
+void MissionSequencer::sendNudge(double speed_mps) {
+  RCLCPP_INFO(this->get_logger(), "  sendNudge(%.2f m/s)", speed_mps);
+  sendVelocityRaw(speed_mps, 0.0);
+}
+
+void MissionSequencer::stopRobot() { sendVelocityRaw(0.0, 0.0); }
+
+void MissionSequencer::refreshDriveCommand() {
+  // Don't re-publish during pause — robot should be stopped
+  if (nav_sub_step_ == NavSubStep::PAUSE) return;
+
+  // Stop re-publishing once a DRIVE_GOAL is reached
+  if (goal_reached_ &&
+      last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_GOAL) {
+    return;
+  }
+  if (last_drive_mode_ != 0) {
+    drive_cmd_pub_->publish(last_drive_cmd_);
+  }
+}
+
+void MissionSequencer::resetPoseMcu(double x_m, double y_m, double theta_rad) {
+  auto msg = geometry_msgs::msg::Pose();
+  msg.position.x = x_m;
+  msg.position.y = y_m;
+  msg.position.z = 0.0;
+
+  float half = static_cast<float>(theta_rad) * 0.5f;
+  msg.orientation.x = 0.0;
+  msg.orientation.y = 0.0;
+  msg.orientation.z = std::sin(half);
+  msg.orientation.w = std::cos(half);
+
+  pose_reset_pub_->publish(msg);
+}
+
+// ============================================================================
+// Task / arm / intake helpers (unchanged from Rafeed)
+// ============================================================================
+
+void MissionSequencer::sendTaskCommand(uint8_t task_id) {
+  auto msg = std_msgs::msg::UInt8();
+  msg.data = task_id;
+  task_cmd_pub_->publish(msg);
+  task_idle_ = false;
+  RCLCPP_INFO(this->get_logger(), "  sendTaskCommand(%d)", task_id);
+}
+
+void MissionSequencer::sendArmCommand(uint8_t joint_id, int16_t position,
+                                      uint8_t speed) {
+  auto msg = mcu_msgs::msg::ArmCommand();
+  msg.joint_id = joint_id;
+  msg.position = position;
+  msg.speed = speed;
+  arm_cmd_pub_->publish(msg);
+  RCLCPP_INFO(this->get_logger(), "  sendArmCommand(joint=%d, pos=%d, spd=%d)",
+              joint_id, position, speed);
+}
+
+void MissionSequencer::sendIntakeCommand(uint8_t cmd, float value) {
+  auto msg = mcu_msgs::msg::IntakeCommand();
+  msg.command = cmd;
+  msg.value = value;
+  intake_cmd_pub_->publish(msg);
+  RCLCPP_INFO(this->get_logger(), "  sendIntakeCommand(cmd=%d, val=%.2f)", cmd,
+              value);
+}
+
+void MissionSequencer::startAntennaRead(const char* label, float camera_angle) {
+  antenna_read_active_ = true;
+  last_antenna_color_ = "unknown";
+
+  if (!beacon_color_client_->wait_for_action_server(std::chrono::seconds(1))) {
+    RCLCPP_WARN(this->get_logger(),
+                "  ReadBeaconColor action server not available, "
+                "skipping %s antenna read",
+                label);
+    antenna_read_active_ = false;
+    return;
+  }
+
+  auto goal = ReadBeaconColor::Goal();
+  goal.camera_angle_goal = camera_angle;
+
+  auto options = rclcpp_action::Client<ReadBeaconColor>::SendGoalOptions();
+  options.result_callback = [this, lbl = std::string(label)](
+                                const BeaconGoalHandle::WrappedResult& result) {
+    antenna_read_active_ = false;
+    if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+      last_antenna_color_ = result.result->color;
+      RCLCPP_INFO(this->get_logger(), "  Antenna %s read: %s", lbl.c_str(),
+                  last_antenna_color_.c_str());
+    } else {
+      last_antenna_color_ = "unknown";
+      RCLCPP_WARN(this->get_logger(), "  Antenna %s read failed (code=%d)",
+                  lbl.c_str(), static_cast<int>(result.code));
+    }
+  };
+
+  beacon_color_client_->async_send_goal(goal, options);
+  RCLCPP_INFO(this->get_logger(),
+              "  Reading %s antenna at camera angle %.1f deg", label,
+              camera_angle);
 }
 
 // ============================================================================
 // State machine tick
 // ============================================================================
 
-void MissionNode::stepMission() {
-  // Refresh the last drive command every tick to prevent MCU 500ms timeout
+// ============================================================================
+// Generic phase command executor
+// ============================================================================
+
+void MissionSequencer::executePhaseCommands(std::vector<MissionCmd>& cmds,
+                                            int& idx, MissionPhase next_phase,
+                                            const char* phase_name) {
+  if (idx >= static_cast<int>(cmds.size())) {
+    RCLCPP_INFO(this->get_logger(), "=== %s COMPLETE ===", phase_name);
+    transitionTo(next_phase);
+    return;
+  }
+
+  auto& cmd = cmds[idx];
+
+  switch (cmd.type) {
+    case CmdType::NAV:
+    case CmdType::NAV_REV: {
+      if (step_entry_) {
+        step_entry_ = false;
+        bool rev = (cmd.type == CmdType::NAV_REV);
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: %s %.0f %.0f %.0f",
+                    phase_name, idx + 1, cmds.size(), rev ? "nav_rev" : "nav",
+                    cmd.x, cmd.y, cmd.heading);
+        startNavMove(cmd.x, cmd.y, cmd.heading, rev);
+      }
+      tickNavMove();
+      double t = (cmd.timeout > 0) ? cmd.timeout : default_step_timeout_s_;
+      if (navMoveComplete() || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::NUDGE: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: nudge (%.1fs)",
+                    phase_name, idx + 1, cmds.size(), cmd.duration);
+        sendNudge(nudge_speed_mps_);
+      }
+      if (stepElapsed() > cmd.duration) {
+        stopRobot();
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::STOP: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: stop", phase_name,
+                    idx + 1, cmds.size());
+        stopRobot();
+      }
+      setStep(++idx);
+      break;
+    }
+
+    case CmdType::WAIT: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: wait %.1fs", phase_name,
+                    idx + 1, cmds.size(), cmd.duration);
+      }
+      if (stepElapsed() > cmd.duration) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::TASK: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: task %d", phase_name,
+                    idx + 1, cmds.size(), cmd.task_id);
+        sendTaskCommand(cmd.task_id);
+      }
+      double t = (cmd.timeout > 0) ? cmd.timeout : 30.0;
+      if (task_idle_ || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::READ_ANTENNA: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: read_antenna %s %.1f",
+                    phase_name, idx + 1, cmds.size(), cmd.label.c_str(),
+                    cmd.camera_angle);
+        startAntennaRead(cmd.label.c_str(), cmd.camera_angle);
+      }
+      double t = (cmd.timeout > 0) ? cmd.timeout : 10.0;
+      if (antennaReadComplete() || checkStepTimeout(t)) {
+        if (cmd.antenna_slot >= 0 &&
+            cmd.antenna_slot < static_cast<int>(antenna_colors_.size())) {
+          antenna_colors_[cmd.antenna_slot] = last_antenna_color_;
+        }
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::ARM: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: arm %d %d %d",
+                    phase_name, idx + 1, cmds.size(), cmd.joint, cmd.position,
+                    cmd.speed);
+        sendArmCommand(cmd.joint, cmd.position, cmd.speed);
+      }
+      if (stepElapsed() > cmd.duration) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::INTAKE: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: intake %d", phase_name,
+                    idx + 1, cmds.size(), cmd.intake_cmd);
+        sendIntakeCommand(cmd.intake_cmd);
+      }
+      double t = (cmd.timeout > 0) ? cmd.timeout : 10.0;
+      if (intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE ||
+          checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::VELOCITY_RAW: {
+      if (step_entry_) {
+        step_entry_ = false;
+        RCLCPP_INFO(this->get_logger(),
+                    "  %s [%d/%zu]: velocity_raw vx=%.2f omega=%.2f (%.1fs)",
+                    phase_name, idx + 1, cmds.size(), cmd.vx, cmd.omega,
+                    cmd.duration);
+        sendVelocityRaw(cmd.vx, cmd.omega);
+      }
+      if (stepElapsed() > cmd.duration) {
+        stopRobot();
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::MINIBOT: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: minibot %s", phase_name,
+                    idx + 1, cmds.size(), cmd.minibot_action.c_str());
+
+        auto client = (cmd.minibot_action == "exit") ? minibot_exit_client_
+                                                     : minibot_enter_client_;
+
+        if (!client->wait_for_service(std::chrono::seconds(2))) {
+          RCLCPP_WARN(this->get_logger(),
+                      "  Minibot service not available, skipping");
+          minibot_call_active_ = false;
+          minibot_call_done_ = true;
+          minibot_call_success_ = false;
+        } else {
+          minibot_call_active_ = true;
+          minibot_call_done_ = false;
+          minibot_call_success_ = false;
+
+          auto req = std::make_shared<mcu_msgs::srv::Reset::Request>();
+          client->async_send_request(
+              req,
+              [this](
+                  rclcpp::Client<mcu_msgs::srv::Reset>::SharedFuture future) {
+                auto result = future.get();
+                minibot_call_success_ = result->success;
+                minibot_call_done_ = true;
+                minibot_call_active_ = false;
+                RCLCPP_INFO(this->get_logger(),
+                            "  Minibot service returned: %s",
+                            result->success ? "OK" : "FAILED");
+              });
+        }
+      }
+
+      double t = (cmd.timeout > 0) ? cmd.timeout : 15.0;
+      if (minibot_call_done_ || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::MOTOR: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: motor %d %.2f",
+                    phase_name, idx + 1, cmds.size(), cmd.motor_index,
+                    cmd.motor_speed);
+
+        motor_call_done_ = false;
+        motor_call_success_ = false;
+
+        if (!set_motor_client_->wait_for_service(std::chrono::seconds(2))) {
+          RCLCPP_WARN(this->get_logger(),
+                      "  SetMotor service not available, skipping");
+          motor_call_done_ = true;
+          motor_call_success_ = false;
+        } else {
+          auto req = std::make_shared<mcu_msgs::srv::SetMotor::Request>();
+          req->index = cmd.motor_index;
+          req->speed = cmd.motor_speed;
+          set_motor_client_->async_send_request(
+              req, [this](rclcpp::Client<mcu_msgs::srv::SetMotor>::SharedFuture
+                              future) {
+                auto result = future.get();
+                motor_call_success_ = result->success;
+                motor_call_done_ = true;
+                RCLCPP_INFO(this->get_logger(),
+                            "  SetMotor service returned: %s",
+                            result->success ? "OK" : "FAILED");
+              });
+        }
+      }
+
+      double t = (cmd.timeout > 0) ? cmd.timeout : 5.0;
+      if (motor_call_done_ || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+
+    case CmdType::SERVO: {
+      if (step_entry_) {
+        step_entry_ = false;
+        stopRobot();
+        RCLCPP_INFO(this->get_logger(), "  %s [%d/%zu]: servo %d %.1f",
+                    phase_name, idx + 1, cmds.size(), cmd.servo_index,
+                    cmd.servo_angle);
+
+        servo_call_done_ = false;
+        servo_call_success_ = false;
+
+        if (!set_servo_client_->wait_for_service(std::chrono::seconds(2))) {
+          RCLCPP_WARN(this->get_logger(),
+                      "  SetServo service not available, skipping");
+          servo_call_done_ = true;
+          servo_call_success_ = false;
+        } else {
+          auto req = std::make_shared<mcu_msgs::srv::SetServo::Request>();
+          req->index = cmd.servo_index;
+          req->angle = cmd.servo_angle;
+          set_servo_client_->async_send_request(
+              req, [this](rclcpp::Client<mcu_msgs::srv::SetServo>::SharedFuture
+                              future) {
+                auto result = future.get();
+                servo_call_success_ = result->success;
+                servo_call_done_ = true;
+                RCLCPP_INFO(this->get_logger(),
+                            "  SetServo service returned: %s",
+                            result->success ? "OK" : "FAILED");
+              });
+        }
+      }
+
+      double t = (cmd.timeout > 0) ? cmd.timeout : 5.0;
+      if (servo_call_done_ || checkStepTimeout(t)) {
+        setStep(++idx);
+      }
+      break;
+    }
+  }
+}
+
+void MissionSequencer::stepMission() {
+  // Refresh last drive command every tick to prevent MCU 500ms timeout
   refreshDriveCommand();
 
   switch (phase_) {
-    // ── WAIT_FOR_START ─────────────────────────────────────────────────
     case MissionPhase::WAIT_FOR_START: {
       if (phase_entry_) {
         phase_entry_ = false;
@@ -98,571 +948,45 @@ void MissionNode::stepMission() {
       break;
     }
 
-    // ── ROBOT_START: reset pose, then begin button phase ───────────────
     case MissionPhase::ROBOT_START: {
       if (phase_entry_) {
         phase_entry_ = false;
-        setStep(0);
         RCLCPP_INFO(this->get_logger(), "=== ROBOT START ===");
-        // Reset pose to starting position: (15, 15, 0) in cm/degrees
-        resetPose(15.0, 15.0, 0.0);
         match_start_ = std::chrono::steady_clock::now();
+        auto sp = this->get_parameter("start_pose").as_double_array();
+        startSetup(sp[0], sp[1], sp[2]);
       }
-      // Wait a brief moment for pose reset to take effect
-      if (stepElapsed() > 0.5) {
+      if (tickSetup()) {
         transitionTo(MissionPhase::PHASE_BUTTON);
       }
       break;
     }
 
-    // ── PHASE_BUTTON: 14 steps ─────────────────────────────────────────
     case MissionPhase::PHASE_BUTTON: {
       if (phase_entry_) {
         phase_entry_ = false;
-        setStep(1);
-        RCLCPP_INFO(this->get_logger(), "=== PHASE 1: BUTTON TASK ===");
+        button_cmd_idx_ = 0;
+        setStep(0);
+        RCLCPP_INFO(this->get_logger(), "=== PHASE 1: BUTTON ===");
       }
-
-      switch (step_) {
-        // Step 1: Start position (15, 15, 0) -- we are already here
-        case 1: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 1: Start at (15, 15, 0)");
-          }
-          // Immediately advance, we are already at start
-          setStep(2);
-          break;
-        }
-
-        // Step 2: Drive to UWB placement (108, 38, 0)
-        case 2: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 2: Drive to UWB placement (108, 38, 0)");
-            sendGoal(108.0, 38.0, 0.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(3);
-          }
-          break;
-        }
-
-        // Step 3: Back up [rev] to (38, 38, 0)
-        case 3: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 3: Reverse to (38, 38, 0)");
-            sendGoal(38.0, 38.0, 0.0, true);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(4);
-          }
-          break;
-        }
-
-        // Step 4: Turn -45 degrees at (38, 38, -45)
-        case 4: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 4: Turn to -45 deg at (38, 38, -45)");
-            sendGoal(38.0, 38.0, -45.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(5);
-          }
-          break;
-        }
-
-        // Step 5: Drive forward to (54, 27, -45)
-        case 5: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 5: Drive to (54, 27, -45)");
-            sendGoal(54.0, 27.0, -45.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(6);
-          }
-          break;
-        }
-
-        // Step 6: Turn +45 at (54, 27, 0)
-        case 6: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 6: Turn to 0 deg at (54, 27, 0)");
-            sendGoal(54.0, 27.0, 0.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(7);
-          }
-          break;
-        }
-
-        // Step 7: Drive to button (78, 27, 0)
-        case 7: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 7: Drive to button (78, 27, 0)");
-            sendGoal(78.0, 27.0, 0.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(8);
-          }
-          break;
-        }
-
-        // Step 8: Nudge forward (tap button #1)
-        case 8: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 8: Nudge forward (tap #1)");
-            sendNudge(NUDGE_SPEED_MPS);
-          }
-          if (stepElapsed() > 1.0) {
-            stopRobot();
-            setStep(9);
-          }
-          break;
-        }
-
-        // Step 9: Back up [rev] to (78, 27, 0)
-        case 9: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 9: Reverse to (78, 27, 0)");
-            sendGoal(78.0, 27.0, 0.0, true);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(10);
-          }
-          break;
-        }
-
-        // Step 10: Nudge forward (tap button #2)
-        case 10: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 10: Nudge forward (tap #2)");
-            sendNudge(NUDGE_SPEED_MPS);
-          }
-          if (stepElapsed() > 1.0) {
-            stopRobot();
-            setStep(11);
-          }
-          break;
-        }
-
-        // Step 11: Back up [rev] to (78, 28, 0)
-        case 11: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 11: Reverse to (78, 28, 0)");
-            sendGoal(78.0, 28.0, 0.0, true);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(12);
-          }
-          break;
-        }
-
-        // Step 12: Nudge forward (tap button #3)
-        case 12: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 12: Nudge forward (tap #3)");
-            sendNudge(NUDGE_SPEED_MPS);
-          }
-          if (stepElapsed() > 1.0) {
-            stopRobot();
-            setStep(13);
-          }
-          break;
-        }
-
-        // Step 13: Back up [rev] to (30, 27, 0)
-        case 13: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 13: Reverse to (30, 27, 0)");
-            sendGoal(30.0, 27.0, 0.0, true);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(14);
-          }
-          break;
-        }
-
-        // Step 14: Read beacon antenna (DUMMY)
-        case 14: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "BUTTON Step 14: Read beacon antenna");
-            readAntennaDummy("beacon");
-          }
-          if (stepElapsed() > 1.0) {
-            RCLCPP_INFO(this->get_logger(),
-                        "=== PHASE 1 COMPLETE: Button task done ===");
-            transitionTo(MissionPhase::PHASE_KEYPAD_CRATER);
-          }
-          break;
-        }
-
-        default:
-          RCLCPP_WARN(this->get_logger(), "BUTTON: Unknown step %d", step_);
-          transitionTo(MissionPhase::PHASE_KEYPAD_CRATER);
-          break;
-      }
+      executePhaseCommands(button_cmds_, button_cmd_idx_,
+                           MissionPhase::PHASE_KEYPAD_CRATER, "BUTTON");
       break;
     }
 
-    // ── PHASE_KEYPAD_CRATER: 22 steps ──────────────────────────────────
     case MissionPhase::PHASE_KEYPAD_CRATER: {
       if (phase_entry_) {
         phase_entry_ = false;
-        setStep(1);
+        keypad_cmd_idx_ = 0;
+        setStep(0);
         RCLCPP_INFO(this->get_logger(),
                     "=== PHASE 2: KEYPAD + CRATER + CRANK ===");
       }
-
-      switch (step_) {
-        // Step 1: Turn +45 at (30, 27, 45)
-        case 1: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 1: Turn to 45 deg at (30, 27, 45)");
-            sendGoal(30.0, 27.0, 45.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(2);
-          }
-          break;
-        }
-
-        // Step 2: Drive to keypad area (81, 95, 45)
-        case 2: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 2: Drive to (81, 95, 45)");
-            sendGoal(81.0, 95.0, 45.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(3);
-          }
-          break;
-        }
-
-        // Step 3: Turn to 0 at (81, 95, 0)
-        case 3: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 3: Turn to 0 deg at (81, 95, 0)");
-            sendGoal(81.0, 95.0, 0.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(4);
-          }
-          break;
-        }
-
-        // Step 4: Reverse to keypad [rev] (38, 95, 0)
-        case 4: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 4: Reverse to keypad (38, 95, 0)");
-            sendGoal(38.0, 95.0, 0.0, true);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(5);
-          }
-          break;
-        }
-
-        // Step 5: Call keypad action
-        case 5: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 5: Execute keypad task");
-            sendTaskCommand(TASK_KEYPAD_ENTER);
-          }
-          // Wait for task to complete or timeout
-          if (task_idle_ || checkStepTimeout(30.0)) {
-            setStep(6);
-          }
-          break;
-        }
-
-        // Step 6: Drive forward to (55, 95, 0)
-        case 6: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 6: Drive forward to (55, 95, 0)");
-            sendGoal(55.0, 95.0, 0.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(7);
-          }
-          break;
-        }
-
-        // Step 7: Turn to 90 deg at (55, 95, 90) -- facing +Y, crater ahead
-        case 7: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 7: Turn to 90 deg at (55, 95, 90)");
-            sendGoal(55.0, 95.0, 90.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(8);
-          }
-          break;
-        }
-
-        // Step 8: Launch minibot
-        case 8: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(), "KEYPAD Step 8: Launch minibot");
-            // Release minibot latch servo
-            sendArmCommand(JOINT_MINIBOT_LATCH, SERVO_EXTENDED, SERVO_SPEED);
-          }
-          if (stepElapsed() > 1.0) {
-            setStep(9);
-          }
-          break;
-        }
-
-        // Step 9: Wait 1 second for minibot to deploy
-        case 9: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 9: Waiting for minibot deploy");
-          }
-          if (stepElapsed() > 1.0) {
-            setStep(10);
-          }
-          break;
-        }
-
-        // Step 10: Deploy intake extender
-        case 10: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 10: Deploy intake extender");
-            sendIntakeCommand(mcu_msgs::msg::IntakeCommand::CMD_EXTEND);
-          }
-          // Wait for intake to finish extending or timeout
-          if (intake_state_ == mcu_msgs::msg::IntakeState::STATE_IDLE ||
-              checkStepTimeout(10.0)) {
-            setStep(11);
-          }
-          break;
-        }
-
-        // Step 11: Turn to 180 deg at (55, 95, 180)
-        case 11: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 11: Turn to 180 deg at (55, 95, 180)");
-            sendGoal(55.0, 95.0, 180.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(12);
-          }
-          break;
-        }
-
-        // Step 12: Reverse [rev] to (91, 95, 180)
-        case 12: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 12: Reverse to (91, 95, 180)");
-            sendGoal(91.0, 95.0, 180.0, true);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(13);
-          }
-          break;
-        }
-
-        // Step 13: Read keypad antenna (DUMMY)
-        case 13: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 13: Read keypad antenna");
-            readAntennaDummy("keypad");
-          }
-          if (stepElapsed() > 1.0) {
-            setStep(14);
-          }
-          break;
-        }
-
-        // Step 14: Turn to 115 deg at (91, 95, 115)
-        case 14: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 14: Turn to 115 deg at (91, 95, 115)");
-            sendGoal(91.0, 95.0, 115.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(15);
-          }
-          break;
-        }
-
-        // Step 15: Read crater antenna (DUMMY)
-        case 15: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 15: Read crater antenna");
-            readAntennaDummy("crater");
-          }
-          if (stepElapsed() > 1.0) {
-            setStep(16);
-          }
-          break;
-        }
-
-        // Step 16: Drive to wall alignment (90, 110, 45)
-        case 16: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 16: Wall alignment (90, 110, 45)");
-            sendGoal(90.0, 110.0, 45.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(17);
-          }
-          break;
-        }
-
-        // Step 17: Safe path up (100, 190, 90) -- avoiding crater
-        case 17: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 17: Safe path to (100, 190, 90)");
-            sendGoal(100.0, 190.0, 90.0);
-          }
-          if (goal_reached_ || checkStepTimeout(20.0)) {
-            setStep(18);
-          }
-          break;
-        }
-
-        // Step 18: Align with crank (53, 225, 180)
-        case 18: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 18: Align with crank (53, 225, 180)");
-            sendGoal(53.0, 225.0, 180.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(19);
-          }
-          break;
-        }
-
-        // Step 19: Reverse to crank [rev] (53, 225, 150)
-        case 19: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 19: Reverse to crank (53, 225, 150)");
-            sendGoal(53.0, 225.0, 150.0, true);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(20);
-          }
-          break;
-        }
-
-        // Step 20: Adjust position (53, 228, 180)
-        case 20: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 20: Fine adjust (53, 228, 180)");
-            sendGoal(53.0, 228.0, 180.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(21);
-          }
-          break;
-        }
-
-        // Step 21: Turn to 0 deg (53, 228, 0) -- spin 180
-        case 21: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 21: Turn to 0 deg at (53, 228, 0)");
-            sendGoal(53.0, 228.0, 0.0);
-          }
-          if (goal_reached_ || checkStepTimeout(DEFAULT_STEP_TIMEOUT_S)) {
-            setStep(22);
-          }
-          break;
-        }
-
-        // Step 22: Read crank antenna (DUMMY)
-        case 22: {
-          if (step_entry_) {
-            step_entry_ = false;
-            RCLCPP_INFO(this->get_logger(),
-                        "KEYPAD Step 22: Read crank antenna");
-            readAntennaDummy("crank");
-          }
-          if (stepElapsed() > 1.0) {
-            RCLCPP_INFO(
-                this->get_logger(),
-                "=== PHASE 2 COMPLETE: Keypad + Crater + Crank done ===");
-            transitionTo(MissionPhase::MISSION_COMPLETE);
-          }
-          break;
-        }
-
-        default:
-          RCLCPP_WARN(this->get_logger(), "KEYPAD: Unknown step %d", step_);
-          transitionTo(MissionPhase::MISSION_COMPLETE);
-          break;
-      }
+      executePhaseCommands(keypad_cmds_, keypad_cmd_idx_,
+                           MissionPhase::MISSION_COMPLETE, "KEYPAD");
       break;
     }
 
-    // ── MISSION_COMPLETE ───────────────────────────────────────────────
     case MissionPhase::MISSION_COMPLETE: {
       if (phase_entry_) {
         phase_entry_ = false;
@@ -684,7 +1008,7 @@ void MissionNode::stepMission() {
 // Phase / step management
 // ============================================================================
 
-void MissionNode::transitionTo(MissionPhase phase) {
+void MissionSequencer::transitionTo(MissionPhase phase) {
   RCLCPP_INFO(this->get_logger(), "Phase transition: %s -> %s",
               phaseName(phase_), phaseName(phase));
   phase_ = phase;
@@ -692,9 +1016,10 @@ void MissionNode::transitionTo(MissionPhase phase) {
   phase_timer_ = std::chrono::steady_clock::now();
   step_ = 0;
   step_entry_ = true;
+  nav_sub_step_ = NavSubStep::IDLE;
 }
 
-const char* MissionNode::phaseName(MissionPhase phase) const {
+const char* MissionSequencer::phaseName(MissionPhase phase) const {
   switch (phase) {
     case MissionPhase::WAIT_FOR_START:
       return "WAIT_FOR_START";
@@ -711,20 +1036,21 @@ const char* MissionNode::phaseName(MissionPhase phase) const {
   }
 }
 
-void MissionNode::setStep(int step) {
+void MissionSequencer::setStep(int step) {
   step_ = step;
   step_entry_ = true;
   goal_reached_ = false;
+  nav_sub_step_ = NavSubStep::IDLE;
   step_timer_ = std::chrono::steady_clock::now();
   RCLCPP_INFO(this->get_logger(), "[%s] -> Step %d", phaseName(phase_), step);
 }
 
-double MissionNode::stepElapsed() const {
+double MissionSequencer::stepElapsed() const {
   auto now = std::chrono::steady_clock::now();
   return std::chrono::duration<double>(now - step_timer_).count();
 }
 
-bool MissionNode::checkStepTimeout(double timeout_s) {
+bool MissionSequencer::checkStepTimeout(double timeout_s) {
   if (stepElapsed() > timeout_s) {
     RCLCPP_WARN(this->get_logger(),
                 "[%s] Step %d TIMED OUT after %.1f s, advancing",
@@ -735,191 +1061,60 @@ bool MissionNode::checkStepTimeout(double timeout_s) {
 }
 
 // ============================================================================
-// Navigation helpers
-// ============================================================================
-
-void MissionNode::sendGoal(double x_cm, double y_cm, double yaw_deg,
-                           bool reverse) {
-  // Convert cm -> meters, degrees -> radians for MCU
-  double x_m = cm2m(x_cm);
-  double y_m = cm2m(y_cm);
-  double theta_rad = deg2rad(yaw_deg);
-
-  // Track goal in cm/degrees for goal-reached detection
-  goal_x_cm_ = x_cm;
-  goal_y_cm_ = y_cm;
-  goal_yaw_deg_ = yaw_deg;
-  goal_reached_ = false;
-
-  auto msg = mcu_msgs::msg::DriveBase();
-  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
-  msg.goal_transform.transform.translation.x = x_m;
-  msg.goal_transform.transform.translation.y = y_m;
-  msg.goal_transform.transform.translation.z = reverse ? -1.0 : 0.0;
-
-  // Encode heading as yaw-only quaternion: q = (0, 0, sin(theta/2),
-  // cos(theta/2))
-  float half = static_cast<float>(theta_rad) * 0.5f;
-  msg.goal_transform.transform.rotation.x = 0.0;
-  msg.goal_transform.transform.rotation.y = 0.0;
-  msg.goal_transform.transform.rotation.z = std::sin(half);
-  msg.goal_transform.transform.rotation.w = std::cos(half);
-
-  last_drive_cmd_ = msg;
-  last_drive_mode_ = mcu_msgs::msg::DriveBase::DRIVE_GOAL;
-  drive_cmd_pub_->publish(msg);
-
-  RCLCPP_INFO(this->get_logger(),
-              "  sendGoal(%.0f, %.0f, %.0f deg%s) -> (%.3f, %.3f, %.3f rad)",
-              x_cm, y_cm, yaw_deg, reverse ? " REV" : "", x_m, y_m, theta_rad);
-}
-
-void MissionNode::sendVelocity(double vx_mps, double omega_radps) {
-  auto msg = mcu_msgs::msg::DriveBase();
-  msg.drive_mode = mcu_msgs::msg::DriveBase::DRIVE_VECTOR;
-  msg.goal_velocity.linear.x = vx_mps;
-  msg.goal_velocity.angular.z = omega_radps;
-
-  last_drive_cmd_ = msg;
-  last_drive_mode_ = mcu_msgs::msg::DriveBase::DRIVE_VECTOR;
-  drive_cmd_pub_->publish(msg);
-}
-
-void MissionNode::sendNudge(double speed_mps) {
-  RCLCPP_INFO(this->get_logger(), "  sendNudge(%.2f m/s)", speed_mps);
-  sendVelocity(speed_mps, 0.0);
-}
-
-void MissionNode::stopRobot() { sendVelocity(0.0, 0.0); }
-
-void MissionNode::refreshDriveCommand() {
-  // Re-publish last command to prevent MCU 500ms timeout auto-stop.
-  // Stop re-publishing once a DRIVE_GOAL is reached, so the robot stops.
-  if (goal_reached_ &&
-      last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_GOAL) {
-    return;
-  }
-  if (last_drive_mode_ != 0) {
-    drive_cmd_pub_->publish(last_drive_cmd_);
-  }
-}
-
-void MissionNode::resetPose(double x_cm, double y_cm, double yaw_deg) {
-  double x_m = cm2m(x_cm);
-  double y_m = cm2m(y_cm);
-  double theta_rad = deg2rad(yaw_deg);
-
-  auto msg = geometry_msgs::msg::Pose();
-  msg.position.x = x_m;
-  msg.position.y = y_m;
-  msg.position.z = 0.0;
-
-  float half = static_cast<float>(theta_rad) * 0.5f;
-  msg.orientation.x = 0.0;
-  msg.orientation.y = 0.0;
-  msg.orientation.z = std::sin(half);
-  msg.orientation.w = std::cos(half);
-
-  pose_reset_pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(),
-              "  resetPose(%.0f, %.0f, %.0f deg) -> (%.3f, %.3f, %.3f rad)",
-              x_cm, y_cm, yaw_deg, x_m, y_m, theta_rad);
-}
-
-// ============================================================================
-// Task helpers
-// ============================================================================
-
-void MissionNode::sendTaskCommand(uint8_t task_id) {
-  auto msg = std_msgs::msg::UInt8();
-  msg.data = task_id;
-  task_cmd_pub_->publish(msg);
-  task_idle_ = false;
-  RCLCPP_INFO(this->get_logger(), "  sendTaskCommand(%d)", task_id);
-}
-
-void MissionNode::sendArmCommand(uint8_t joint_id, int16_t position,
-                                 uint8_t speed) {
-  auto msg = mcu_msgs::msg::ArmCommand();
-  msg.joint_id = joint_id;
-  msg.position = position;
-  msg.speed = speed;
-  arm_cmd_pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "  sendArmCommand(joint=%d, pos=%d, spd=%d)",
-              joint_id, position, speed);
-}
-
-void MissionNode::sendIntakeCommand(uint8_t cmd, float value) {
-  auto msg = mcu_msgs::msg::IntakeCommand();
-  msg.command = cmd;
-  msg.value = value;
-  intake_cmd_pub_->publish(msg);
-  RCLCPP_INFO(this->get_logger(), "  sendIntakeCommand(cmd=%d, val=%.2f)", cmd,
-              value);
-}
-
-void MissionNode::readAntennaDummy(const char* label) {
-  RCLCPP_INFO(this->get_logger(),
-              "  [DUMMY] Reading %s antenna... (placeholder, returning green)",
-              label);
-}
-
-// ============================================================================
 // Subscriber callbacks
 // ============================================================================
 
-void MissionNode::onDriveStatus(const mcu_msgs::msg::DriveBase::SharedPtr msg) {
-  // Extract pose from status: MCU sends meters and radians
+void MissionSequencer::onDriveStatus(
+    const mcu_msgs::msg::DriveBase::SharedPtr msg) {
+  // Extract pose: MCU sends meters and radians
   auto& t = msg->transform.transform.translation;
   auto& r = msg->transform.transform.rotation;
 
-  double x_m = t.x;
-  double y_m = t.y;
-  double theta_rad = 2.0 * std::atan2(r.z, r.w);
-
-  // Store in cm / degrees
-  robot_x_cm_ = m2cm(x_m);
-  robot_y_cm_ = m2cm(y_m);
-  robot_yaw_deg_ = rad2deg(theta_rad);
+  robot_x_m_ = t.x;
+  robot_y_m_ = t.y;
+  robot_theta_rad_ = 2.0 * std::atan2(r.z, r.w);
   has_drive_status_ = true;
 
-  // Check if current goal is reached
+  // Check if current goal is reached (all in MCU coords)
   if (last_drive_mode_ == mcu_msgs::msg::DriveBase::DRIVE_GOAL &&
       !goal_reached_) {
-    double dx = robot_x_cm_ - goal_x_cm_;
-    double dy = robot_y_cm_ - goal_y_cm_;
-    double dist_cm = std::hypot(dx, dy);
+    double dx = robot_x_m_ - goal_x_m_;
+    double dy = robot_y_m_ - goal_y_m_;
+    double dist = std::hypot(dx, dy);
 
-    // Normalize heading error to [-180, 180]
-    double heading_err = robot_yaw_deg_ - goal_yaw_deg_;
-    while (heading_err > 180.0) heading_err -= 360.0;
-    while (heading_err < -180.0) heading_err += 360.0;
+    double heading_err =
+        std::abs(normalizeAngle(robot_theta_rad_ - goal_theta_rad_));
 
-    if (dist_cm < GOAL_DIST_TOL_CM &&
-        std::abs(heading_err) < GOAL_HEADING_TOL_DEG) {
+    if (dist < DIST_TOL_M && heading_err < HEADING_TOL_RAD) {
       goal_reached_ = true;
+      auto raf = mcuToRafeed(robot_x_m_, robot_y_m_, robot_theta_rad_);
       RCLCPP_INFO(this->get_logger(),
-                  "  GOAL REACHED at (%.1f, %.1f, %.1f deg) "
-                  "err: dist=%.1f cm, heading=%.1f deg",
-                  robot_x_cm_, robot_y_cm_, robot_yaw_deg_, dist_cm,
-                  heading_err);
+                  "  GOAL REACHED at MCU(%.3f, %.3f, %.1f deg) "
+                  "Rafeed(%.1f, %.1f, %.1f deg) "
+                  "err: dist=%.3f m, heading=%.1f deg",
+                  robot_x_m_, robot_y_m_, rad2deg(robot_theta_rad_), raf.x_cm,
+                  raf.y_cm, raf.yaw_deg, dist, rad2deg(heading_err));
     }
   }
 
-  // Periodic debug logging (every 10th callback, around 1 Hz at 10 Hz status)
+  // Periodic debug logging (~1 Hz)
   if (++debug_status_tick_ >= 10) {
     debug_status_tick_ = 0;
     if (phase_ == MissionPhase::PHASE_BUTTON ||
         phase_ == MissionPhase::PHASE_KEYPAD_CRATER) {
+      auto raf = mcuToRafeed(robot_x_m_, robot_y_m_, robot_theta_rad_);
       RCLCPP_INFO(this->get_logger(),
-                  "  [POSE] (%.1f, %.1f, %.1f deg) goal=(%.1f, %.1f, %.1f deg)",
-                  robot_x_cm_, robot_y_cm_, robot_yaw_deg_, goal_x_cm_,
-                  goal_y_cm_, goal_yaw_deg_);
+                  "  [POSE] MCU(%.3f, %.3f, %.1f deg) "
+                  "Rafeed(%.1f, %.1f, %.1f deg) "
+                  "goal_MCU(%.3f, %.3f, %.1f deg) navStep=%d",
+                  robot_x_m_, robot_y_m_, rad2deg(robot_theta_rad_), raf.x_cm,
+                  raf.y_cm, raf.yaw_deg, goal_x_m_, goal_y_m_,
+                  rad2deg(goal_theta_rad_), static_cast<int>(nav_sub_step_));
     }
   }
 }
 
-void MissionNode::onTaskStatus(
+void MissionSequencer::onTaskStatus(
     const secbot_msgs::msg::TaskStatus::SharedPtr msg) {
   if (msg->task_id == TASK_NONE) {
     task_idle_ = true;
@@ -932,16 +1127,16 @@ void MissionNode::onTaskStatus(
   }
 }
 
-void MissionNode::onRobotInputs(
-    const mcu_msgs::msg::RobotInputs::SharedPtr msg) {
-  // Use button 1 as start trigger
-  if (msg->btn1 && !start_button_pressed_) {
+void MissionSequencer::onButtons(const std_msgs::msg::UInt8::SharedPtr msg) {
+  if (!button_start_enabled_) return;
+  // Bit 0 = button channel 0
+  if ((msg->data & 0x01) && !start_button_pressed_) {
     start_button_pressed_ = true;
-    RCLCPP_INFO(this->get_logger(), "START BUTTON PRESSED!");
+    RCLCPP_INFO(this->get_logger(), "START BUTTON PRESSED (button 0)!");
   }
 }
 
-void MissionNode::onIntakeState(
+void MissionSequencer::onIntakeState(
     const mcu_msgs::msg::IntakeState::SharedPtr msg) {
   intake_state_ = msg->state;
 }
@@ -950,7 +1145,7 @@ void MissionNode::onIntakeState(
 // Service callbacks
 // ============================================================================
 
-void MissionNode::onStartService(
+void MissionSequencer::onStartService(
     const std_srvs::srv::Trigger::Request::SharedPtr /*req*/,
     std_srvs::srv::Trigger::Response::SharedPtr res) {
   if (!start_button_pressed_) {
@@ -966,9 +1161,13 @@ void MissionNode::onStartService(
 
 }  // namespace secbot
 
+// ============================================================================
+// main
+// ============================================================================
+
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<secbot::MissionNode>());
+  rclcpp::spin(std::make_shared<secbot::MissionSequencer>());
   rclcpp::shutdown();
   return 0;
 }

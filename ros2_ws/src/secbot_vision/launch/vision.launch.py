@@ -82,6 +82,8 @@ def generate_launch_description():
                               description='Launch a dummy SetServo service for testing without MCU'),
         DeclareLaunchArgument('enable_goal_converter', default_value='true',
                               description='Launch convert_vision_to_goal node'),
+        DeclareLaunchArgument('enable_slider_gui', default_value='true',
+                              description='Launch the HSV slider tuning GUI'),
         DeclareLaunchArgument('odom_topic', default_value='/odometry/global',
                               description='Odometry topic for vision goal converter'),
         DeclareLaunchArgument('camera_info_topic', default_value='/camera/camera_info',
@@ -112,6 +114,7 @@ def generate_launch_description():
             name='rgb_slider_gui',
             output='screen',
             additional_env={'DISPLAY': os.environ.get('DISPLAY', ':0')},
+            condition=LaunchConfigurationEquals('enable_slider_gui', 'true'),
         ),
 
         # Detector (color detection + bounding box debug image)

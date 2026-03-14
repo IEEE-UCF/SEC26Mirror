@@ -19,3 +19,7 @@ colors:
     color_low: [130, 80, 80]
     color_high: [160, 255, 255]
     hsv_values: [145, 180, 200]
+  white:
+    color_low:  [0, 0, 183]
+    color_high: [0, 0, 255]
+    hsv_values: [0, 0, 219]

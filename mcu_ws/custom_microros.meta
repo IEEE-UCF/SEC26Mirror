@@ -7,8 +7,9 @@
                 "-DRMW_UXRCE_MAX_SUBSCRIPTIONS=16",
                 "-DRMW_UXRCE_MAX_SERVICES=12",
                 "-DRMW_UXRCE_MAX_CLIENTS=1",
-                "-DRMW_UXRCE_MAX_HISTORY=4",
-                "-DRMW_UXRCE_TRANSPORT=custom"
+                "-DRMW_UXRCE_MAX_HISTORY=8",
+                "-DRMW_UXRCE_TRANSPORT=custom",
+                "-DUCLIENT_CUSTOM_TRANSPORT_MTU=1024"
             ]
         }
     }

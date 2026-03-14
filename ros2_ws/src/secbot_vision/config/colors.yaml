@@ -1,8 +1,8 @@
 colors:
   yellow:
-    color_low: [20, 100, 100]
-    color_high: [35, 255, 255]
-    hsv_values: [28, 200, 200]
+    color_low: [20, 111, 180]
+    color_high: [40, 211, 255]
+    hsv_values: [30, 161, 218]
   red:
     color_low: [0, 120, 100]
     color_high: [10, 255, 255]

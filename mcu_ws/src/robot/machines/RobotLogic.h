@@ -516,24 +516,24 @@ void setup() {
   // Sensor/control tasks promoted so they never get starved by publishing.
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 2, 1);    // ROS agent (pri 2, 1ms for fast publish)
+  g_mr.beginThreaded(16384, 2, 1);   // ROS agent — needs deep stack for entity creation
   g_imu.beginThreaded(8192, 4, 10);  // 100Hz poll — INT pin skips I2C when no data ready
   g_servo.beginThreaded(2048, 3, 100);    // 10 Hz state pub
   g_motor.beginThreaded(2048, 3, 1);      // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(2048, 3, 50);  // 20 Hz encoder reading
+  g_encoder_sub.beginThreaded(1024, 3, 50);  // 20 Hz encoder reading
   g_oled.beginThreaded(2048, 2, 100);     // 10 Hz display
-  g_battery.beginThreaded(2048, 2, 2000); // 0.5 Hz
-  g_sensor.beginThreaded(2048, 2, 500);   // 2 Hz TOF
-  g_dip.beginThreaded(2048, 2, 2000);     // 0.5 Hz
-  g_btn.beginThreaded(2048, 2, 100);      // 10 Hz
-  g_led.beginThreaded(2048, 2, 200);      // 5 Hz
-  g_hb.beginThreaded(2048, 2, 1000);      // 1 Hz
+  g_battery.beginThreaded(1024, 2, 2000); // 0.5 Hz
+  g_sensor.beginThreaded(1024, 2, 500);   // 2 Hz TOF
+  g_dip.beginThreaded(1024, 2, 2000);     // 0.5 Hz
+  g_btn.beginThreaded(1024, 2, 100);      // 10 Hz
+  g_led.beginThreaded(1024, 2, 200);      // 5 Hz
+  g_hb.beginThreaded(1024, 2, 1000);      // 1 Hz
   if (uwb_enabled) g_uwb.beginThreaded(2048, 3, 200);  // 5 Hz UWB ranging
   g_arm.beginThreaded(2048, 3, 50);       // 20 Hz arm
   g_intake.beginThreaded(2048, 3, 50);    // 20 Hz intake
-  g_deploy.beginThreaded(2048, 2, 100);   // 10 Hz deploy button
-  g_crank.beginThreaded(2048, 2, 200);    // 5 Hz crank
-  g_keypad.beginThreaded(2048, 2, 200);   // 5 Hz keypad
+  g_deploy.beginThreaded(1024, 2, 100);   // 10 Hz deploy button
+  g_crank.beginThreaded(1024, 2, 200);    // 5 Hz crank
+  g_keypad.beginThreaded(1024, 2, 200);   // 5 Hz keypad
   g_drive.beginThreaded(4096, 4, 20);     // 50 Hz drive control
   xTaskCreate(reinterpret_cast<TaskFunction_t>(wire0_dma_task),
               "wire0_dma", 2048 / 4, nullptr, 2, nullptr);   // 50 Hz Wire0 DMA

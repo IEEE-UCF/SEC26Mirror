@@ -571,8 +571,8 @@ void setup() {
   // Sensor/control tasks promoted so they never get starved by publishing.
   DEBUG_PRINTLN("[INIT] --- Starting threads ---");
   //                                 stack  pri   rate(ms)
-  g_mr.beginThreaded(8192, 1, 2);   // ROS agent (leftover cycles)
-  g_hb.beginThreaded(2048, 2, 1000); // 1 Hz
+  g_mr.beginThreaded(16384, 1, 2);  // ROS agent — needs deep stack for entity creation
+  g_hb.beginThreaded(1024, 2, 1000); // 1 Hz
 
 #if DEBUG_STAGE >= 2
   g_imu.beginThreaded(8192, 4, 30);  // target ~20 Hz — highest priority
@@ -581,24 +581,24 @@ void setup() {
 #if DEBUG_STAGE >= 3
   g_servo.beginThreaded(2048, 3, 100);       // 10 Hz state pub
   g_motor.beginThreaded(2048, 3, 1);         // 1000 Hz — NFPShop reverse-pulse
-  g_encoder_sub.beginThreaded(2048, 3, 50);  // 20 Hz encoder reading
+  g_encoder_sub.beginThreaded(1024, 3, 50);  // 20 Hz encoder reading
   xTaskCreate(reinterpret_cast<TaskFunction_t>(pca_task),
               "pca_dma", 2048 / 4, nullptr, 3, nullptr);  // Wire2 DMA (pri 3)
 #endif
 
 #if DEBUG_STAGE >= 4
-  g_battery.beginThreaded(2048, 2, 2000);  // 0.5 Hz
-  g_sensor.beginThreaded(2048, 2, 500);    // 2 Hz TOF
-  g_dip.beginThreaded(2048, 2, 2000);      // 0.5 Hz
-  g_btn.beginThreaded(2048, 2, 100);       // 10 Hz
+  g_battery.beginThreaded(1024, 2, 2000);  // 0.5 Hz
+  g_sensor.beginThreaded(1024, 2, 500);    // 2 Hz TOF
+  g_dip.beginThreaded(1024, 2, 2000);      // 0.5 Hz
+  g_btn.beginThreaded(1024, 2, 100);       // 10 Hz
 #endif
 
 #if DEBUG_STAGE >= 5
-  g_led.beginThreaded(2048, 2, 200);       // 5 Hz
-  g_oled.beginThreaded(2048, 2, 100);      // 10 Hz display
-  g_deploy.beginThreaded(2048, 2, 100);    // 10 Hz deploy button
-  g_crank.beginThreaded(2048, 2, 200);     // 5 Hz crank
-  g_keypad.beginThreaded(2048, 2, 200);    // 5 Hz keypad
+  g_led.beginThreaded(1024, 2, 200);       // 5 Hz
+  g_oled.beginThreaded(2048, 2, 100);      // 10 Hz display (SPI1 needs stack)
+  g_deploy.beginThreaded(1024, 2, 100);    // 10 Hz deploy button
+  g_crank.beginThreaded(1024, 2, 200);     // 5 Hz crank
+  g_keypad.beginThreaded(1024, 2, 200);    // 5 Hz keypad
 #endif
 
 #if DEBUG_STAGE >= 6

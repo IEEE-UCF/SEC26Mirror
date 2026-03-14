@@ -1,0 +1,45 @@
+mission_sequencer:
+  ros__parameters:
+    # All coordinates in Rafeed frame: x_cm, y_cm, heading_deg
+    # Each line is a command. Reorder/add/remove without recompiling.
+    #
+    # Commands:
+    #   nav x y heading [timeout]         - drive to waypoint
+    #   nav_rev x y heading [timeout]     - drive in reverse to waypoint
+    #   nudge [duration]                  - nudge forward (default 1.0s)
+    #   stop                              - stop robot
+    #   wait duration                     - pause for duration seconds
+    #   task id [timeout]                 - run task by ID (default timeout 30s)
+    #   read_antenna label angle [idx]    - read antenna color (idx = storage slot)
+    #   arm joint position speed          - move arm servo
+    #   intake extend|retract [timeout]   - intake command (default timeout 10s)
+    #   velocity_raw vx omega [duration]  - raw velocity, no gyro hold (default 1.0s)
+    #   minibot enter|exit [timeout]     - call minibot enter/exit crater service (default 15s)
+
+    start_pose: [15.0, 15.0, 180.0]
+    nudge_speed: 0.25
+    light_start_threshold: 2000.0
+    turn_timeout: 5.0
+    drive_timeout: 5.0
+    default_step_timeout: 5.0
+
+    #  Phase 1: Button 
+    phase_button:
+      - "nav_rev 60.0 15.0 180.0" #backup to button
+      - "nav_rev 97.0 15.0 180.0" #press button
+      - "nav 60.0 15.0 180.0" #backup to repress button
+      - "nav_rev 97.0 15.0 180.0" #press button
+      - "nav 60.0 15.0 180.0" #backup to repress button
+      - "nav_rev 97.0 15.0 180.0" #press button
+      - "nav 50.0 18.0 90.0" #backup to go crater
+      - "nav 50.0 90.0 90.0" #go to crater
+      - "motor 2 -0.5"
+      - "minibot enter 10.0"    #launch minibot into crater
+      - "wait 5.0"              #wait just to be safe anyways
+      - "motor 2 0.0"
+      - "nav_rev 30.0 18.0 0.0" #backup to read button
+      - "wait 5.0"
+      - "read_antenna beacon 0.0 0"     # read beacon antenna (store slot 0)
+      - "wait 20"
+      - "minibot exit 15.0"     #call minibot exit crater service
+      - "wait 5.0"

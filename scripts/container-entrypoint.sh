@@ -22,6 +22,18 @@ if ! ros2 pkg list 2>/dev/null | grep -q secbot_deploy; then
   )
 fi
 
+# Build secbot_autonomy on first boot if not already built
+if ! ros2 pkg list 2>/dev/null | grep -q secbot_autonomy; then
+  echo "[entrypoint] Building secbot_autonomy (first boot)..."
+  (
+    cd /home/ubuntu/ros2_workspaces
+    colcon build --packages-select secbot_autonomy mcu_msgs secbot_msgs 2>&1 || true
+    if [ -f install/setup.bash ]; then
+      source install/setup.bash
+    fi
+  )
+fi
+
 # Re-source after potential build
 if [ -f /home/ubuntu/ros2_workspaces/install/setup.bash ]; then
   source /home/ubuntu/ros2_workspaces/install/setup.bash
@@ -70,6 +82,19 @@ is_running() {
     if ! is_running "secbot_deploy" && ros2 pkg list 2>/dev/null | grep -q secbot_deploy; then
       echo "[entrypoint] Starting secbot_deploy node"
       ros2 launch secbot_deploy deploy.launch.py || true
+      wait $! 2>/dev/null
+    fi
+    sleep 5
+  done
+) &
+
+# Autonomy stack — mission sequencer + task FSMs (auto-restart loop)
+(
+  sleep 12  # Wait for micro-ROS agents to be ready
+  while true; do
+    if ! is_running "mission_sequencer" && ros2 pkg list 2>/dev/null | grep -q secbot_autonomy; then
+      echo "[entrypoint] Starting secbot_autonomy (mission_sequencer + autonomy_node)"
+      ros2 launch secbot_autonomy autonomy.launch.py || true
       wait $! 2>/dev/null
     fi
     sleep 5

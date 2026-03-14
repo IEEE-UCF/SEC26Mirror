@@ -63,6 +63,7 @@ setup(
             'detector_node = secbot_vision.detector_node:main',
             'teleop_pid = secbot_vision.teleop_pid:main',
             'camera_node = secbot_vision.camera_node:main',
+            'read_beacon_color = secbot_vision.read_beacon_color:main',
         ],
     },
 )

@@ -9,7 +9,7 @@
  *   1 = micro-ROS + Heartbeat only
  *   2 = + IMU
  *   3 = + Wire2 (PCA servo/motor, encoder)
- *   4 = + Wire0 (mux, GPIO, battery, TOF, DIP, buttons)
+ *   4 = + Wire0 (mux, GPIO, light, TOF, DIP, buttons)
  *   5 = + no-bus peripherals (LED, OLED, deploy, crank, keypad)
  *   6 = + Drive + RC (full system minus UWB)
  *   7 = + UWB (full system)
@@ -17,7 +17,7 @@
  * Workflow: change DEBUG_STAGE, flash, measure `ros2 topic hz /mcu_robot/imu/data`
  *
  * Hardware expected (see RobotPins.h for pin map):
- *   Wire0  — TCA9548A mux, TCA9555 GPIO, INA219 (mux ch0)
+ *   Wire0  — TCA9548A mux, TCA9555 GPIO, BH1750 (mux ch1)
  *   Wire1  — BNO085 IMU
  *   Wire2  — PCA9685 #0 (servos), PCA9685 #1 (motors)
  *   SPI0   — DW3000 UWB tag (CS=10)
@@ -26,7 +26,7 @@
  *
  * micro-ROS topics published:
  *   /mcu_robot/heartbeat          std_msgs/String          1 Hz
- *   /mcu_robot/battery_health     mcu_msgs/BatteryHealth   0.5 Hz
+ *   /mcu_robot/light              std_msgs/Float32         2 Hz
  *   /mcu_robot/imu/data           sensor_msgs/Imu         ~25 Hz
  *   /mcu_robot/rc                 mcu_msgs/RC             20 Hz
  *   /mcu_robot/tof_distances      std_msgs/Float32Multi..  2 Hz
@@ -66,7 +66,7 @@
 //  Stage 1: micro-ROS + Heartbeat
 //  Stage 2: + IMU
 //  Stage 3: + Wire2 (PCA servo/motor, encoder)
-//  Stage 4: + Wire0 (mux, GPIO, battery, TOF, DIP, buttons)
+//  Stage 4: + Wire0 (mux, GPIO, light, TOF, DIP, buttons)
 //  Stage 5: + no-bus peripherals (LED, OLED, deploy, crank, keypad)
 //  Stage 6: + Drive + RC
 //  Stage 7: + UWB (full system)
@@ -94,7 +94,7 @@
 #include "I2CBusLock.h"
 #include "I2CDMABus.h"
 #include "I2CMuxDriver.h"
-#include "I2CPowerDriver.h"
+#include "BH1750Driver.h"
 #include "PCA9685Manager.h"
 #include "TCA9555Driver.h"
 #include "TOF.h"
@@ -102,7 +102,7 @@
 
 // Subsystems
 #include "robot/machines/HeartbeatSubsystem.h"
-#include "robot/subsystems/BatterySubsystem.h"
+#include "robot/subsystems/LightSubsystem.h"
 #include "robot/subsystems/ButtonSubsystem.h"
 #include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/DipSwitchSubsystem.h"
@@ -182,15 +182,15 @@ static Drivers::TCA9555DriverSetup g_gpio_setup("gpio_expander", I2C_ADDR_GPIO,
                                                 Wire);
 static Drivers::TCA9555Driver g_gpio(g_gpio_setup);
 
-// --- Wire0: Battery subsystem (INA219 on mux ch0) ---
-static Drivers::I2CPowerDriverSetup g_power_setup("power_driver",
-                                                  I2C_ADDR_POWER, &g_mux,
-                                                  MUX_CH_BATTERY, Wire,
-                                                  SHUNT_RESISTANCE_OHM);
-static Drivers::I2CPowerDriver g_power_driver(g_power_setup);
-static BatterySubsystemSetup g_battery_setup("battery_subsystem",
-                                             &g_power_driver);
-static BatterySubsystem g_battery(g_battery_setup);
+// --- Wire0: Light subsystem (BH1750 on mux ch7) ---
+static constexpr uint8_t MUX_CH_LIGHT = 7;
+static constexpr uint8_t I2C_ADDR_BH1750 = 0x23;
+static Drivers::BH1750DriverSetup g_light_driver_setup("bh1750_driver",
+                                                       I2C_ADDR_BH1750, &g_mux,
+                                                       MUX_CH_LIGHT, Wire);
+static Drivers::BH1750Driver g_light_driver(g_light_driver_setup);
+static LightSubsystemSetup g_light_setup("light_subsystem", &g_light_driver);
+static LightSubsystem g_light(g_light_setup);
 
 // --- Wire0: Sensor subsystem (TOF) ---
 static Drivers::TOFDriverSetup g_tof_setup("tof_sensor", 500, 0, Wire);
@@ -383,14 +383,17 @@ static void rc_drive_task(void*) {
       }
     }
 
-    // RC knob motor control — knob 1 (left) → motor 2 (linear extension),
-    //                         knob 2 (right) → motor 3 (intake)
+    // RC knob motor control — only when SWD is ON (ch9 > 0)
+    // knob 1 (VRA, ch4) → motor 2, knob 2 (VRB, ch5) → motor 3
     {
       const auto& rc = g_rc.getData();
-      float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;
-      float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;
-      g_motor.setSpeed(2, knob1);
-      g_motor.setSpeed(3, knob2);
+      bool swd_high = rc.channels[9] > 0;
+      if (swd_high) {
+        float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;
+        float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;
+        g_motor.setSpeed(2, knob1);
+        g_motor.setSpeed(3, knob2);
+      }
     }
 
     vTaskDelay(pdMS_TO_TICKS(5));
@@ -462,17 +465,17 @@ void setup() {
   g_mr.registerParticipant(&g_encoder_sub);
 #endif
 
-  // ─── Stage 4: + Wire0 (mux, GPIO, battery, TOF, DIP, buttons) ────────
+  // ─── Stage 4: + Wire0 (mux, GPIO, light, TOF, DIP, buttons) ──────────
 #if DEBUG_STAGE >= 4
-  DEBUG_PRINTLN("[INIT] --- Stage 4: + Wire0 (mux, GPIO, battery, TOF, DIP, buttons) ---");
+  DEBUG_PRINTLN("[INIT] --- Stage 4: + Wire0 (mux, GPIO, light, TOF, DIP, buttons) ---");
   g_mux.init();       DEBUG_PRINTLN("[INIT] I2C Mux OK");
   g_gpio.init();      DEBUG_PRINTLN("[INIT] GPIO Expander OK");
-  g_battery.init();   DEBUG_PRINTLN("[INIT] Battery OK");
+  g_light.init();     DEBUG_PRINTLN("[INIT] Light (BH1750) OK");
   g_sensor.init();    DEBUG_PRINTLN("[INIT] Sensor (TOF) OK");
   g_dip.init();       DEBUG_PRINTLN("[INIT] DIP Switch OK");
   g_btn.init();       DEBUG_PRINTLN("[INIT] Buttons OK");
 
-  g_mr.registerParticipant(&g_battery);
+  g_mr.registerParticipant(&g_light);
   g_mr.registerParticipant(&g_sensor);
   g_mr.registerParticipant(&g_dip);
   g_mr.registerParticipant(&g_btn);
@@ -506,8 +509,6 @@ void setup() {
     g_oled.appendText(connected ? "uROS CONNECTED" : "uROS DISCONNECTED");
   });
 
-  // Wire battery → OLED status line
-  g_battery.setOLED(&g_oled);
 #endif
 
   // ─── Stage 6: + Drive + RC ────────────────────────────────────────────
@@ -554,7 +555,7 @@ void setup() {
 #if DEBUG_STAGE >= 5
   g_oled.setDashboardSources(
 #if DEBUG_STAGE >= 4
-      &g_dip, &g_battery, &g_imu,
+      &g_dip, nullptr, &g_imu,
 #else
       nullptr, nullptr, &g_imu,
 #endif
@@ -587,7 +588,7 @@ void setup() {
 #endif
 
 #if DEBUG_STAGE >= 4
-  g_battery.beginThreaded(2048, 2, 2000);  // 0.5 Hz
+  g_light.beginThreaded(2048, 2, 500);     // 2 Hz light sensor
   g_sensor.beginThreaded(2048, 2, 500);    // 2 Hz TOF
   g_dip.beginThreaded(2048, 2, 2000);      // 0.5 Hz
   g_btn.beginThreaded(2048, 2, 100);       // 10 Hz
@@ -670,9 +671,7 @@ static void debugMonitorTask(void*) {
 #endif
 
 #if DEBUG_STAGE >= 4
-    DEBUG_PRINTF("  Battery    : %.2fV  %.0fmA  %.0fmW\n",
-                 g_power_driver.getVoltage(), g_power_driver.getCurrentmA(),
-                 g_power_driver.getPowermW());
+    DEBUG_PRINTF("  Light      : %.1f lux\n", g_light_driver.getLux());
     DEBUG_PRINTF("  DIP        : 0x%02X\n", g_dip.getState());
     DEBUG_PRINTF("  Buttons    : 0x%02X\n", g_btn.getState());
 #endif

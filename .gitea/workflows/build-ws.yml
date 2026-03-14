@@ -230,7 +230,7 @@ jobs:
             set +u; . /opt/ros/$ROS_DISTRO/setup.bash; set -u; \
             sudo apt-get update; \
             rosdep update || true; \
-            rosdep install --from-paths src src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python; \
+            rosdep install --from-paths src/sec26ros --ignore-src -y --rosdistro $ROS_DISTRO --skip-keys ament_python; \
             echo "Discovered packages:"; \
             colcon list || true; \
             colcon build --base-paths src src/sec26ros'

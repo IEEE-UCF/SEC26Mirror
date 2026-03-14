@@ -40,7 +40,6 @@
 #include "robot/subsystems/DeploySubsystem.h"
 #include "robot/subsystems/DipSwitchSubsystem.h"
 #include "robot/subsystems/ImuSubsystem.h"
-#include "robot/subsystems/IntakeSubsystem.h"
 #include "robot/subsystems/LEDSubsystem.h"
 #include "robot/subsystems/EncoderSubsystem.h"
 #include "robot/subsystems/MotorManagerSubsystem.h"
@@ -182,15 +181,6 @@ static Drivers::UWBDriver g_uwb_driver(g_uwb_driver_setup);
 static UWBSubsystemSetup g_uwb_setup("uwb_subsystem", &g_uwb_driver,
                                      ROBOT_UWB_TOPIC);
 static UWBSubsystem g_uwb(g_uwb_setup);
-
-// --- Intake subsystem (combined linear rail + spinning motor) ---
-// TODO: confirm motor indices, encoder channel, and limit switch button
-// indices with electrical team
-static IntakeSubsystemSetup g_intake_setup(
-    "intake_subsystem", &g_motor, &g_encoder_sub, &g_btn,
-    /*rail_motor_idx*/ 2, /*intake_motor_idx*/ 3, /*rail_encoder_idx*/ 2,
-    /*retract_limit_btn*/ 2, /*extend_limit_btn*/ 3);
-static IntakeSubsystem g_intake(g_intake_setup);
 
 // --- Deploy subsystem (button-triggered deployment) ---
 static DeploySubsystemSetup g_deploy_setup("deploy_subsystem", &g_btn, &g_dip,
@@ -431,7 +421,6 @@ void setup() {
   g_crank.init();        DEBUG_PRINTLN("[INIT] Crank OK");
   g_motor.init();        DEBUG_PRINTLN("[INIT] Motor Manager OK");
   g_encoder_sub.init();  DEBUG_PRINTLN("[INIT] Encoder OK");
-  g_intake.init();       DEBUG_PRINTLN("[INIT] Intake OK");
   g_deploy.init();       DEBUG_PRINTLN("[INIT] Deploy OK");
 
   // Conditional UWB init — DIP 2 ON = UWB enabled
@@ -493,7 +482,6 @@ void setup() {
   g_mr.registerParticipant(&g_motor);
   g_mr.registerParticipant(&g_encoder_sub);
   if (uwb_enabled) g_mr.registerParticipant(&g_uwb);
-  g_mr.registerParticipant(&g_intake);
   g_mr.registerParticipant(&g_deploy);
   g_mr.registerParticipant(&g_reset);
   g_mr.registerParticipant(&g_drive);
@@ -504,7 +492,6 @@ void setup() {
   g_reset.addTarget(&g_servo);
   g_reset.addTarget(&g_encoder_sub);
   g_reset.addTarget(&g_arm);
-  g_reset.addTarget(&g_intake);
   g_reset.addTarget(&g_led);
   g_reset.addTarget(&g_drive);
   g_reset.addTarget(&g_crank);
@@ -530,7 +517,6 @@ void setup() {
   g_hb.beginThreaded(2048, 2, 1000);      // 1 Hz
   if (uwb_enabled) g_uwb.beginThreaded(2048, 3, 200);  // 5 Hz UWB ranging
   g_arm.beginThreaded(2048, 3, 50);       // 20 Hz arm
-  g_intake.beginThreaded(2048, 3, 50);    // 20 Hz intake
   g_deploy.beginThreaded(2048, 2, 100);   // 10 Hz deploy button
   g_crank.beginThreaded(2048, 2, 200);    // 5 Hz crank
   g_keypad.beginThreaded(2048, 2, 200);   // 5 Hz keypad

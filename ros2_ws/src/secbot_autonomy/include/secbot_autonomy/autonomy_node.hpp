@@ -95,6 +95,7 @@ class AutonomyNode : public rclcpp::Node {
   uint8_t antenna_target_id_ = 1;
 
   // ROS interfaces
+  rclcpp::TimerBase::SharedPtr init_timer_;
   rclcpp::TimerBase::SharedPtr step_timer_;
   rclcpp::Publisher<secbot_msgs::msg::TaskStatus>::SharedPtr status_pub_;
   rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr task_cmd_sub_;

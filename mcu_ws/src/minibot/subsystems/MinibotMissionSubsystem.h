@@ -76,6 +76,15 @@ class MinibotMissionSubsystem : public IMicroRosParticipant,
 
       case Phase::ENTER_FORWARD:
         if (elapsed >= ENTER_FORWARD_MS) {
+          phase_ = Phase::ENTER_BACKWARD;
+          phase_start_ms_ = now;
+          left_.setPWM(-ENTER_SPEED);
+          right_.setPWM(-ENTER_SPEED);
+        }
+        break;
+
+      case Phase::ENTER_BACKWARD:
+        if (elapsed >= ENTER_BACKWARD_MS) {
           phase_ = Phase::ENTER_TURN_LEFT;
           phase_start_ms_ = now;
           left_.setPWM((int)(TURN_SPEED * TURN_FACTOR));
@@ -85,6 +94,15 @@ class MinibotMissionSubsystem : public IMicroRosParticipant,
 
       case Phase::ENTER_TURN_LEFT:
         if (elapsed >= ENTER_TURN_MS) {
+          phase_ = Phase::REVERSE_TURN_LEFT;
+          phase_start_ms_ = now;
+          left_.setPWM(-(int)(TURN_SPEED * TURN_FACTOR));
+          right_.setPWM(-TURN_SPEED);
+        }
+        break;
+
+      case Phase::REVERSE_TURN_LEFT:
+        if (elapsed >= REVERSE_TURN_MS) {
           stopMotors();
           phase_ = Phase::IDLE;
           current_task_ = mcu_msgs__msg__MiniRobotState__TASK_NONE;
@@ -93,6 +111,15 @@ class MinibotMissionSubsystem : public IMicroRosParticipant,
 
       case Phase::EXIT_FORWARD:
         if (elapsed >= EXIT_FORWARD_MS) {
+          phase_ = Phase::EXIT_FORWARD_REVERSE;
+          phase_start_ms_ = now;
+          left_.setPWM(-EXIT_SPEED);
+          right_.setPWM(-EXIT_SPEED);
+        }
+        break;
+
+      case Phase::EXIT_FORWARD_REVERSE:
+        if (elapsed >= EXIT_FORWARD_REVERSE_MS) {
           stopMotors();
           phase_ = Phase::IDLE;
           current_task_ = mcu_msgs__msg__MiniRobotState__TASK_NONE;
@@ -184,14 +211,17 @@ class MinibotMissionSubsystem : public IMicroRosParticipant,
 
  private:
   // ── Timing constants (from MinibotCorrectCode.ino) ──
-  static constexpr uint32_t ENTER_WAIT_MS = 5000;
-  static constexpr uint32_t ENTER_FORWARD_MS = 3000;
-  static constexpr uint32_t ENTER_TURN_MS = 2000;
-  static constexpr uint32_t EXIT_FORWARD_MS = 3000;
+  static constexpr uint32_t ENTER_WAIT_MS = 1000;
+  static constexpr uint32_t ENTER_FORWARD_MS = 5000;
+  static constexpr uint32_t ENTER_BACKWARD_MS = 5000;
+  static constexpr uint32_t ENTER_TURN_MS = 10000;
+  static constexpr uint32_t REVERSE_TURN_MS = 10000;
+  static constexpr uint32_t EXIT_FORWARD_MS = 5000;
+  static constexpr uint32_t EXIT_FORWARD_REVERSE_MS = 5000;
 
-  static constexpr int ENTER_SPEED = 90;
-  static constexpr int TURN_SPEED = 60;
-  static constexpr float TURN_FACTOR = 0.5f;
+  static constexpr int ENTER_SPEED = 60;
+  static constexpr int TURN_SPEED = 90;
+  static constexpr float TURN_FACTOR = 0.6f;
   static constexpr int EXIT_SPEED = 220;
 
   // Pending command IDs (set by service callback, consumed by update)
@@ -203,8 +233,11 @@ class MinibotMissionSubsystem : public IMicroRosParticipant,
     IDLE,
     ENTER_WAIT,
     ENTER_FORWARD,
+    ENTER_BACKWARD,
     ENTER_TURN_LEFT,
+    REVERSE_TURN_LEFT,
     EXIT_FORWARD,
+    EXIT_FORWARD_REVERSE,
   };
 
   void stopMotors() {

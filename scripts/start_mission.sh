@@ -8,6 +8,14 @@ cd "$WS_DIR" || exit 1
 colcon build --packages-select secbot_autonomy mcu_msgs secbot_msgs
 source install/setup.bash
 
+# Kill background launch and all its children on Ctrl+C
+cleanup() {
+  kill -INT "$LAUNCH_PID" 2>/dev/null
+  wait "$LAUNCH_PID" 2>/dev/null
+  exit 0
+}
+trap cleanup SIGINT SIGTERM
+
 # Launch nodes in background, call the start service, then wait
 ros2 launch secbot_autonomy mission.launch.py &
 LAUNCH_PID=$!

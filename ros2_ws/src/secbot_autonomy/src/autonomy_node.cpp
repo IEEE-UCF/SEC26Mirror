@@ -18,9 +18,6 @@ AutonomyNode::AutonomyNode() : Node("autonomy_node") {
   RCLCPP_INFO(this->get_logger(), "Autonomy node starting (step rate: %.1f Hz)",
               step_rate_hz_);
 
-  // Initialize all tasks
-  initializeTasks();
-
   // Create status publisher
   status_pub_ = this->create_publisher<secbot_msgs::msg::TaskStatus>(
       "autonomy/task_status", 10);
@@ -35,13 +32,19 @@ AutonomyNode::AutonomyNode() : Node("autonomy_node") {
       "autonomy/antenna_target", 10,
       std::bind(&AutonomyNode::onAntennaTarget, this, std::placeholders::_1));
 
-  // Create step timer
-  auto period = std::chrono::duration<double>(1.0 / step_rate_hz_);
-  step_timer_ = this->create_wall_timer(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(period),
-      std::bind(&AutonomyNode::stepCallback, this));
+  // Defer task init — shared_from_this() is not available in the constructor
+  init_timer_ = this->create_wall_timer(std::chrono::milliseconds(0), [this]() {
+    init_timer_->cancel();
+    initializeTasks();
 
-  RCLCPP_INFO(this->get_logger(), "Autonomy node ready!");
+    // Create step timer now that tasks exist
+    auto period = std::chrono::duration<double>(1.0 / step_rate_hz_);
+    step_timer_ = this->create_wall_timer(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(period),
+        std::bind(&AutonomyNode::stepCallback, this));
+
+    RCLCPP_INFO(this->get_logger(), "Autonomy node ready!");
+  });
 }
 
 void AutonomyNode::initializeTasks() {

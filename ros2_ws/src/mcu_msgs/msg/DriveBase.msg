@@ -6,9 +6,10 @@ geometry_msgs/TransformStamped transform
 geometry_msgs/Twist twist
 
 # Drive Modes
-uint8 DRIVE_VECTOR=0  # Command by twist vector
-uint8 DRIVE_GOAL=1    # Drive towards goal transform
+uint8 DRIVE_VECTOR=0      # Command by twist vector (gyro heading hold)
+uint8 DRIVE_GOAL=1        # Drive towards goal transform
 uint8 DRIVE_TRAJ=2
+uint8 DRIVE_VECTOR_RAW=3  # Command by twist vector (no gyro hold)
 uint8 drive_mode      # One of DRIVE_VECTOR / DRIVE_GOAL
 
 # Goal position and velocity

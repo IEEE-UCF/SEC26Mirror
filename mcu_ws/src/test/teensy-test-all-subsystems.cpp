@@ -383,14 +383,17 @@ static void rc_drive_task(void*) {
       }
     }
 
-    // RC knob motor control — knob 1 (left) → motor 2 (linear extension),
-    //                         knob 2 (right) → motor 3 (intake)
+    // RC knob motor control — only when SWD is ON (ch9 > 0)
+    // knob 1 (VRA, ch4) → motor 2, knob 2 (VRB, ch5) → motor 3
     {
       const auto& rc = g_rc.getData();
-      float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;
-      float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;
-      g_motor.setSpeed(2, knob1);
-      g_motor.setSpeed(3, knob2);
+      bool swd_high = rc.channels[9] > 0;
+      if (swd_high) {
+        float knob1 = static_cast<float>(rc.channels[4]) / 255.0f;
+        float knob2 = static_cast<float>(rc.channels[5]) / 255.0f;
+        g_motor.setSpeed(2, knob1);
+        g_motor.setSpeed(3, knob2);
+      }
     }
 
     vTaskDelay(pdMS_TO_TICKS(5));

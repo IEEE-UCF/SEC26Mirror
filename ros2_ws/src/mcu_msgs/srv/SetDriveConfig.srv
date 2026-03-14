@@ -4,8 +4,7 @@
 # update a single gain without touching the others.
 #
 # Example:
-#   ros2 service call /mcu_robot/drive/config mcu_msgs/srv/SetDriveConfig \
-#   "{wheel_kp: 0.5, wheel_ki: 0.05}"
+#   ros2 service call /mcu_robot/drive/config mcu_msgs/srv/SetDriveConfig "{wheel_kp: 0.5, wheel_ki: 0.05}"
 
 # ── Wheel velocity PID gains ──
 float32 wheel_kp              # Proportional (default 0.4)

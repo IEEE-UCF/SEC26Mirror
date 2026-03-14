@@ -1139,7 +1139,7 @@ class DriveSubsystem : public IMicroRosParticipant,
       if (kd != 0.0f) cfg.gains.kd = kd;
       if (i_min != 0.0f) cfg.limits.i_min = i_min;
       if (i_max != 0.0f) cfg.limits.i_max = i_max;
-      if (d_filter != 0.0f) cfg.gains.d_filter_alpha = d_filter;
+      if (d_filter != 0.0f) cfg.d_filter_alpha = d_filter;
       pid.configure(cfg);
     };
 

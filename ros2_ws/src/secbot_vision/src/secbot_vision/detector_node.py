@@ -318,7 +318,11 @@ def process_frame(frame, color_low, color_high, hsv_values, min_area_ratio=0.000
             sv_boost = ((sat + bri)/2).mean()
 
             # --- Confidence ---
+            MIN_CONFIDENCE = 50.0
             confidence = ((0.0 * fill_ratio) + (0.9 * hue_i) + (0.1 * sv_boost)) * 100
+
+            if confidence < MIN_CONFIDENCE:
+                continue
 
             # colored fill on debug overlay
             cv2.rectangle(overlay, (x, y), (x + w, y + h), bgr_color, -1)

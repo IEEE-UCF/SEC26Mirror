@@ -10,6 +10,7 @@ Syncs config from drone on connect via CONFIG: debug messages.
 """
 
 import curses
+import argparse
 import threading
 import sys
 from dataclasses import dataclass, field
@@ -21,6 +22,10 @@ from mcu_msgs.msg import DroneState
 from mcu_msgs.srv import DroneArm, DroneSetParam, DroneTakeoff, DroneLand, DroneTare
 from std_msgs.msg import String
 
+try:
+    from mcu_msgs.msg import PIDTunning
+except ImportError:
+    PIDTunning = None
 
 # ── Parameter definitions (matches DroneFlightSubsystem::setParam) ────────
 
@@ -42,6 +47,8 @@ class Param:
 class ParamGroup:
     label: str
     params: list  # list[Param]
+    
+
 
 
 def build_params() -> list:
@@ -105,9 +112,11 @@ STATE_NAMES = {
 # ── ROS2 Node ─────────────────────────────────────────────────────────────
 
 class PidTunerNode(Node):
-    def __init__(self):
+    def __init__(self, debug_mode: bool = False):
         super().__init__("drone_pid_tuner")
 
+        self._debug_mode = debug_mode
+        
         best_effort = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
@@ -120,6 +129,22 @@ class PidTunerNode(Node):
         self.debug_sub = self.create_subscription(
             String, "/mcu_drone/debug", self._debug_cb, best_effort
         )
+        # after existing subscriptions:
+        self.pid_debug_text = ""
+
+        self._pid_tunning_sub = None
+        if PIDTunning is not None:
+            self._pid_tunning_sub = self.create_subscription(
+                PIDTunning,
+                "/drone_pid_tunning",
+                self._pid_tunning_cb,
+                10,
+            )
+        else:
+            self.get_logger().warn(
+                "PIDTunning message not available — debug mode will show no PID data"
+            )
+        
         self.set_param_cli = self.create_client(
             DroneSetParam, "/mcu_drone/set_param"
         )
@@ -156,6 +181,30 @@ class PidTunerNode(Node):
         self.pending_config = {}  # name -> value from CONFIG: messages
         self._config_requested = False
         self._lock = threading.Lock()
+        
+    @property
+    def debug_mode(self) -> bool:
+        return self._debug_mode
+
+    @debug_mode.setter
+    def debug_mode(self, value: bool):
+        self._debug_mode = value
+        
+    def _pid_tunning_cb(self, msg: PIDTunning):
+        if not self._debug_mode:
+            return
+        line = (
+            f"[PIDTunning]  "
+            f"roll_rate kp={msg.roll_rate_kp} ki={msg.roll_rate_ki} kd={msg.roll_rate_kd}  |  "
+            f"pitch_rate kp={msg.pitch_rate_kp} ki={msg.pitch_rate_ki} kd={msg.pitch_rate_kd}  |  "
+            f"roll_angle kp={msg.roll_angle_kp} ki={msg.roll_angle_ki} kd={msg.roll_angle_kd}  |  "
+            f"pitch_angle kp={msg.pitch_angle_kp} ki={msg.pitch_angle_ki} kd={msg.pitch_angle_kd}  |  "
+            f"yaw_rate kp={msg.yaw_rate_kp} ki={msg.yaw_rate_ki} kd={msg.yaw_rate_kd}  |  "
+            f"altitude kp={msg.altitude_kp} ki={msg.altitude_ki} kd={msg.altitude_kd}  |  "
+            f"alt_vel kp={msg.alt_vel_kp} ki={msg.alt_vel_ki} kd={msg.alt_vel_kd}"
+        )
+        with self._lock:
+            self.pid_debug_text = line
 
     def _state_cb(self, msg: DroneState):
         should_request = False
@@ -174,6 +223,8 @@ class PidTunerNode(Node):
             self._request_config()
 
     def _debug_cb(self, msg: String):
+        if self._debug_mode:   # <-- add this guard
+            return
         with self._lock:
             text = msg.data
             # Parse CONFIG: messages for param sync
@@ -276,7 +327,9 @@ class PidTunerNode(Node):
     def get_telemetry(self):
         with self._lock:
             return (self.roll, self.pitch, self.yaw, self.alt,
-                    self.state, self.debug_text, self.last_result)
+                    self.state, 
+                    self.pid_debug_text if self._debug_mode else self.debug_text, 
+                    self.last_result)
 
     def take_pending_config(self):
         """Take and clear pending config dict (thread-safe)."""
@@ -336,6 +389,8 @@ def run_tui(stdscr, node: PidTunerNode):
     curses.init_pair(3, curses.COLOR_YELLOW, -1)    # pending
     curses.init_pair(4, curses.COLOR_RED, -1)       # changed from default
     curses.init_pair(5, curses.COLOR_WHITE, -1)     # normal
+    curses.init_pair(6, curses.COLOR_MAGENTA, -1)   # debug mode active
+
 
     groups = build_params()
     rows = flat_params(groups)
@@ -362,7 +417,7 @@ def run_tui(stdscr, node: PidTunerNode):
         # ── Telemetry ──
         roll, pitch, yaw, alt, state, debug_text, last_result = node.get_telemetry()
         state_name = STATE_NAMES.get(state, f"?{state}")
-
+        debug_active = node.debug_mode
         height, width = stdscr.getmaxyx()
         stdscr.erase()
 
@@ -370,12 +425,18 @@ def run_tui(stdscr, node: PidTunerNode):
         row = 0
         title = " DRONE PID TUNER"
         telemetry = f"State: {state_name}   Alt: {alt:.2f}m"
+        debug_tag = "  [DEBUG: PIDTunning]" if debug_active else ""
         stdscr.addnstr(row, 0, title, width, curses.A_BOLD | curses.color_pair(1))
         stdscr.addnstr(row, max(len(title) + 2, 25), telemetry, width - 25)
+        if debug_tag:
+            tag_x = min(width - len(debug_tag) - 1, max(len(title) + 2 + len(telemetry) + 2, 55))
+            stdscr.addnstr(row, tag_x, debug_tag, width - tag_x, curses.A_BOLD | curses.color_pair(6))
+        
         row += 1
 
         if debug_text:
-            stdscr.addnstr(row, 1, debug_text[:width - 2], width - 2, curses.color_pair(5))
+            color = curses.color_pair(6) if debug_active else curses.color_pair(5)
+            stdscr.addnstr(row, 1, debug_text[:width - 2], width - 2, color)
             row += 1
 
         att_line = f" Roll: {roll:7.1f}    Pitch: {pitch:7.1f}    Yaw: {yaw:7.1f}"
@@ -460,7 +521,7 @@ def run_tui(stdscr, node: PidTunerNode):
                 prompt = f" Enter value for {params[cursor].name}: {type_buf}_"
             stdscr.addnstr(footer_y + 1, 0, prompt, width - 1, curses.A_BOLD)
         else:
-            keys1 = " jk:nav  hl:fine  []:coarse  Enter:type  c:copy  r:reset  R:resetAll"
+            keys1 = " jk:nav  hl:fine  []:coarse  Enter:type  c:copy  r:reset  R:resetAll  x:debug"
             keys2 = " a:arm  d:disarm  D:EMERG  f:ready  t:takeoff  L:land  T:tare  S:save  q:quit"
             stdscr.addnstr(footer_y + 1, 0, keys1[:width - 1], width - 1, curses.color_pair(5))
             stdscr.addnstr(footer_y + 2, 0, keys2[:width - 1], width - 1, curses.color_pair(5))
@@ -535,6 +596,15 @@ def run_tui(stdscr, node: PidTunerNode):
             typing = True
             type_buf = ""
             type_mode = "value"
+        
+        elif key == ord('x'):
+            node.debug_mode = not node.debug_mode
+            with node._lock:
+                node.last_result = (
+                    "Debug mode ON  — showing /drone_pid_tunning"
+                    if node.debug_mode else
+                    "Debug mode OFF — showing /mcu_drone/debug"
+                )
 
         # Copy roll -> pitch (rate and angle)
         elif key == ord('c'):
@@ -602,8 +672,15 @@ def run_tui(stdscr, node: PidTunerNode):
 # ── Main ──────────────────────────────────────────────────────────────────
 
 def main():
-    rclpy.init()
-    node = PidTunerNode()
+    parser = argparse.ArgumentParser(description="Drone PID TUI")
+    parser.add_argument(
+        "--debug", action="store_true",
+        help="Start in debug mode: show /drone_pid_tunning values instead of /mcu_drone/debug",
+    )
+    args, ros_args = parser.parse_known_args()
+
+    rclpy.init(args=ros_args)
+    node = PidTunerNode(debug_mode=args.debug)
 
     # Spin ROS2 in daemon thread
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)

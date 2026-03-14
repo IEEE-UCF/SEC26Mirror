@@ -27,6 +27,7 @@ install(TARGETS
 
 install(PROGRAMS
   scripts/drone_pid_tuner.py
+  scripts/gui_for_pid.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

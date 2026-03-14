@@ -18,6 +18,7 @@ mission_sequencer:
 
     start_pose: [15.0, 15.0, 180.0]
     nudge_speed: 0.25
+    light_start_threshold: 2000.0
     turn_timeout: 5.0
     drive_timeout: 5.0
     default_step_timeout: 5.0
